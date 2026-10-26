@@ -1,0 +1,32 @@
+@keyframes spin-slow {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+.animate-spin-slow {
+    animation: spin-slow 4s linear infinite;
+}
+
+/* Phones: blurred blobs and backdrop-filter layers are not rasterized fast enough while
+   scrolling, which shows up as white flashes. Drop them on small screens only. */
+@media (max-width: 1023px) {
+    .taxi-low-power [class*="backdrop-blur"] {
+        -webkit-backdrop-filter: none !important;
+        backdrop-filter: none !important;
+    }
+    .taxi-low-power .blur-md,
+    .taxi-low-power .blur-lg,
+    .taxi-low-power .blur-xl,
+    .taxi-low-power .blur-2xl,
+    .taxi-low-power .blur-3xl,
+    .taxi-low-power :not([class*="backdrop-blur"])[class*="blur-["] {
+        display: none !important;
+    }
+    .taxi-low-power .animate-pulse {
+        animation: none;
+    }
+}
+
+/* Ensure incoming ride request modal is never suppressed by low-power blur rules */
+[data-incoming-ride-request] {
+    display: flex !important;
+}
