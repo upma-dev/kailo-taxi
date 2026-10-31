@@ -1,5 +1,6 @@
 import { PageContent } from '../models/PageContent.js';
 import { ApiError } from '../../../../utils/ApiError.js';
+import { DEFAULT_LANDING } from '../data/defaultLanding.js';
 
 export const LEGAL_PAGE_KEYS = [
   'terms',
@@ -105,6 +106,7 @@ export const getPublicPageByKey = async (key) => {
   const k = normalizeKey(key);
   const doc = await PageContent.findOne({ key: k }).lean();
   if (!doc) {
+    if (k === 'landing') return { key: k, data: DEFAULT_LANDING };
     if (k === 'about') {
       return { key: k, data: { appName: 'Kailo Taxi', version: '1.0.0', description: '', logo: '' } };
     }
@@ -112,6 +114,7 @@ export const getPublicPageByKey = async (key) => {
   }
   if (k === 'about') return { key: k, data: normalizeAboutForResponse(doc.about || null) };
   if (k === 'home') return { key: k, data: doc.home || DEFAULT_PAGES.home };
+  if (k === 'landing') return { key: k, data: mergeLanding(doc.landing) };
 
   const legalData = normalizeLegalForResponse(doc.legal || null);
   if (!legalData || !legalData.content || !legalData.content.trim()) {
@@ -164,6 +167,27 @@ export const upsertAboutPage = async (payload, updatedBy) => {
     updatedBy,
   );
   return { key: 'about', data: normalizeAboutForResponse(doc?.about || null) };
+};
+
+// Saved landing content wins; any section the admin has not touched falls back to defaults.
+const mergeLanding = (saved) => {
+  const base = JSON.parse(JSON.stringify(DEFAULT_LANDING));
+  if (!saved || typeof saved !== 'object') return base;
+  const out = { ...base };
+  for (const [section, value] of Object.entries(saved)) {
+    const baseValue = base[section];
+    const isObj = (v) => v && typeof v === 'object' && !Array.isArray(v);
+    if (isObj(value) && isObj(baseValue)) out[section] = { ...baseValue, ...value };
+    else if (value !== undefined && value !== null) out[section] = value;
+  }
+  return out;
+};
+
+export const upsertLandingPage = async (payload, updatedBy) => {
+  const landing = payload?.landing || payload || {};
+  if (typeof landing !== 'object' || Array.isArray(landing)) throw new ApiError(400, 'Invalid landing content');
+  const doc = await upsertPage('landing', { landing }, updatedBy);
+  return { key: 'landing', data: mergeLanding(doc?.landing) };
 };
 
 export const upsertHomePage = async (payload, updatedBy) => {

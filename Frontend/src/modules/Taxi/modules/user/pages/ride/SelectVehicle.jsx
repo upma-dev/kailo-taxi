@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, X, Banknote, CreditCard, ChevronDown, Clock3, LoaderCircle, Eye, TicketPercent, CheckCircle2, AlertTriangle, Calendar, User, Clock, Users, Package, Navigation } from 'lucide-react';
+import { Car, ArrowLeft, X, Banknote, CreditCard, ChevronDown, Clock3, LoaderCircle, Eye, TicketPercent, CheckCircle2, AlertTriangle, Calendar, User, Clock, Users, Package, Navigation } from 'lucide-react';
 import { GoogleMap, MarkerF, OverlayView, PolylineF } from '@react-google-maps/api';
 import api from '../../../../shared/api/axiosInstance';
 import { BACKEND_ORIGIN } from '../../../../shared/api/runtimeConfig';
@@ -19,17 +19,7 @@ const resolveAssetUrl = (value = '') => {
   if (raw.startsWith('/')) return `${BACKEND_ORIGIN}${raw}`;
   return `${BACKEND_ORIGIN}/${raw.replace(/^\/+/, '')}`;
 };
-import BikeIcon from '../../../../assets/icons/bike.png';
-import AutoIcon from '../../../../assets/icons/auto.png';
 import CarIcon from '../../../../assets/icons/car.png';
-import PremiumIcon from '../../../../assets/icons/Premium.png';
-import LuxuryIcon from '../../../../assets/icons/Luxury.png';
-import SuvIcon from '../../../../assets/icons/SUV.png';
-import TruckIcon from '../../../../assets/icons/truck.png';
-import LcvIcon from '../../../../assets/icons/LCV.png';
-import McvIcon from '../../../../assets/icons/mcv.png';
-import HcvIcon from '../../../../assets/icons/hcv.png';
-import EhcvIcon from '../../../../assets/icons/ehcv.png';
 
 const MAP_CONTAINER_STYLE = { width: '100%', height: '100%' };
 const SELECT_VEHICLE_MAP_OPTIONS = {
@@ -536,24 +526,20 @@ const getVehiclePreviewImage = (type) => {
     type?.vehicleIconUrl ||
     ''
   ).trim();
-  if (previewImage) {
-    return resolveAssetUrl(previewImage);
+  // Only the image the admin uploaded for this vehicle type is shown in the ride list. No bundled
+  // stock pictures: when the admin has not set one, a plain icon is drawn instead (see VehicleThumb).
+  return previewImage ? resolveAssetUrl(previewImage) : '';
+};
+
+// The admin's vehicle image, or a neutral icon when none was uploaded or it fails to load.
+const VehicleThumb = ({ src, name, imgClassName, iconSize = 26 }) => {
+  const [broken, setBroken] = React.useState(false);
+  React.useEffect(() => setBroken(false), [src]);
+
+  if (!src || broken) {
+    return <Car size={iconSize} strokeWidth={1.8} className="text-slate-400" aria-label={name} />;
   }
-
-  const value = getIconValue(type);
-
-  if (value.includes('bike')) return BikeIcon;
-  if (value.includes('auto')) return AutoIcon;
-  if (value.includes('ehc')) return EhcvIcon;
-  if (value.includes('hcv')) return HcvIcon;
-  if (value.includes('lcv')) return LcvIcon;
-  if (value.includes('mcv')) return McvIcon;
-  if (value.includes('truck')) return TruckIcon;
-  if (value.includes('lux')) return LuxuryIcon;
-  if (value.includes('premium')) return PremiumIcon;
-  if (value.includes('suv')) return SuvIcon;
-
-  return CarIcon;
+  return <img src={src} alt={name} className={imgClassName} draggable={false} onError={() => setBroken(true)} />;
 };
 
 const getCapacity = (type) => {
@@ -2034,6 +2020,20 @@ const SelectVehicle = () => {
       return;
     }
 
+    // A city ride hundreds of km long almost always means the wrong place was picked as the drop.
+    const tripKm = Number(tripMetrics?.distanceMeters || 0) / 1000;
+    if (!shouldUseDriverBidding && tripKm > 150) {
+      const proceed = window.confirm(
+        `Your drop is about ${Math.round(tripKm)} km from the pickup. That is much farther than a city ride.
+
+Press Cancel to go back and choose a nearer drop, or OK to book anyway.`,
+      );
+      if (!proceed) {
+        navigate(-1);
+        return;
+      }
+    }
+
     const token = getLocalUserToken();
     if (!token) {
       localStorage.setItem('kailo_active_module', 'taxi');
@@ -2260,7 +2260,7 @@ const SelectVehicle = () => {
                   >
                     <div className="flex w-[56px] shrink-0 flex-col items-center justify-center">
                       <div className="flex h-10 w-full items-center justify-center">
-                        <img src={v.icon} alt={v.name} className="h-9 w-12 object-contain" draggable={false} />
+                        <VehicleThumb src={v.icon} name={v.name} imgClassName="h-9 w-12 object-contain" iconSize={26} />
                       </div>
                       <span className="mt-1 flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[9.5px] font-black text-slate-700">
                         {isParcelService ? (
@@ -2530,7 +2530,7 @@ const SelectVehicle = () => {
                   </p>
                 </div>
                 <div className="flex h-16 w-16 items-center justify-center rounded-[18px] bg-slate-50">
-                  <img src={previewVehicle.icon} alt={previewVehicle.name} className="h-12 w-14 object-contain" draggable={false} />
+                  <VehicleThumb src={previewVehicle.icon} name={previewVehicle.name} imgClassName="h-12 w-14 object-contain" iconSize={32} />
                 </div>
               </div>
 

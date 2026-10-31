@@ -6,10 +6,7 @@ import HomeHeader from '../components/HomeHeader';
 import SuperAppHero from '../components/SuperAppHero';
 import ServiceGrid from '../components/ServiceGrid';
 import LocationMapSection from '../components/LocationMapSection';
-import ActionsSection from '../components/ActionsSection';
-import PromoBanners from '../components/PromoBanners';
-import ExplorerSection from '../components/ExplorerSection';
-import EcosystemStorytelling from '../components/EcosystemStorytelling';
+import RecentTrips from '../components/RecentTrips';
 import BottomNavbar from '../components/BottomNavbar';
 import carIcon from '../../../assets/icons/car.png';
 import bikeIcon from '../../../assets/icons/bike.png';
@@ -591,18 +588,13 @@ const Home = ({ embedded = false }) => {
     maskSize: '100% 100%',
   };
 
-  const pageBgClass = 'bg-[#EFF5FD]';
+  const pageBgClass = 'bg-[#F8FAF7]';
 
   return (
     <div className={`${embedded ? 'relative' : 'min-h-screen'} ${pageBgClass} ${embedded ? 'pb-6' : 'pb-24'} w-full relative font-sans no-scrollbar`}>
-      {/* Light blue draped vanished shade background elements */}
-      <div className="absolute -top-20 left-1/2 -translate-x-1/2 w-full max-w-lg h-[450px] bg-[radial-gradient(ellipse_at_top,_rgba(147,197,253,0.55)_0%,_rgba(219,234,254,0.3)_45%,_rgba(255,255,255,0)_80%)] blur-2xl pointer-events-none" />
-      <div className="absolute top-44 -left-20 h-80 w-80 rounded-full bg-blue-300/30 blur-3xl pointer-events-none" />
-      <div className="absolute top-[32rem] -right-20 h-96 w-96 rounded-full bg-sky-200/40 blur-3xl pointer-events-none" />
-
       <div className="relative z-10 space-y-3 pb-6">
         {!embedded && (
-          <div className="flex flex-col bg-[#0B172A] rounded-b-[28px] shadow-[0_14px_36px_rgba(11,23,42,0.18)] overflow-hidden">
+          <div className="flex flex-col bg-gradient-to-b from-[#0F766E] via-[#0D625C] to-[#0A4A46] rounded-b-[32px] shadow-[0_18px_40px_rgba(10,74,70,0.35)] overflow-hidden">
             <HomeHeader />
             <SuperAppHero onSearchFocus={() => navigate(`${routePrefix}/ride/select-location`)} />
           </div>
@@ -734,9 +726,7 @@ const Home = ({ embedded = false }) => {
           <div className="relative z-10 flex flex-col gap-5 pt-1 pb-6">
             <ServiceGrid plain={true} />
             <LocationMapSection plain={true} />
-            <ActionsSection plain={true} />
-            <PromoBanners plain={true} />
-            <ExplorerSection plain={true} />
+            <RecentTrips />
           </div>
         ) : (
           <div className="relative z-10 flex flex-col gap-4 pt-1 pb-6 px-5">
@@ -745,7 +735,6 @@ const Home = ({ embedded = false }) => {
             <div className="h-[160px] animate-pulse rounded-[24px] border border-white/80 bg-white/70 shadow-[0_10px_22px_rgba(15,23,42,0.05)]" />
           </div>
         )}
-        <EcosystemStorytelling />
       </div>
 
       <AnimatePresence>

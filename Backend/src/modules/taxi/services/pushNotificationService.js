@@ -194,12 +194,21 @@ const sendPushToTargets = async ({
       },
       android: {
         priority: 'high',
+        // A ride request is only worth ringing for while it can still be accepted; never ring for a stale one.
+        ...(isRing ? { ttl: 45 * 1000 } : {}),
         notification: {
           channelId,
           sound: soundName,
           priority: isRing ? 'max' : 'high',
           defaultSound: !isRing,
-          defaultVibrateTimings: true,
+          defaultVibrateTimings: !isRing,
+          ...(isRing
+            ? {
+                vibrateTimingsMillis: [0, 600, 250, 600, 250, 600, 250, 600],
+                sticky: true,
+                ...(safeData.rideId ? { tag: `ride_${safeData.rideId}` } : {}),
+              }
+            : {}),
           visibility: 'public',
           clickAction: 'FLUTTER_NOTIFICATION_CLICK',
           ...(image ? { imageUrl: image } : {}),
@@ -208,9 +217,11 @@ const sendPushToTargets = async ({
       apns: {
         headers: {
           'apns-priority': '10',
+          ...(isRing ? { 'apns-expiration': String(Math.floor(Date.now() / 1000) + 45) } : {}),
         },
         payload: {
           aps: {
+            ...(isRing ? { 'interruption-level': 'time-sensitive' } : {}),
             sound: isRing ? 'ride-request-alert.mp3' : 'default',
             badge: 1,
             'content-available': 1,
@@ -220,6 +231,7 @@ const sendPushToTargets = async ({
       webpush: {
         headers: {
           Urgency: 'high',
+          ...(isRing ? { TTL: '45' } : {}),
         },
         notification: {
           title,

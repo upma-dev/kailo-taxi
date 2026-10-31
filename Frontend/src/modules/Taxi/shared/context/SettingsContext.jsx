@@ -149,8 +149,13 @@ export const SettingsProvider = ({ children }) => {
       const bootstrapResponse = await api.get('/common/settings');
       const bootstrapData = bootstrapResponse?.data?.data || bootstrapResponse?.data || {};
 
+      // Settings saved before the rebrand may still carry the old name/logo; never show them.
+      const general = { ...(bootstrapData.general || {}) };
+      if (/eqosy/i.test(String(general.app_name || ''))) general.app_name = 'Kailo Taxi';
+      if (/eqosy/i.test(String(general.logo || ''))) general.logo = '';
+
       setSettings({
-        general: bootstrapData.general || {},
+        general,
         customization: bootstrapData.customization || {},
         transportRide: bootstrapData.transportRide || { enable_bus_service: '1' },
         bidRide: bootstrapData.bidRide || DEFAULT_SETTINGS_CONTEXT.settings.bidRide,
@@ -168,7 +173,7 @@ export const SettingsProvider = ({ children }) => {
   }, []);
 
   useEffect(() => {
-    const appName = settings.general?.app_name || 'App';
+    const appName = settings.general?.app_name || 'Kailo Taxi';
     document.title = appName;
 
     const favicon = settings.general?.favicon || settings.customization?.favicon;

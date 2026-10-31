@@ -15,11 +15,18 @@ const poolingBookingSchema = new mongoose.Schema(
     route: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'TaxiPoolingRoute',
-      required: true,
+    },
+    trip: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'TaxiPoolingTrip',
     },
     scheduleId: {
       type: String,
-      required: true,
+      default: '',
+    },
+    departureTime: {
+      type: String,
+      default: '',
     },
     vehicle: {
       type: mongoose.Schema.Types.ObjectId,
@@ -27,11 +34,31 @@ const poolingBookingSchema = new mongoose.Schema(
     },
     pickupStopId: {
       type: String,
-      required: true,
+      default: '',
     },
     dropStopId: {
       type: String,
-      required: true,
+      default: '',
+    },
+    pickupLocation: {
+      lat: { type: Number, default: null },
+      lng: { type: Number, default: null },
+    },
+    dropLocation: {
+      lat: { type: Number, default: null },
+      lng: { type: Number, default: null },
+    },
+    // `fare` is what the rider currently owes (shrinks as more riders join).
+    // paidAmount is what they actually paid; the difference is returned to their wallet.
+    paidAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    refundedAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
     },
     seatsBooked: {
       type: Number,
@@ -131,6 +158,7 @@ const poolingBookingSchema = new mongoose.Schema(
 
 poolingBookingSchema.index({ user: 1 });
 poolingBookingSchema.index({ route: 1 });
+poolingBookingSchema.index({ trip: 1, bookingStatus: 1 });
 poolingBookingSchema.index({ travelDate: 1 });
 poolingBookingSchema.index({ 'payment.orderId': 1 });
 poolingBookingSchema.index({ 'payment.paymentId': 1 });

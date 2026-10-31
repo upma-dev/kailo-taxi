@@ -73,6 +73,14 @@ export const userService = {
     const response = await api.get(`/users/pooling/routes/${id}`, { params });
     return response;
   },
+  searchPoolingTrips: async (params) => {
+    const response = await api.get('/users/pooling/trips/search', { params });
+    return response;
+  },
+  quotePoolingBooking: async (payload) => {
+    const response = await api.post('/users/pooling/trips/quote', payload);
+    return response;
+  },
   createPoolingBookingOrder: async (payload) => {
     const response = await api.post('/users/pooling/bookings/order', payload);
     return response;
@@ -81,8 +89,8 @@ export const userService = {
     const response = await api.post('/users/pooling/bookings/verify', payload);
     return response;
   },
-  createPoolingBooking: async (payload) => {
-    const response = await api.post('/users/pooling/bookings', payload);
+  payPoolingBookingWithWallet: async (payload) => {
+    const response = await api.post('/users/pooling/bookings/wallet', payload);
     return response;
   },
   getMyPoolingBookings: async () => {

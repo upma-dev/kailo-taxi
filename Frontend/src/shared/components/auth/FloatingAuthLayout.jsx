@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
+import taxiImg from '@/assets/3d images/AutoCab/taxi.png';
 import {
   AlertCircle,
   ArrowLeft,
@@ -19,15 +20,15 @@ import {
 // `accent` -> `accent2` paints buttons, `accentDark` is the readable accent used for text on the cream sheet,
 // `accentSoft` is the pale tint behind small chips and the +91 block.
 export const AUTH_THEMES = {
-  // Taxi driver: navy blue running into royal blue.
+  // Kailo Taxi: deep teal with lime lights.
   driver: {
-    gradient: 'linear-gradient(180deg, #040920 0%, #0A1A57 55%, #14308A 100%)',
-    glow: '#3B82F6',
-    glow2: '#818CF8',
-    accent: '#3B6BF0',
-    accent2: '#1E3A8A',
-    accentDark: '#1E3A8A',
-    accentSoft: '#E8EEFF',
+    gradient: 'linear-gradient(180deg, #052E2B 0%, #0F766E 62%, #0A4A46 100%)',
+    glow: '#C6F432',
+    glow2: '#14B8A6',
+    accent: '#0F766E',
+    accent2: '#0A4A46',
+    accentDark: '#0F766E',
+    accentSoft: '#E3F6F2',
     Icons: [Car, MapPin, Navigation, Route],
   },
 };
@@ -54,6 +55,26 @@ function HeroBackground({ theme }) {
       />
       <div className="absolute left-1/2 top-16 h-64 w-64 -translate-x-1/2 rounded-full border border-white/10" />
       <div className="absolute left-1/2 top-4 h-96 w-96 -translate-x-1/2 rounded-full border border-white/5" />
+
+      {/* a taxi cruising along a lit road at the foot of the hero */}
+      <div className="absolute left-0 right-0 top-[206px] h-[64px]">
+        <span className="absolute inset-x-6 bottom-[6px] h-[3px] rounded-full bg-white/10" />
+        <motion.span
+          className="absolute bottom-[6px] left-6 h-[3px] w-[200%]"
+          style={{ backgroundImage: 'repeating-linear-gradient(90deg, rgba(198,244,50,0.85) 0 18px, transparent 18px 44px)' }}
+          animate={reduceMotion ? undefined : { x: [0, -44] }}
+          transition={{ duration: 0.7, repeat: Infinity, ease: 'linear' }}
+        />
+        <motion.img
+          src={taxiImg}
+          alt=""
+          aria-hidden="true"
+          initial={{ x: -160, opacity: 0 }}
+          animate={{ x: 0, opacity: 1 }}
+          transition={{ type: 'spring', stiffness: 50, damping: 14, delay: 0.2 }}
+          className="absolute bottom-[8px] left-[10%] h-[52px] w-auto object-contain drop-shadow-[0_10px_8px_rgba(0,0,0,0.4)]"
+        />
+      </div>
 
       {FLOATERS.map(({ size, delay, duration, ...position }, index) => {
         const Icon = theme.Icons[index % theme.Icons.length];
@@ -149,7 +170,7 @@ export default function FloatingAuthLayout({
         initial={{ y: 60, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-        className="relative z-10 mx-auto flex w-full max-w-[460px] flex-1 flex-col rounded-t-[32px] bg-[#FFFDF6] px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-20px_50px_-20px_rgba(0,0,0,0.6)]"
+        className="relative z-10 mx-auto flex w-full max-w-[460px] flex-1 flex-col rounded-t-[32px] bg-[#F8FAF7] px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-20px_50px_-20px_rgba(0,0,0,0.6)]"
       >
         <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-[#D9DEEE]" />
 

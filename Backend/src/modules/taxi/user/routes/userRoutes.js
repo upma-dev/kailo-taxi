@@ -51,11 +51,15 @@ import {
 import {
   searchPoolingRoutes,
   getPoolingRouteDetails,
-  createPoolingBookingOrder,
-  verifyPoolingBookingPayment,
-  createPoolingBooking,
-  getMyPoolingBookings
 } from '../controllers/poolingController.js';
+import {
+  searchPoolingTrips,
+  quotePoolingBooking,
+  createPoolingPaymentOrder,
+  verifyPoolingPayment,
+  payPoolingWithWallet,
+  getMyPoolingBookings,
+} from '../controllers/poolingTripController.js';
 import { getAppModules, getGoodsTypes, getPublicRentalVehicleCatalog, getPublicVehicleTypeCatalog } from '../../admin/controllers/adminController.js';
 import { triggerUserSosAlert } from '../../safety/controllers/safetyController.js';
 
@@ -114,7 +118,9 @@ userRouter.post('/bus-bookings/:id/cancel', authenticateOrResolveUser(['user']),
 
 userRouter.get('/pooling/search', authenticateOrResolveUser(['user']), asyncHandler(searchPoolingRoutes));
 userRouter.get('/pooling/routes/:id', authenticateOrResolveUser(['user']), asyncHandler(getPoolingRouteDetails));
-userRouter.post('/pooling/bookings/order', authenticateOrResolveUser(['user']), asyncHandler(createPoolingBookingOrder));
-userRouter.post('/pooling/bookings/verify', authenticateOrResolveUser(['user']), asyncHandler(verifyPoolingBookingPayment));
-userRouter.post('/pooling/bookings', authenticateOrResolveUser(['user']), asyncHandler(createPoolingBooking));
+userRouter.get('/pooling/trips/search', authenticateOrResolveUser(['user']), asyncHandler(searchPoolingTrips));
+userRouter.post('/pooling/trips/quote', authenticateOrResolveUser(['user']), asyncHandler(quotePoolingBooking));
+userRouter.post('/pooling/bookings/order', authenticateOrResolveUser(['user']), asyncHandler(createPoolingPaymentOrder));
+userRouter.post('/pooling/bookings/verify', authenticateOrResolveUser(['user']), asyncHandler(verifyPoolingPayment));
+userRouter.post('/pooling/bookings/wallet', authenticateOrResolveUser(['user']), asyncHandler(payPoolingWithWallet));
 userRouter.get('/pooling/bookings', authenticateOrResolveUser(['user']), asyncHandler(getMyPoolingBookings));

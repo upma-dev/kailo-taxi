@@ -7,8 +7,10 @@ import {
   AlertTriangle, 
   Shield, 
   Star, 
-  ChevronLeft, 
-  Share2, 
+  ChevronLeft,
+  ChevronUp,
+  ChevronDown,
+  Share2,
   Package, 
   CheckCircle2,
   Receipt,
@@ -23,6 +25,7 @@ import api from '../../../../shared/api/axiosInstance';
 import { BACKEND_ORIGIN } from '../../../../shared/api/runtimeConfig';
 import { clearCurrentRide, getCurrentRide, saveCurrentRide } from '../../services/currentRideService';
 import { useSettings } from '../../../../shared/context/SettingsContext';
+import { ROUTE_REFRESH_INTERVAL_MS, LIVE_LOCATION_POLL_MS, frameMapToPoints, getStageFramePoints, SHOW_TRIP_PREVIEW_BEFORE_PICKUP, riderPinLabel, getDistanceMeters, formatDistanceAway } from '../../../../shared/trackingConfig';
 
 const loadRazorpayScript = () =>
   new Promise((resolve) => {
@@ -48,7 +51,7 @@ import deliveryIcon from '../../../../assets/icons/Delivery.png';
 const MAP_CONTAINER_STYLE = { width: '100%', height: '100%' };
 const DEFAULT_CENTER = { lat: 22.7196, lng: 75.8577 };
 const TERMINAL_STATUSES = new Set(['completed', 'cancelled', 'delivered']);
-const ACTIVE_RIDE_VALIDATE_MS = 4000;
+const ACTIVE_RIDE_VALIDATE_MS = LIVE_LOCATION_POLL_MS;
 const COMPLETED_TRACKING_STATUSES = new Set(['completed', 'delivered']);
 const TIP_OPTIONS = [0, 20, 50, 100];
 
@@ -60,7 +63,8 @@ const toLatLng = (coords, fallback = DEFAULT_CENTER) => {
   return fallback;
 };
 
-const arePositionsNearlyEqual = (first, second, threshold = 0.0002) => (
+// ~2 m: closer than that there is nothing to draw; anything further still gets a line (same as the ride screen).
+const arePositionsNearlyEqual = (first, second, threshold = 0.00002) => (
   Math.abs(Number(first?.lat ?? 0) - Number(second?.lat ?? 0)) < threshold &&
   Math.abs(Number(first?.lng ?? 0) - Number(second?.lng ?? 0)) < threshold
 );
@@ -84,6 +88,20 @@ const calculateBearing = (from, to, fallback = 0) => {
 const getRouteHeading = (position, path = [], fallback = 0) => {
   const nextPoint = path.find((point) => !arePositionsNearlyEqual(position, point, 0.00001));
   return nextPoint ? calculateBearing(position, nextPoint, fallback) : fallback;
+};
+
+// Rider pickup pin: same person icon as the driver and ride screens.
+const buildUserPinIcon = () => {
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 36 36">'
+    + '<circle cx="18" cy="18" r="16" fill="#10b981" stroke="#ffffff" stroke-width="3"/>'
+    + '<circle cx="18" cy="14" r="4.6" fill="#ffffff"/>'
+    + '<path d="M9.5 27c0-4.7 3.8-8 8.5-8s8.5 3.3 8.5 8z" fill="#ffffff"/></svg>';
+  return {
+    url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
+    scaledSize: new window.google.maps.Size(36, 36),
+    anchor: new window.google.maps.Point(18, 18),
+    labelOrigin: new window.google.maps.Point(18, 46),
+  };
 };
 
 const RotatingVehicleMarker = ({ position, iconUrl = deliveryIcon, heading = 0, title = 'Delivery Captain' }) => (
@@ -214,10 +232,35 @@ const ParcelTracking = () => {
   const pickupPosition = useMemo(() => toLatLng(rideRealtime?.pickup?.coordinates || state.pickupCoords || [75.9048, 22.7039]), [rideRealtime?.pickup?.coordinates, state.pickupCoords]);
   const dropPosition = useMemo(() => toLatLng(rideRealtime?.drop?.coordinates || state.dropCoords || [75.8937, 22.7533], pickupPosition), [pickupPosition, rideRealtime?.drop?.coordinates, state.dropCoords]);
   const driverPosition = useMemo(() => toLatLng(rideRealtime?.driverLocation?.coordinates, pickupPosition), [pickupPosition, rideRealtime?.driverLocation?.coordinates]);
+  const hasLiveDriverLocation = Boolean(rideRealtime?.driverLocation?.coordinates?.length >= 2);
   const activeDestination = useMemo(
     () => (['started', 'ongoing', 'arrived', 'completed', 'delivered'].includes(tripStatus) ? dropPosition : pickupPosition),
     [dropPosition, pickupPosition, tripStatus],
   );
+  const isParcelTripStarted = ['started', 'ongoing', 'arrived', 'completed', 'delivered'].includes(tripStatus);
+  const [headerOpen, setHeaderOpen] = useState(true);
+  // Bottom sheet can be pulled down to a small peek (handle + driver row) so the map is fully visible.
+  const SHEET_PEEK_PX = 150;
+  const [sheetOpen, setSheetOpen] = useState(true);
+  const [sheetHeight, setSheetHeight] = useState(0);
+  const sheetRef = useRef(null);
+  useEffect(() => {
+    const el = sheetRef.current;
+    if (!el) return undefined;
+    const measure = () => setSheetHeight(el.offsetHeight);
+    measure();
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  // Same straight-line figure and wording the driver sees (driver -> pickup, then driver -> drop).
+  const liveDistanceLabel = useMemo(() => {
+    if (!hasLiveDriverLocation || ['arrived', 'completed', 'delivered', 'cancelled'].includes(tripStatus)) return '';
+    const text = formatDistanceAway(getDistanceMeters(driverPosition, activeDestination));
+    if (!text) return '';
+    return `${text} away ${['started', 'ongoing'].includes(tripStatus) ? 'from drop' : 'from pickup'}`;
+  }, [activeDestination, driverPosition, hasLiveDriverLocation, tripStatus]);
 
   const driver = useMemo(() => mergeDriverSnapshot(state.driver || {}, rideRealtime?.driver || {}), [state.driver, rideRealtime?.driver]);
   const vehicleIcon = getTrackingVehicleIcon(state, driver);
@@ -639,18 +682,33 @@ const ParcelTracking = () => {
   }, [driver, fare, navigate, parcelPayer, rideId, rideRealtime, routePrefix, tripStatus, userHomeRoute]);
 
   // Route Path Update
+  const lastRouteFetchRef = useRef({ at: 0, key: '' });
   useEffect(() => {
+    // No driver fix yet: draw nothing instead of a line from the pickup to itself / a default point.
+    if (!hasLiveDriverLocation) {
+      setRoutePath([]);
+      return undefined;
+    }
+
     if (!isLoaded || !window.google?.maps?.DirectionsService) {
       setRoutePath(arePositionsNearlyEqual(driverPosition, activeDestination) ? [driverPosition] : [driverPosition, activeDestination]);
-      return;
+      return undefined;
     }
 
     if (arePositionsNearlyEqual(driverPosition, activeDestination)) {
       setRoutePath([driverPosition]);
-      return;
+      return undefined;
     }
 
+    // Driver location arrives every few seconds; throttle Directions calls per destination.
+    const destinationKey = `${activeDestination.lat},${activeDestination.lng}`;
+    const { at, key } = lastRouteFetchRef.current;
+    const wait = key === destinationKey ? Math.max(0, ROUTE_REFRESH_INTERVAL_MS - (Date.now() - at)) : 0;
+
     let active = true;
+    let timerId = null;
+    const fetchRoute = () => {
+    lastRouteFetchRef.current = { at: Date.now(), key: destinationKey };
     const directionsService = new window.google.maps.DirectionsService();
     directionsService.route({
       origin: driverPosition,
@@ -669,41 +727,66 @@ const ParcelTracking = () => {
 
       setRoutePath([driverPosition, activeDestination]);
     });
+    };
+
+    if (wait === 0) {
+      fetchRoute();
+    } else {
+      timerId = window.setTimeout(fetchRoute, wait);
+    }
 
     return () => {
       active = false;
+      if (timerId) window.clearTimeout(timerId);
     };
-  }, [isLoaded, driverPosition, activeDestination]);
+  }, [isLoaded, driverPosition, activeDestination, hasLiveDriverLocation]);
 
+  // Camera: frame only the driver and the current target once per stage (and when the first live fix
+  // arrives), instead of chasing the driver on every tick or zooming out to the whole route.
+  const parcelCameraKey = `${activeDestination.lat},${activeDestination.lng}:${hasLiveDriverLocation ? 'live' : 'wait'}`;
   useEffect(() => {
     if (!map || !window.google?.maps) {
       return;
     }
-
-    if (routePath.length > 1) {
-      if (!hasAutoFramedMapRef.current) {
-        const bounds = new window.google.maps.LatLngBounds();
-        routePath.forEach((point) => bounds.extend(point));
-        bounds.extend(driverPosition);
-        bounds.extend(activeDestination);
-        map.fitBounds(bounds, { top: 120, right: 48, bottom: 320, left: 48 });
-        hasAutoFramedMapRef.current = true;
-        return;
-      }
-
-      map.panTo(driverPosition);
+    if (hasAutoFramedMapRef.current === parcelCameraKey) {
       return;
     }
+    hasAutoFramedMapRef.current = parcelCameraKey;
 
-    if (!hasAutoFramedMapRef.current) {
-      map.panTo(driverPosition);
-      map.setZoom(15);
-      hasAutoFramedMapRef.current = true;
-      return;
+    // Same framing as the driver app: driver + pickup pin + "D" drop (drop only once the trip has started).
+    frameMapToPoints(map, getStageFramePoints({
+      tripStarted: isParcelTripStarted,
+      driver: driverPosition,
+      hasDriver: hasLiveDriverLocation,
+      pickup: pickupPosition,
+      drop: dropPosition,
+    }));
+  }, [activeDestination, driverPosition, dropPosition, hasLiveDriverLocation, isParcelTripStarted, map, parcelCameraKey, pickupPosition]);
+
+  // Before the trip starts, also show where the parcel itself goes (pickup -> drop), like the driver sees.
+  const [tripPreviewPath, setTripPreviewPath] = useState([]);
+  const previewKey = `${pickupPosition.lat},${pickupPosition.lng}|${dropPosition.lat},${dropPosition.lng}`;
+  useEffect(() => {
+    if (!SHOW_TRIP_PREVIEW_BEFORE_PICKUP || isParcelTripStarted || !isLoaded || !window.google?.maps?.DirectionsService || arePositionsNearlyEqual(pickupPosition, dropPosition)) {
+      setTripPreviewPath([]);
+      return undefined;
     }
-
-    map.panTo(driverPosition);
-  }, [activeDestination, driverPosition, map, routePath]);
+    let off = false;
+    new window.google.maps.DirectionsService().route(
+      { origin: pickupPosition, destination: dropPosition, travelMode: window.google.maps.TravelMode.DRIVING },
+      (result, status) => {
+        if (off) return;
+        const path = status === 'OK' && result?.routes?.[0]?.overview_path?.length
+          ? result.routes[0].overview_path.map((p) => ({ lat: p.lat(), lng: p.lng() }))
+          : [];
+        setTripPreviewPath(path.length > 1 ? path : [pickupPosition, dropPosition]);
+      },
+    );
+    return () => {
+      off = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isParcelTripStarted, isLoaded, previewKey]);
 
   const handleCall = () => {
     if (driver.phone) window.open(`tel:${driver.phone}`, '_self');
@@ -861,7 +944,7 @@ const ParcelTracking = () => {
         {isLoaded ? (
           <GoogleMap
             mapContainerStyle={MAP_CONTAINER_STYLE}
-            center={driverPosition}
+            center={activeDestination}
             zoom={15}
             onLoad={setMap}
             options={{
@@ -872,14 +955,44 @@ const ParcelTracking = () => {
               ]
             }}
           >
-            {routePath.length > 0 && (
-              <PolylineF
-                path={routePath}
-                options={{ strokeColor: '#0f172a', strokeOpacity: 0.9, strokeWeight: 6 }}
+            {!isParcelTripStarted && tripPreviewPath.length > 1 && (
+              <>
+                <PolylineF path={tripPreviewPath} options={{ strokeColor: '#000000', strokeOpacity: 0.16, strokeWeight: 9, zIndex: 8 }} />
+                <PolylineF path={tripPreviewPath} options={{ strokeColor: '#111827', strokeOpacity: 0.95, strokeWeight: 5, zIndex: 9 }} />
+              </>
+            )}
+            {hasLiveDriverLocation && routePath.length > 1 && (
+              <>
+                <PolylineF path={routePath} options={{ strokeColor: '#000000', strokeOpacity: 0.16, strokeWeight: 9, zIndex: 10 }} />
+                <PolylineF path={routePath} options={{ strokeColor: '#111827', strokeOpacity: 0.95, strokeWeight: 5, zIndex: 20 }} />
+              </>
+            )}
+            {hasLiveDriverLocation && (
+              <RotatingVehicleMarker position={driverPosition} iconUrl={vehicleIcon} heading={displayDriverHeading} />
+            )}
+            {/* Same pickup pin and "D" drop marker the driver sees, so both maps look identical. */}
+            <MarkerF
+              position={pickupPosition}
+              title="Your location"
+              icon={buildUserPinIcon()}
+              {...(isParcelTripStarted ? {} : { label: riderPinLabel('You') })}
+            />
+            {/* "D" only once the parcel is on its way; before pickup the map is just driver -> you. */}
+            {isParcelTripStarted && (
+              <MarkerF
+                position={dropPosition}
+                title="Drop"
+                label={{ text: 'D', color: '#ffffff', fontSize: '11px', fontWeight: '800' }}
+                icon={{
+                  path: window.google.maps.SymbolPath.CIRCLE,
+                  fillColor: '#ef4444',
+                  fillOpacity: 1,
+                  strokeColor: '#ffffff',
+                  strokeWeight: 2,
+                  scale: 11,
+                }}
               />
             )}
-            <RotatingVehicleMarker position={driverPosition} iconUrl={vehicleIcon} heading={displayDriverHeading} />
-            <MarkerF position={activeDestination} />
           </GoogleMap>
         ) : (
           <div className="h-full w-full bg-slate-200 animate-pulse" />
@@ -891,17 +1004,41 @@ const ParcelTracking = () => {
         <button onClick={() => navigate(userHomeRoute, { replace: true })} className="w-12 h-12 bg-white/90 backdrop-blur-xl rounded-2xl shadow-xl border border-white/80 flex items-center justify-center text-gray-900">
           <ChevronLeft size={20} strokeWidth={2.5} />
         </button>
-        <div className="min-w-0 flex-1 bg-white/90 backdrop-blur-xl rounded-2xl p-3 shadow-xl border border-white/80 flex items-center gap-3 overflow-hidden">
-          <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-900">
-            <Package size={16} strokeWidth={2.5} />
+        {headerOpen ? (
+          <div className="min-w-0 flex-1 bg-white/90 backdrop-blur-xl rounded-2xl p-3 shadow-xl border border-white/80 flex items-center gap-3 overflow-hidden">
+            <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-900">
+              <Package size={16} strokeWidth={2.5} />
+            </div>
+            <div className="min-w-0 flex-1 overflow-hidden">
+              {/* Pickup until the driver verifies the OTP; the drop only appears once the parcel is on its way. */}
+              <p className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-500">
+                {isParcelTripStarted ? 'Destination' : 'Pickup'}
+              </p>
+              <p className="mt-1 truncate text-xs font-black text-gray-900">
+                {isParcelTripStarted
+                  ? (rideRealtime?.drop?.address || state.drop || 'Drop')
+                  : (rideRealtime?.pickup?.address || state.pickup || 'Pickup')}
+              </p>
+            </div>
+            <button
+              type="button"
+              aria-label="Minimize header"
+              onClick={() => setHeaderOpen(false)}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600"
+            >
+              <ChevronUp size={16} strokeWidth={2.8} />
+            </button>
           </div>
-          <div className="min-w-0 flex-1 overflow-hidden">
-            <p className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-500">Destination</p>
-            <p className="mt-1 truncate text-xs font-black text-gray-900">
-              {state.drop || 'Drop'}
-            </p>
-          </div>
-        </div>
+        ) : (
+          <button
+            type="button"
+            aria-label="Show destination"
+            onClick={() => setHeaderOpen(true)}
+            className="w-12 h-12 bg-white/90 backdrop-blur-xl rounded-2xl shadow-xl border border-white/80 flex items-center justify-center text-slate-700"
+          >
+            <ChevronDown size={18} strokeWidth={2.8} />
+          </button>
+        )}
       </motion.div>
 
       {/* Toast Notification */}
@@ -915,11 +1052,24 @@ const ParcelTracking = () => {
 
       {/* Bottom Tracking Card */}
       <motion.div
+        ref={sheetRef}
         initial={{ y: 300 }}
-        animate={{ y: 0 }}
+        animate={{ y: sheetOpen || isDeliveryCompleted ? 0 : Math.max(0, sheetHeight - SHEET_PEEK_PX) }}
+        transition={{ type: 'spring', damping: 30, stiffness: 300 }}
         className="absolute bottom-0 left-0 right-0 z-20 bg-white rounded-t-[32px] sm:rounded-t-[40px] shadow-[0_-20px_60px_rgba(0,0,0,0.15)] p-5 sm:p-6 pb-8 border-t border-gray-100 max-h-[85vh] sm:max-h-[90vh] overflow-y-auto"
       >
-        <div className="w-12 h-1.5 bg-gray-100 rounded-full mx-auto mb-6" />
+        {isDeliveryCompleted ? (
+          <div className="w-12 h-1.5 bg-gray-100 rounded-full mx-auto mb-6" />
+        ) : (
+          <button
+            type="button"
+            aria-label={sheetOpen ? 'Minimize details' : 'Show details'}
+            onClick={() => setSheetOpen((open) => !open)}
+            className="mx-auto mb-4 flex h-7 w-24 items-center justify-center rounded-full bg-slate-100 text-slate-500"
+          >
+            {sheetOpen ? <ChevronDown size={18} strokeWidth={3} /> : <ChevronUp size={18} strokeWidth={3} />}
+          </button>
+        )}
 
         {isDeliveryCompleted ? (
           <div className="space-y-5">
@@ -1162,6 +1312,9 @@ const ParcelTracking = () => {
                         : 'Arriving Shortly'}
                   </span>
                 </div>
+                {liveDistanceLabel && (
+                  <p className="mt-1 text-[11px] font-black text-slate-700">{liveDistanceLabel}</p>
+                )}
               </div>
             </div>
 

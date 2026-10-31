@@ -1,470 +1,205 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  MapPin, 
-  ArrowLeftRight, 
-  Calendar, 
-  ChevronRight, 
-  Clock, 
-  Star,
-  ShieldCheck,
-  Users,
-  ArrowLeft,
-  Search,
-  History
-} from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { userService } from '../../services/userService';
+import { ArrowLeftRight, ArrowLeft, Calendar, Clock, Minus, Plus, Search, Users, Wallet, Split } from 'lucide-react';
+import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
-
-const toRadians = (degree) => (degree * Math.PI) / 180;
-const calculateDistanceKm = (from, to) => {
-  if (!Array.isArray(from) || from.length < 2 || !Array.isArray(to) || to.length < 2) return 0;
-  const fromCoords = { lat: Number(from[1]), lng: Number(from[0]) };
-  const toCoords = { lat: Number(to[1]), lng: Number(to[0]) };
-  
-  if (!Number.isFinite(fromCoords.lat) || !Number.isFinite(fromCoords.lng) || !Number.isFinite(toCoords.lat) || !Number.isFinite(toCoords.lng)) {
-    return 0;
-  }
-
-  const earthRadiusKm = 6371;
-  const dLat = toRadians(toCoords.lat - fromCoords.lat);
-  const dLng = toRadians(toCoords.lng - fromCoords.lng);
-
-  const lat1 = toRadians(fromCoords.lat);
-  const lat2 = toRadians(toCoords.lat);
-
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.sin(dLng / 2) * Math.sin(dLng / 2) * Math.cos(lat1) * Math.cos(lat2);
-
-  return earthRadiusKm * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
-};
-
-// Asset Imports
+import PoolingPlaceInput from './PoolingPlaceInput';
 import taxiImg from '../../../../assets/3d images/AutoCab/taxi.png';
 
-const toCleanString = (value = '') => String(value || '').trim();
+const MAX_SEATS = 4;
 
-const formatDurationFromSchedule = (schedule = {}) => {
-  const departure = toCleanString(schedule?.departureTime);
-  const arrival = toCleanString(schedule?.arrivalTime);
-  if (!departure || !arrival) return '';
+const pad = (value) => String(value).padStart(2, '0');
+const toDateInput = (date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 
-  const [departureHour, departureMinute] = departure.split(':').map(Number);
-  const [arrivalHour, arrivalMinute] = arrival.split(':').map(Number);
-
-  if (![departureHour, departureMinute, arrivalHour, arrivalMinute].every(Number.isFinite)) {
-    return '';
-  }
-
-  let totalMinutes = ((arrivalHour * 60) + arrivalMinute) - ((departureHour * 60) + departureMinute);
-  if (totalMinutes < 0) {
-    totalMinutes += 24 * 60;
-  }
-
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  if (hours > 0 && minutes > 0) return `${hours}h ${minutes}m`;
-  if (hours > 0) return `${hours}h`;
-  return `${minutes}m`;
+// Default departure: next half hour that is at least 30 minutes away.
+const getDefaultDeparture = () => {
+  const next = new Date(Date.now() + 30 * 60 * 1000);
+  next.setMinutes(next.getMinutes() <= 30 ? 30 : 60, 0, 0);
+  return { date: toDateInput(next), time: `${pad(next.getHours())}:${pad(next.getMinutes())}` };
 };
 
-const getPrimarySchedule = (route = {}) => {
-  const schedules = Array.isArray(route?.schedules) ? route.schedules : [];
-  return schedules.find((item) => String(item?.status || '').toLowerCase() === 'active') || schedules[0] || null;
-};
-
-const normalizePopularRoute = (route = {}) => {
-  const schedule = getPrimarySchedule(route);
-  const middleStopCount = Array.isArray(route?.stops) ? route.stops.length : 0;
-
-  return {
-    id: route._id || route.id,
-    from: toCleanString(route.originLabel) || 'Origin',
-    to: toCleanString(route.destinationLabel) || 'Destination',
-    price: Number(route.farePerSeat || 0),
-    time: formatDurationFromSchedule(schedule) || (schedule?.departureTime && schedule?.arrivalTime ? `${schedule.departureTime} - ${schedule.arrivalTime}` : 'Schedule available'),
-    scheduleLabel: toCleanString(schedule?.label) || 'Shared route',
-    seats: Number(route.maxSeatsPerBooking || 0),
-    stopCount: middleStopCount,
-  };
-};
+const HOW_IT_WORKS = [
+  { icon: Users, title: 'Book the car', text: 'Pay for the whole car. Others heading your way can hop in.' },
+  { icon: Split, title: 'Fare gets split', text: 'Every rider who joins brings everyone\'s share down.' },
+  { icon: Wallet, title: 'Money back instantly', text: 'The difference lands in your wallet right away.' },
+];
 
 const PoolingHome = () => {
   const navigate = useNavigate();
-  const [search, setSearch] = useState({
-    from: '',
-    to: '',
-    date: new Date().toISOString().split('T')[0]
-  });
-  const [popularRoutes, setPopularRoutes] = useState([]);
-  const [allSuggestions, setAllSuggestions] = useState({ origins: [], destinations: [] });
-  const [showFromSuggestions, setShowFromSuggestions] = useState(false);
-  const [showToSuggestions, setShowToSuggestions] = useState(false);
-  
-  const [userCoords, setUserCoords] = useState(null);
-  const [locationCoords, setLocationCoords] = useState({});
-  
-  const fromRef = useRef(null);
-  const toRef = useRef(null);
-
-  useEffect(() => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          setUserCoords([pos.coords.longitude, pos.coords.latitude]);
-        },
-        null,
-        { enableHighAccuracy: true }
-      );
-    }
-  }, []);
-
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        const response = await userService.searchPoolingRoutes({});
-        const routes = Array.isArray(response?.data?.data) ? response.data.data : Array.isArray(response?.data) ? response.data : [];
-        
-        // Extract unique locations for suggestions
-        const origins = [...new Set(routes.map(r => r.originLabel).filter(Boolean))];
-        const destinations = [...new Set(routes.map(r => r.destinationLabel).filter(Boolean))];
-        setAllSuggestions({ origins, destinations });
-
-        // Map city names to coordinates
-        const coordsMap = {};
-        routes.forEach((route) => {
-          if (route.originLabel && Array.isArray(route.pickupPoints) && route.pickupPoints.length > 0) {
-            const firstStop = route.pickupPoints[0];
-            if (Number.isFinite(firstStop.longitude) && Number.isFinite(firstStop.latitude)) {
-              coordsMap[route.originLabel] = [firstStop.longitude, firstStop.latitude];
-            }
-          }
-          if (route.destinationLabel && Array.isArray(route.dropPoints) && route.dropPoints.length > 0) {
-            const firstStop = route.dropPoints[0];
-            if (Number.isFinite(firstStop.longitude) && Number.isFinite(firstStop.latitude)) {
-              coordsMap[route.destinationLabel] = [firstStop.longitude, firstStop.latitude];
-            }
-          }
-        });
-        setLocationCoords(coordsMap);
-
-        const activeRoutes = routes
-          .filter((route) => String(route?.status || '').toLowerCase() === 'active' && route?.active !== false)
-          .slice(0, 6)
-          .map(normalizePopularRoute)
-          .filter((route) => route.id);
-        setPopularRoutes(activeRoutes);
-      } catch (error) {
-        setPopularRoutes([]);
-      }
-    };
-
-    loadData();
-  }, []);
-
-  // Close suggestions on click outside
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (fromRef.current && !fromRef.current.contains(event.target)) setShowFromSuggestions(false);
-      if (toRef.current && !toRef.current.contains(event.target)) setShowToSuggestions(false);
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const handleSearch = () => {
-    if (!search.from || !search.to) {
-      toast.error('Please select both origin and destination');
-      return;
-    }
-    navigate(`/taxi/user/pooling/list?from=${search.from}&to=${search.to}&date=${search.date}`);
-  };
+  const [defaults] = useState(getDefaultDeparture);
+  const [pickup, setPickup] = useState(null);
+  const [drop, setDrop] = useState(null);
+  const [date, setDate] = useState(defaults.date);
+  const [time, setTime] = useState(defaults.time);
+  const [seats, setSeats] = useState(1);
 
   const swapLocations = () => {
-    setSearch(prev => ({ ...prev, from: prev.to, to: prev.from }));
-  };
-
-  const getSortedFilteredSuggestions = (type, query) => {
-    const list = type === 'from' ? allSuggestions.origins : allSuggestions.destinations;
-    const filtered = list.filter(loc => 
-      loc.toLowerCase().includes(query.toLowerCase()) && loc !== query
-    );
-    
-    if (userCoords) {
-      return filtered
-        .map(name => {
-          const coords = locationCoords[name];
-          const distance = coords ? calculateDistanceKm(userCoords, coords) : Infinity;
-          return { name, distance };
-        })
-        .sort((a, b) => a.distance - b.distance);
+    if (!pickup || !drop) {
+      toast.error('Select both pickup and drop first');
+      return;
     }
-    
-    return filtered.map(name => ({ name, distance: null }));
+    setPickup(drop);
+    setDrop(pickup);
   };
 
-  const filteredFrom = useMemo(() => getSortedFilteredSuggestions('from', search.from), [allSuggestions.origins, search.from, userCoords, locationCoords]);
-  const filteredTo = useMemo(() => getSortedFilteredSuggestions('to', search.to), [allSuggestions.destinations, search.to, userCoords, locationCoords]);
+  const handleSearch = () => {
+    if (!pickup) return toast.error('Please choose a pickup location from the suggestions');
+    if (!drop) return toast.error('Please choose a drop location from the suggestions');
+    if (!date || !time) return toast.error('Please choose date and time');
+
+    const departure = new Date(`${date}T${time}:00`);
+    if (Number.isNaN(departure.getTime()) || departure.getTime() < Date.now() + 15 * 60 * 1000) {
+      return toast.error('Please choose a departure at least 15 minutes from now');
+    }
+
+    const params = new URLSearchParams({
+      pickupLat: pickup.lat,
+      pickupLng: pickup.lng,
+      pickupLabel: pickup.label,
+      dropLat: drop.lat,
+      dropLng: drop.lng,
+      dropLabel: drop.label,
+      date,
+      time,
+      seats,
+    });
+    navigate(`/taxi/user/pooling/list?${params.toString()}`);
+    return undefined;
+  };
 
   return (
-    <div className="min-h-screen bg-white pb-24 max-w-lg mx-auto font-sans selection:bg-indigo-100">
-      {/* Header Section */}
-      <div className="relative bg-slate-900 px-6 pt-12 pb-28 text-white overflow-hidden">
-        <div className="absolute top-0 right-0 -mr-16 -mt-16 h-80 w-80 rounded-full bg-indigo-500/20 blur-3xl" />
-        <div className="absolute bottom-0 left-0 -ml-16 -mb-16 h-64 w-64 rounded-full bg-blue-500/10 blur-3xl" />
-        
-        <div className="relative z-20 flex items-center justify-between mb-8">
-          <button 
+    <div className="mx-auto min-h-screen max-w-lg bg-white pb-24 font-sans selection:bg-indigo-100">
+      <div className="relative overflow-hidden bg-slate-900 px-6 pb-28 pt-12 text-white">
+        <div className="absolute right-0 top-0 -mr-16 -mt-16 h-80 w-80 rounded-full bg-indigo-500/20 blur-3xl" />
+        <div className="relative z-20 mb-8 flex items-center justify-between">
+          <button
             onClick={() => navigate('/taxi/user')}
-            className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10 backdrop-blur-md transition hover:bg-white/20 border border-white/10 shadow-xl shadow-black/20"
+            className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/10 backdrop-blur-md transition hover:bg-white/20"
           >
             <ArrowLeft size={20} />
           </button>
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10 backdrop-blur-md border border-white/10">
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/10 backdrop-blur-md">
             <Users size={18} className="text-indigo-200" />
           </div>
         </div>
 
         <div className="relative z-10 flex items-end justify-between">
-          <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="max-w-[200px]"
-          >
-            <h1 className="text-5xl font-black tracking-tight leading-[0.9]">
+          <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="max-w-[200px]">
+            <h1 className="text-5xl font-black leading-[0.9] tracking-tight">
               POOL <br />
               <span className="text-indigo-400">RIDE.</span>
             </h1>
-            <p className="mt-4 text-indigo-100 font-bold uppercase text-[9px] tracking-[0.3em] bg-white/10 inline-block px-3 py-1 rounded-full backdrop-blur-sm">Shared rides</p>
+            <p className="mt-4 inline-block rounded-full bg-white/10 px-3 py-1 text-[9px] font-bold uppercase tracking-[0.3em] text-indigo-100 backdrop-blur-sm">
+              Share the car, split the fare
+            </p>
           </motion.div>
-          
-          <motion.div
+          <motion.img
             initial={{ opacity: 0, scale: 0.8, x: 20 }}
             animate={{ opacity: 1, scale: 1, x: 0 }}
-            transition={{ type: 'spring', damping: 15 }}
-            className="relative -mr-10"
-          >
-            <div className="absolute inset-0 bg-indigo-500/20 blur-3xl rounded-full" />
-            <img src={taxiImg} alt="Pooling" className="relative z-10 h-40 w-auto object-contain drop-shadow-[0_20px_40px_rgba(0,0,0,0.5)]" />
-          </motion.div>
+            src={taxiImg}
+            alt="Pooling"
+            className="relative z-10 -mr-10 h-40 w-auto object-contain drop-shadow-[0_20px_40px_rgba(0,0,0,0.5)]"
+          />
         </div>
       </div>
 
-      {/* Search Card */}
-      <div className="mx-6 -mt-16 relative z-50">
-        <motion.div 
+      <div className="relative z-50 mx-6 -mt-16">
+        <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="rounded-[40px] bg-white p-6 shadow-2xl shadow-indigo-200/50 border border-slate-50"
+          className="rounded-[40px] border border-slate-50 bg-white p-6 shadow-2xl shadow-indigo-200/50"
         >
           <div className="space-y-4">
-            {/* Origin */}
-            <div className="relative" ref={fromRef}>
-              <div className="absolute left-4 top-1/2 -translate-y-1/2 text-indigo-500 z-10">
-                <MapPin size={20} />
-              </div>
-              <input
-                type="text"
-                placeholder="From where?"
-                value={search.from}
-                onFocus={() => setShowFromSuggestions(true)}
-                onChange={(e) => {
-                  setSearch({ ...search, from: e.target.value });
-                  setShowFromSuggestions(true);
-                }}
-                className="w-full rounded-[24px] bg-slate-50 py-5 pl-12 pr-4 text-sm font-black text-slate-900 outline-none transition focus:ring-4 focus:ring-indigo-50 border border-transparent focus:border-indigo-100"
-              />
-              
-              <AnimatePresence>
-                {showFromSuggestions && filteredFrom.length > 0 && (
-                  <motion.div 
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 10 }}
-                    className="absolute left-0 right-0 top-full mt-2 bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden z-[100]"
-                  >
-                    <p className="px-5 pt-4 pb-2 text-[10px] font-black uppercase tracking-widest text-slate-400">Suggestions</p>
-                    {filteredFrom.map((item, idx) => (
-                      <button
-                        key={idx}
-                        onClick={() => {
-                          setSearch({ ...search, from: item.name });
-                          setShowFromSuggestions(false);
-                        }}
-                        className="w-full px-5 py-4 text-left flex items-center justify-between hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0"
-                      >
-                        <div className="flex items-center gap-4 min-w-0 flex-1">
-                          <History size={16} className="text-slate-300 shrink-0" />
-                          <span className="text-sm font-black text-slate-900 truncate">{item.name}</span>
-                        </div>
-                        {item.distance && item.distance !== Infinity && (
-                          <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200/80 rounded-lg text-[10px] font-black shrink-0">
-                            {item.distance.toFixed(1)} km
-                          </span>
-                        )}
-                      </button>
-                    ))}
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
+            <PoolingPlaceInput value={pickup} onChange={setPickup} placeholder="Pickup location" allowCurrentLocation />
 
-            {/* Swap Button */}
-            <div className="relative flex justify-center -my-3 z-10">
-              <button 
+            <div className="relative z-10 -my-3 flex justify-center">
+              <button
+                type="button"
                 onClick={swapLocations}
-                className="h-12 w-12 rounded-2xl bg-indigo-600 text-white shadow-xl flex items-center justify-center border-4 border-white active:scale-90 transition-transform"
+                className="flex h-12 w-12 items-center justify-center rounded-2xl border-4 border-white bg-indigo-600 text-white shadow-xl transition-transform active:scale-90"
               >
                 <ArrowLeftRight size={20} className="rotate-90" />
               </button>
             </div>
 
-            {/* Destination */}
-            <div className="relative" ref={toRef}>
-              <div className="absolute left-4 top-1/2 -translate-y-1/2 text-rose-500 z-10">
-                <MapPin size={20} />
-              </div>
-              <input
-                type="text"
-                placeholder="To where?"
-                value={search.to}
-                onFocus={() => setShowToSuggestions(true)}
-                onChange={(e) => {
-                  setSearch({ ...search, to: e.target.value });
-                  setShowToSuggestions(true);
-                }}
-                className="w-full rounded-[24px] bg-slate-50 py-5 pl-12 pr-4 text-sm font-black text-slate-900 outline-none transition focus:ring-4 focus:ring-indigo-50 border border-transparent focus:border-indigo-100"
-              />
+            <PoolingPlaceInput value={drop} onChange={setDrop} placeholder="Drop location" accentClass="text-rose-500" />
 
-              <AnimatePresence>
-                {showToSuggestions && filteredTo.length > 0 && (
-                  <motion.div 
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 10 }}
-                    className="absolute left-0 right-0 top-full mt-2 bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden z-[100]"
-                  >
-                    <p className="px-5 pt-4 pb-2 text-[10px] font-black uppercase tracking-widest text-slate-400">Suggestions</p>
-                    {filteredTo.map((item, idx) => (
-                      <button
-                        key={idx}
-                        onClick={() => {
-                          setSearch({ ...search, to: item.name });
-                          setShowToSuggestions(false);
-                        }}
-                        className="w-full px-5 py-4 text-left flex items-center justify-between hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0"
-                      >
-                        <div className="flex items-center gap-4 min-w-0 flex-1">
-                          <History size={16} className="text-slate-300 shrink-0" />
-                          <span className="text-sm font-black text-slate-900 truncate">{item.name}</span>
-                        </div>
-                        {item.distance && item.distance !== Infinity && (
-                          <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200/80 rounded-lg text-[10px] font-black shrink-0">
-                            {item.distance.toFixed(1)} km
-                          </span>
-                        )}
-                      </button>
-                    ))}
-                  </motion.div>
-                )}
-              </AnimatePresence>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="relative">
+                <Calendar size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-indigo-500" />
+                <input
+                  type="date"
+                  value={date}
+                  min={toDateInput(new Date())}
+                  onChange={(event) => setDate(event.target.value)}
+                  className="w-full appearance-none rounded-[24px] border border-transparent bg-slate-50 py-5 pl-11 pr-3 text-sm font-black text-slate-900 outline-none focus:border-indigo-100 focus:ring-4 focus:ring-indigo-50"
+                />
+              </div>
+              <div className="relative">
+                <Clock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-indigo-500" />
+                <input
+                  type="time"
+                  value={time}
+                  onChange={(event) => setTime(event.target.value)}
+                  className="w-full appearance-none rounded-[24px] border border-transparent bg-slate-50 py-5 pl-11 pr-3 text-sm font-black text-slate-900 outline-none focus:border-indigo-100 focus:ring-4 focus:ring-indigo-50"
+                />
+              </div>
             </div>
 
-            {/* Date Selection */}
-            <div className="relative">
-              <div className="absolute left-4 top-1/2 -translate-y-1/2 text-indigo-500">
-                <Calendar size={20} />
+            <div className="flex items-center justify-between rounded-[24px] bg-slate-50 px-5 py-3">
+              <div className="flex items-center gap-3">
+                <Users size={18} className="text-indigo-500" />
+                <span className="text-sm font-black text-slate-900">Seats</span>
               </div>
-              <input
-                type="date"
-                value={search.date}
-                onChange={(e) => setSearch({ ...search, date: e.target.value })}
-                className="w-full rounded-[24px] bg-slate-50 py-5 pl-12 pr-4 text-sm font-black text-slate-900 outline-none transition focus:ring-4 focus:ring-indigo-50 border border-transparent focus:border-indigo-100 appearance-none"
-              />
+              <div className="flex items-center gap-4">
+                <button
+                  type="button"
+                  disabled={seats <= 1}
+                  onClick={() => setSeats((current) => Math.max(1, current - 1))}
+                  className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-slate-900 shadow-sm active:scale-90 disabled:opacity-30"
+                >
+                  <Minus size={16} />
+                </button>
+                <span className="w-4 text-center text-base font-black text-slate-900">{seats}</span>
+                <button
+                  type="button"
+                  disabled={seats >= MAX_SEATS}
+                  onClick={() => setSeats((current) => Math.min(MAX_SEATS, current + 1))}
+                  className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-slate-900 shadow-sm active:scale-90 disabled:opacity-30"
+                >
+                  <Plus size={16} />
+                </button>
+              </div>
             </div>
 
             <button
+              type="button"
               onClick={handleSearch}
-              className="mt-2 w-full rounded-[24px] bg-slate-900 py-5 text-sm font-black text-white shadow-2xl shadow-slate-200 transition hover:bg-black active:scale-[0.98] flex items-center justify-center gap-3"
+              className="mt-2 flex w-full items-center justify-center gap-3 rounded-[24px] bg-slate-900 py-5 text-sm font-black text-white shadow-2xl shadow-slate-200 transition hover:bg-black active:scale-[0.98]"
             >
               <Search size={20} />
-              Search Rides
+              Find Rides
             </button>
           </div>
         </motion.div>
       </div>
 
-      {/* Popular Routes */}
-      <div className="mt-16 px-6">
-        <div className="mb-8 flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-black text-slate-900 tracking-tight">Popular Routes</h2>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Frequent shared trips</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-            className="w-10 h-10 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-900"
-          >
-            <ChevronRight size={20} className="-rotate-90" />
-          </button>
-        </div>
-        
-        <div className="space-y-5">
-          {!popularRoutes.length ? (
-            <div className="rounded-[32px] border-2 border-dashed border-slate-100 bg-slate-50/50 p-10 text-center">
-              <History size={32} className="mx-auto text-slate-200 mb-4" />
-              <p className="text-xs font-bold text-slate-400 leading-relaxed max-w-[180px] mx-auto">Active pooling routes will appear here once they are created by admin.</p>
-            </div>
-          ) : null}
-          {popularRoutes.map((route) => (
-            <motion.div
-              key={route.id}
-              whileTap={{ scale: 0.98 }}
-              onClick={() => {
-                setSearch({ ...search, from: route.from, to: route.to });
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }}
-              className="group relative overflow-hidden rounded-[40px] border border-slate-100 bg-white p-6 transition-all hover:border-indigo-200 hover:shadow-2xl hover:shadow-indigo-100/50"
-            >
-              <div className="flex items-center justify-between relative z-10">
-                <div className="flex items-center gap-5">
-                  <div className="flex h-14 w-14 items-center justify-center rounded-3xl bg-slate-50 text-slate-400 group-hover:bg-indigo-600 group-hover:text-white transition-all duration-500 shadow-sm">
-                    <ArrowLeftRight size={22} />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-base font-black text-slate-900">{route.from}</span>
-                      <ChevronRight size={14} className="text-slate-300" />
-                      <span className="text-base font-black text-slate-900">{route.to}</span>
-                    </div>
-                    <div className="mt-2 flex flex-wrap items-center gap-4">
-                      <div className="flex items-center gap-1.5 text-[10px] font-black text-indigo-600 uppercase tracking-wider bg-indigo-50 px-2 py-0.5 rounded-full">
-                        <Clock size={12} />
-                        {route.time}
-                      </div>
-                      <div className="flex items-center gap-1.5 text-[10px] font-black text-amber-600 uppercase tracking-wider bg-amber-50 px-2 py-0.5 rounded-full">
-                        <Users size={12} />
-                        {route.seats || 0} SEATS
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-xl font-black text-slate-900">₹{route.price}</p>
-                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">FARES</p>
-                </div>
+      <div className="mt-14 px-6">
+        <h2 className="text-2xl font-black tracking-tight text-slate-900">How pooling works</h2>
+        <div className="mt-6 space-y-4">
+          {HOW_IT_WORKS.map(({ icon: Icon, title, text }) => (
+            <div key={title} className="flex items-start gap-4 rounded-[28px] border border-slate-100 bg-white p-5">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
+                <Icon size={22} />
               </div>
-              
-              {/* Background Decoration */}
-              <div className="absolute -right-12 -bottom-12 w-32 h-32 bg-indigo-50/20 rounded-full blur-2xl group-hover:bg-indigo-100/40 transition-colors" />
-            </motion.div>
+              <div>
+                <p className="text-sm font-black text-slate-900">{title}</p>
+                <p className="mt-1 text-xs font-semibold leading-relaxed text-slate-500">{text}</p>
+              </div>
+            </div>
           ))}
         </div>
       </div>
-
     </div>
   );
 };

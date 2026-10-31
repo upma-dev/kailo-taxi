@@ -43,6 +43,8 @@ export const getCancellationPolicy = async (ride) => {
       : 0;
 
     return {
+      // Admin's "Fee Goes to" choice on the price rule: 'driver' means the rider's cancellation fee is paid out to the driver.
+      fee_goes_to: String(setPrice.cancellation_fee_goes_to || 'admin').trim().toLowerCase(),
       enable_cancellation_charge: setPrice.cancellation_policy.enable_cancellation_charge ?? true,
       free_cancellation_time_mins: Number(setPrice.cancellation_policy.free_cancellation_time_mins ?? 2),
       fixed_cancellation_charge: fixedCharge,
@@ -61,6 +63,7 @@ export const getCancellationPolicy = async (ride) => {
   const policyFromBiz = bizSetting?.transport_ride?.cancellation_policy || defaultPolicy;
 
   return {
+    fee_goes_to: String(policyFromBiz.fee_goes_to || 'admin').trim().toLowerCase(),
     enable_cancellation_charge: Boolean(policyFromBiz.enable_cancellation_charge ?? true),
     free_cancellation_time_mins: Number(policyFromBiz.free_cancellation_time_mins ?? 2),
     fixed_cancellation_charge: Number(policyFromBiz.fixed_cancellation_charge ?? 50),
@@ -110,6 +113,13 @@ export const calculateCancellationBill = async ({ ride, cancelledBy = 'user', re
   const estimatedFare = Number(ride.baseRideFare)
     || Math.max(0, Number(ride.fare || ride.baseFare || 0) - previousCancellationFee);
 
+  // Share of the rider's fee paid to the driver. "Fee Goes to: Driver" pays all of it unless the admin has
+  // set an explicit Driver Compensation % (then that % applies).
+  const driverSharePercent = Math.min(100, Math.max(0,
+    policy.fee_goes_to === 'driver' && !(policy.driver_compensation_percentage > 0)
+      ? 100
+      : policy.driver_compensation_percentage));
+
   if (!policy.enable_cancellation_charge) {
     isWaived = true;
     feeWaivedReason = 'Cancellation charges disabled by policy';
@@ -127,8 +137,8 @@ export const calculateCancellationBill = async ({ ride, cancelledBy = 'user', re
       const calculatedBase = policy.fixed_cancellation_charge + (estimatedFare * policy.percentage_cancellation_charge / 100);
       cancellationFee = Math.min(Math.round(calculatedBase), policy.max_cancellation_fee);
 
-      if (policy.driver_compensation_percentage > 0) {
-        driverCompensation = Math.round((cancellationFee * policy.driver_compensation_percentage) / 100);
+      if (driverSharePercent > 0) {
+        driverCompensation = Math.round((cancellationFee * driverSharePercent) / 100);
       }
       paymentStatus = 'added_to_next_ride_due';
     } else {
@@ -141,8 +151,8 @@ export const calculateCancellationBill = async ({ ride, cancelledBy = 'user', re
     if (isPassengerNoShow && timeSinceArrivalMins >= policy.cancellation_grace_period_driver_arrived) {
       const calculatedBase = policy.fixed_cancellation_charge + (estimatedFare * policy.percentage_cancellation_charge / 100);
       cancellationFee = Math.min(Math.round(calculatedBase), policy.max_cancellation_fee);
-      if (policy.driver_compensation_percentage > 0) {
-        driverCompensation = Math.round((cancellationFee * policy.driver_compensation_percentage) / 100);
+      if (driverSharePercent > 0) {
+        driverCompensation = Math.round((cancellationFee * driverSharePercent) / 100);
       }
       driverPenalty = 0;
       paymentStatus = 'added_to_next_ride_due';
@@ -247,7 +257,11 @@ const FLAGGED_DRIVER_REASONS = [
   'driver is not responding'
 ];
 
-export const processRideCancellation = async ({ ride, cancelledBy = 'user', reason = '', comment = '', cancellerId = null, session = null }) => {
+// deferredSideEffects: pass an empty object to get promo restore and driver wallet credit/penalty back as
+// `deferredSideEffects.run()` instead of doing them inside the caller's transaction. That lets the caller
+// commit the cancellation and notify the other side first, then run it right after. Every wallet entry has
+// a referenceKey, so running it again never double-credits.
+export const processRideCancellation = async ({ ride, cancelledBy = 'user', reason = '', comment = '', cancellerId = null, session = null, deferredSideEffects = null }) => {
   if (!ride) {
     return null;
   }
@@ -277,64 +291,72 @@ export const processRideCancellation = async ({ ride, cancelledBy = 'user', reas
     payment_status: paymentDetails.status,
   };
 
-  // Give the promo use back to the rider as per the promo's restore_on_cancel setting
-  await releasePromoForCancelledRide({
-    session,
-    ride,
-    cancellationFeeApplied: !billBreakdown.isWaived && billBreakdown.totalAmount > 0,
-    riderAtFault: cancelledBy === 'user',
-  });
+  const runSideEffects = async (sideSession) => {
+    // Give the promo use back to the rider as per the promo's restore_on_cancel setting
+    await releasePromoForCancelledRide({
+      session: sideSession,
+      ride,
+      cancellationFeeApplied: !billBreakdown.isWaived && billBreakdown.totalAmount > 0,
+      riderAtFault: cancelledBy === 'user',
+    });
 
-  // Reset driver isOnRide status & driver wallet transactions
-  if (ride.driverId) {
-    await Driver.updateOne(
-      { _id: ride.driverId },
-      { $set: { isOnRide: false } },
-      { session }
-    );
-
-    const refBase = `ride-cancel:${String(ride._id)}`;
-
-    // Driver Compensation
-    if (driverBreakdown.driverPayout > 0) {
-      await applyDriverWalletAdjustment({
-        driverId: ride.driverId,
-        amount: driverBreakdown.driverPayout,
-        type: 'adjustment',
-        rideId: ride._id,
-        description: `Cancellation compensation for booking ${String(ride._id).slice(-6)}`,
-        metadata: {
-          source: 'CANCELLATION_COMPENSATION',
-          cancelledBy,
-          referenceKey: `${refBase}:compensation`,
-        },
-        session,
-      });
-    }
-
-    // Driver Penalty
-    if (driverBreakdown.driverPenalty > 0) {
-      await applyDriverWalletAdjustment({
-        driverId: ride.driverId,
-        amount: -driverBreakdown.driverPenalty,
-        type: 'adjustment',
-        rideId: ride._id,
-        description: `Cancellation penalty for booking ${String(ride._id).slice(-6)}`,
-        metadata: {
-          source: 'CANCELLATION_PENALTY',
-          cancelledBy,
-          referenceKey: `${refBase}:penalty`,
-        },
-        session,
-      });
-
-      // Increment driver cancellation count
+    // Reset driver isOnRide status & driver wallet transactions
+    if (ride.driverId) {
       await Driver.updateOne(
         { _id: ride.driverId },
-        { $inc: { cancellation_count: 1 } },
-        { session }
+        { $set: { isOnRide: false } },
+        { session: sideSession }
       );
+
+      const refBase = `ride-cancel:${String(ride._id)}`;
+
+      // Driver Compensation
+      if (driverBreakdown.driverPayout > 0) {
+        await applyDriverWalletAdjustment({
+          driverId: ride.driverId,
+          amount: driverBreakdown.driverPayout,
+          type: 'adjustment',
+          rideId: ride._id,
+          description: `Cancellation compensation for booking ${String(ride._id).slice(-6)}`,
+          metadata: {
+            source: 'CANCELLATION_COMPENSATION',
+            cancelledBy,
+            referenceKey: `${refBase}:compensation`,
+          },
+          session: sideSession,
+        });
+      }
+
+      // Driver Penalty
+      if (driverBreakdown.driverPenalty > 0) {
+        await applyDriverWalletAdjustment({
+          driverId: ride.driverId,
+          amount: -driverBreakdown.driverPenalty,
+          type: 'adjustment',
+          rideId: ride._id,
+          description: `Cancellation penalty for booking ${String(ride._id).slice(-6)}`,
+          metadata: {
+            source: 'CANCELLATION_PENALTY',
+            cancelledBy,
+            referenceKey: `${refBase}:penalty`,
+          },
+          session: sideSession,
+        });
+
+        // Increment driver cancellation count
+        await Driver.updateOne(
+          { _id: ride.driverId },
+          { $inc: { cancellation_count: 1 } },
+          { session: sideSession }
+        );
+      }
     }
+  };
+
+  if (deferredSideEffects) {
+    deferredSideEffects.run = () => runSideEffects(null);
+  } else {
+    await runSideEffects(session);
   }
 
   return cancellationBill;

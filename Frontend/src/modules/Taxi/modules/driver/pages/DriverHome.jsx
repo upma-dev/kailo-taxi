@@ -1748,6 +1748,32 @@ const DriverHome = () => {
         return () => clearInterval(poller);
     }, [checkPendingDispatch, isHydratingDriver, isOnline]);
 
+    // A trip in progress must survive a reload / app restart even if the driver shows as offline:
+    // once the driver profile has loaded, look for a live trip once and reopen it.
+    const resumedActiveTripRef = useRef(false);
+    useEffect(() => {
+        if (isHydratingDriver || resumedActiveTripRef.current) return undefined;
+        let off = false;
+        (async () => {
+            const [activeDelivery, activeRide] = await Promise.allSettled([
+                fetchActiveJob('parcel'),
+                fetchActiveJob('ride'),
+            ]);
+            if (off) return;
+            resumedActiveTripRef.current = true;
+            const delivery = activeDelivery.status === 'fulfilled' ? activeDelivery.value : null;
+            const ride = activeRide.status === 'fulfilled' ? activeRide.value : null;
+            const job = delivery?.rideId ? delivery : ride?.rideId ? ride : null;
+            const live = String(job?.liveStatus || job?.status || '').toLowerCase();
+            if (job?.rideId && !['cancelled', 'canceled', 'completed', 'searching'].includes(live)) {
+                openActiveJob(job);
+            }
+        })();
+        return () => {
+            off = true;
+        };
+    }, [isHydratingDriver, fetchActiveJob, openActiveJob]);
+
     const recoverRealtimeSession = useCallback(async ({ reason = 'resume' } = {}) => {
         if (!isOnline || isHydratingDriver || isTogglingDuty) {
             return;
@@ -2190,12 +2216,55 @@ const DriverHome = () => {
             return;
         }
 
-        acceptingRideIdRef.current = activeRequest.rideId;
-        setAcceptingRideId(activeRequest.rideId);
+        const rideIdToAccept = activeRequest.rideId;
+        const requestType = activeRequest.type || 'ride';
+        acceptingRideIdRef.current = rideIdToAccept;
+        setAcceptingRideId(rideIdToAccept);
         setStatusMessage('Accepting ride...');
         stopRideRequestAlertSound();
-        socketService.emit('acceptRide', { rideId: activeRequest.rideId });
-    }, [currentRequest]);
+
+        // Normal path: the realtime socket. If it is down, or the confirmation never comes back,
+        // finish the accept over HTTP so the button can never hang on "Accepting...".
+        const socketUp = typeof socketService.isConnected === 'function' ? socketService.isConnected() : true;
+        if (socketUp) {
+            socketService.emit('acceptRide', { rideId: rideIdToAccept });
+        }
+
+        const finishOverHttp = async () => {
+            if (acceptingRideIdRef.current !== rideIdToAccept) return; // socket already answered
+            let httpError = '';
+            try {
+                await api.post(`/drivers/rides/${rideIdToAccept}/accept`, {}, withDriverAuthorization(getLocalDriverToken()));
+            } catch (error) {
+                // "already accepted" (by this driver over the socket) is fine; anything else is checked below
+                httpError = String(error?.message || error?.error || '');
+                console.warn('[driver-home] HTTP accept failed', httpError);
+            }
+            if (acceptingRideIdRef.current !== rideIdToAccept) return;
+
+            let job = null;
+            try {
+                job = await fetchActiveJob(requestType);
+            } catch {
+                job = null;
+            }
+            acceptingRideIdRef.current = '';
+            setAcceptingRideId('');
+            if (job?.rideId && String(job.rideId) === String(rideIdToAccept)) {
+                currentRequestRef.current = null;
+                setShowRequest(false);
+                setCurrentRequest(null);
+                openActiveJob(job);
+            } else {
+                setStatusMessage(httpError || 'Could not accept this ride. It may have been taken by another driver.');
+                currentRequestRef.current = null;
+                setShowRequest(false);
+                setCurrentRequest(null);
+            }
+        };
+
+        window.setTimeout(finishOverHttp, socketUp ? 6000 : 0);
+    }, [currentRequest, fetchActiveJob, openActiveJob]);
 
     // `reason: 'timeout'` means the accept timer ran out (ignored); anything else is a real reject.
     const handleDecline = useCallback((declineInfo) => {

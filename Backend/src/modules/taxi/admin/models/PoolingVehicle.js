@@ -39,6 +39,23 @@ const poolingVehicleSchema = new mongoose.Schema(
       min: 0,
       max: 100,
     },
+    // Car-pool pricing: totalFare = max(minFare, baseFare + pricePerKm * distanceKm).
+    // pricePerKm = 0 falls back to POOLING_DEFAULT_PRICE_PER_KM.
+    baseFare: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    pricePerKm: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    minFare: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     vehicleType: {
       type: String,
       enum: ['bike', 'sedan', 'hatchback', 'suv', 'van', 'luxury'],

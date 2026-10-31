@@ -16,6 +16,7 @@ import userBusService from '../services/busService';
 import { userService } from '../services/userService';
 import { normalizeBusBooking, normalizePoolingBooking, normalizeRentalBooking, normalizeRide, PAGE_SIZE, TABS } from '../components/activity/activityHelpers';
 import { POOLING_ENABLED, RENTAL_ENABLED } from '../../../shared/featureFlags';
+import { getRideResume, isResumableRide, toCurrentRideSnapshot } from '../services/currentRideService';
 
 const AGGREGATE_FETCH_LIMIT = 60;
 const ACTIVITY_TABS = TABS.filter((tab) => {
@@ -302,6 +303,21 @@ const Activity = () => {
       navigate(`${routePrefix}/ride/detail/${item.id}`, { state: { ride: item.ride } });
     }
   };
+  // A trip that is still going (or still searching) can be reopened straight from history.
+  const TERMINAL_BOOKING = ['completed', 'cancelled', 'canceled', 'failed', 'refunded', 'delivered', 'expired', 'rejected', 'no show'];
+  const getContinueHandler = (item) => {
+    if (item.type === 'bus' || item.type === 'rental' || item.type === 'pooling') {
+      if (item.type === 'rental' && !RENTAL_ENABLED) return undefined;
+      if (item.type === 'pooling' && !POOLING_ENABLED) return undefined;
+      if (TERMINAL_BOOKING.includes(String(item.status || '').toLowerCase())) return undefined;
+      return () => handleItemClick(item);
+    }
+    if (item.type !== 'ride' && item.type !== 'parcel') return undefined;
+    const snapshot = toCurrentRideSnapshot(item.ride || {});
+    if (!snapshot.rideId || !isResumableRide(snapshot)) return undefined;
+    const resume = getRideResume(snapshot, routePrefix || '/taxi/user');
+    return () => navigate(resume.path, { state: resume.state });
+  };
   const helperText = useMemo(() => getHelperText(activeTab), [activeTab]);
 
   return (
@@ -321,7 +337,7 @@ const Activity = () => {
         ) : (
           <div className="space-y-3 pb-2">
             {activities.map((activity) => (
-              <ActivityCard key={activity.id} {...activity} onClick={() => handleItemClick(activity)} />
+              <ActivityCard key={activity.id} {...activity} onClick={() => handleItemClick(activity)} onContinue={getContinueHandler(activity)} continueLabel={activity.type === 'bus' ? 'View ticket' : activity.type === 'pooling' ? 'Open pooling trip' : activity.type === 'rental' ? 'Continue rental' : activity.type === 'parcel' ? 'Continue delivery' : 'Continue ride'} />
             ))}
             <ActivityPager
               pagination={pagination}

@@ -26,9 +26,13 @@ import { GoogleMap, MarkerF, OverlayView, OverlayViewF, PolylineF } from '@react
 import { HAS_VALID_GOOGLE_MAPS_KEY, useAppGoogleMapsLoader } from '../../admin/utils/googleMaps';
 import { socketService } from '../../../shared/api/socket';
 import { pushDriverLocationRealtime } from '../../../shared/services/rideRealtime';
+import { ROUTE_DEVIATION_METERS, ROUTE_REFRESH_INTERVAL_MS, frameMapToPoints, getStageFramePoints, SHOW_TRIP_PREVIEW_BEFORE_PICKUP, riderPinLabel, formatDistanceAway } from '../../../shared/trackingConfig';
 import api from '../../../shared/api/axiosInstance';
 import { BACKEND_ORIGIN } from '../../../shared/api/runtimeConfig';
 import carIcon from '../../../assets/icons/car.png';
+import bikeIcon from '../../../assets/icons/bike.png';
+import autoIcon from '../../../assets/icons/auto.png';
+import deliveryIcon from '../../../assets/icons/Delivery.png';
 import { getLocalDriverToken } from '../services/registrationService';
 import CancellationReceiptModal from '../../shared/components/CancellationReceiptModal';
 import ParcelProofPanel from '../components/ParcelProofPanel';
@@ -52,8 +56,6 @@ const DEFAULT_CENTER = { lat: 22.7196, lng: 75.8577 };
 const DEFAULT_DRIVER_COORDS = [75.8577, 22.7196];
 const ARRIVAL_RADIUS_METERS = 100;
 const MIN_ROUTE_POLYLINE_METERS = 1;
-const ROUTE_DEVIATION_METERS = 100;
-const ROUTE_REFRESH_INTERVAL_MS = 30000;
 const ROUTE_WATCH_INTERVAL_MS = 5000;
 const LOCATION_EMIT_MIN_MS = 2000;
 const LOCATION_PATCH_MIN_MS = 10000;
@@ -358,7 +360,21 @@ const getVehicleMarkerOffset = (width, height) => ({
     y: -(height / 2),
 });
 
-const RotatingVehicleMarker = ({ position, iconUrl = carIcon, heading = 0, title = 'Driver' }) => (
+// Rider pickup pin: a person icon (instead of a letter) so it reads as "the rider is here".
+const buildUserPinIcon = () => {
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 36 36">'
+        + '<circle cx="18" cy="18" r="16" fill="#10b981" stroke="#ffffff" stroke-width="3"/>'
+        + '<circle cx="18" cy="14" r="4.6" fill="#ffffff"/>'
+        + '<path d="M9.5 27c0-4.7 3.8-8 8.5-8s8.5 3.3 8.5 8z" fill="#ffffff"/></svg>';
+    return {
+        url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
+        scaledSize: new window.google.maps.Size(36, 36),
+        anchor: new window.google.maps.Point(18, 18),
+        labelOrigin: new window.google.maps.Point(18, 46),
+    };
+};
+
+const RotatingVehicleMarker = ({ position, iconUrl = carIcon, fallbackIcon = carIcon, heading = 0, title = 'Driver' }) => (
     <OverlayViewF
         position={position}
         mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
@@ -370,10 +386,16 @@ const RotatingVehicleMarker = ({ position, iconUrl = carIcon, heading = 0, title
                 style={{ transform: `rotate(${normalizeHeading(heading)}deg)` }}
             >
                 <img
-                    src={iconUrl || carIcon}
+                    src={iconUrl || fallbackIcon}
                     alt={title}
                     className="h-12 w-12 object-contain drop-shadow-[0_8px_10px_rgba(15,23,42,0.35)]"
                     draggable={false}
+                    onError={(event) => {
+                        // A missing/blocked vehicle icon must never show a broken-image box on the map.
+                        if (event.currentTarget.dataset.fallback) return;
+                        event.currentTarget.dataset.fallback = '1';
+                        event.currentTarget.src = fallbackIcon;
+                    }}
                 />
             </div>
         </div>
@@ -582,11 +604,7 @@ const formatDistanceLabel = (meters) => {
         return 'Nearby';
     }
 
-    if (distance < 1000) {
-        return `${Math.max(50, Math.round(distance / 10) * 10)} m away`;
-    }
-
-    return `${(distance / 1000).toFixed(distance >= 10000 ? 0 : 1)} km away`;
+    return `${formatDistanceAway(distance)} away`;
 };
 
 const formatTimerClock = (totalSeconds) => {
@@ -777,6 +795,20 @@ const ActiveTrip = () => {
                 const currentRideId = getJobRideId(currentJob);
                 const currentStatus = String(currentJob?.liveStatus || currentJob?.status || '').toLowerCase();
 
+                const bothFailedOffline =
+                    activeDelivery.status === 'rejected' &&
+                    activeRide.status === 'rejected' &&
+                    ![activeDelivery.reason, activeRide.reason].some((r) => Number(r?.response?.status || r?.status || 0) === 404);
+                if (!currentRideId && bothFailedOffline) {
+                    // Network trouble, not "no trip": keep showing the stored trip instead of throwing the driver out.
+                    const fallbackSnapshot = readStoredActiveTripSnapshot();
+                    if (fallbackSnapshot?.rideId) {
+                        setHydratedTripState(fallbackSnapshot);
+                        setPhase(resolvePhaseFromJob(fallbackSnapshot?.request?.raw || fallbackSnapshot));
+                        return;
+                    }
+                }
+
                 if (!currentRideId || currentStatus === 'cancelled' || currentStatus === 'canceled') {
                     exitToDriverHome('Ride was cancelled or is no longer active.');
                     return;
@@ -840,7 +872,24 @@ const ActiveTrip = () => {
         effectiveState.image ||
         ''
     ).trim();
-    const vehicleIconUrl = rawVehicleIcon ? resolveAssetUrl(rawVehicleIcon) : carIcon;
+    // With no custom icon, show the right kind of vehicle (a bike must never appear as a car).
+    const vehicleKind = String(
+        liveRaw.vehicleIconType ||
+        liveRequest.vehicleIconType ||
+        effectiveState.vehicleIconType ||
+        liveRaw.driver?.vehicleIconType ||
+        liveRaw.driver?.vehicleType ||
+        liveRaw.vehicleType ||
+        '',
+    ).toLowerCase();
+    const defaultVehicleIcon = vehicleKind.includes('bike') || vehicleKind.includes('scoot')
+        ? bikeIcon
+        : vehicleKind.includes('auto')
+            ? autoIcon
+            : isParcel
+                ? deliveryIcon
+                : carIcon;
+    const vehicleIconUrl = rawVehicleIcon ? resolveAssetUrl(rawVehicleIcon) : defaultVehicleIcon;
 
     useEffect(() => {
         if (!rideId) return;
@@ -1006,6 +1055,7 @@ const ActiveTrip = () => {
     const [driverHeading, setDriverHeading] = useState(null);
     const [routePath, setRoutePath] = useState([]);
     const [routeError, setRouteError] = useState('');
+    const [tripPreviewPath, setTripPreviewPath] = useState([]);
     const [isSimulationEnabled, setIsSimulationEnabled] = useState(false);
     const [isSimulationRunning, setIsSimulationRunning] = useState(false);
     const [simulationStep, setSimulationStep] = useState(0);
@@ -1142,6 +1192,13 @@ const ActiveTrip = () => {
                         return;
                     }
                 }
+
+                // Directions failed (no road route, API key/billing problem, quota...). Never leave the map
+                // without a line: draw the straight line between the driver and the destination instead.
+                const straight = [origin, destination];
+                routePathRef.current = straight;
+                setRoutePath(straight);
+                setRouteError('');
             },
         );
     }, [isLoaded]);
@@ -1764,6 +1821,148 @@ const ActiveTrip = () => {
         });
     };
 
+    // ---- driver cancels a trip before it starts. The penalty amount is set by the admin. ----
+    const [showCancelSheet, setShowCancelSheet] = useState(false);
+    const [cancelReason, setCancelReason] = useState('');
+    const [cancelPreview, setCancelPreview] = useState(null);
+    const [isCancelling, setIsCancelling] = useState(false);
+    const [cancelError, setCancelError] = useState('');
+    const DRIVER_CANCEL_REASONS = ['Rider not responding', 'Rider asked to cancel', 'Vehicle problem', 'Wrong pickup location', 'Unsafe pickup', 'Other'];
+
+    const openCancelSheet = async () => {
+        if (!rideId) return;
+        setCancelReason('');
+        setCancelError('');
+        setCancelPreview(null);
+        setShowCancelSheet(true);
+        try {
+            const res = await api.get(`/drivers/rides/${rideId}/cancel-preview`, withDriverAuthorization(getLocalDriverToken()));
+            setCancelPreview(unwrapApiPayload(res));
+        } catch (error) {
+            setCancelError(error?.message || error?.error || 'Could not load cancellation details.');
+        }
+    };
+
+    const confirmDriverCancel = async () => {
+        if (!rideId || isCancelling) return;
+        if (!cancelReason) {
+            setCancelError('Please choose a reason.');
+            return;
+        }
+        setIsCancelling(true);
+        setCancelError('');
+        try {
+            const res = await api.post(`/drivers/rides/${rideId}/cancel`, { reason: cancelReason }, withDriverAuthorization(getLocalDriverToken()));
+            const data = unwrapApiPayload(res);
+            clearStoredTripPhase(rideId);
+            clearStoredTripUiState(rideId);
+            clearStoredActiveTripSnapshot();
+            setShowCancelSheet(false);
+            if (data?.cancellationBill) {
+                setCancellationBillReceipt(data.cancellationBill);
+                setShowReceiptModal(true);
+            } else {
+                exitToDriverHome('Ride cancelled.');
+            }
+        } catch (error) {
+            setCancelError(error?.message || error?.error || 'Could not cancel this trip.');
+        } finally {
+            setIsCancelling(false);
+        }
+    };
+
+    // Before the trip starts the driver-to-pickup leg can be a few meters long (invisible). Always also
+    // draw the trip itself (pickup -> drop) as a lighter dashed line, so the map shows where the ride goes.
+    const previewPickupKey = pickupPosition ? `${pickupPosition.lat.toFixed(5)},${pickupPosition.lng.toFixed(5)}` : '';
+    const previewDropKey = dropPosition ? `${dropPosition.lat.toFixed(5)},${dropPosition.lng.toFixed(5)}` : '';
+    const showTripPreview = SHOW_TRIP_PREVIEW_BEFORE_PICKUP && (phase === 'to_pickup' || phase === 'otp_verification');
+    useEffect(() => {
+        if (!showTripPreview || !isLoaded || !pickupPosition || !dropPosition || !window.google?.maps?.DirectionsService) {
+            setTripPreviewPath([]);
+            return undefined;
+        }
+        if (getDistanceMeters(pickupPosition, dropPosition) < 20) {
+            setTripPreviewPath([]);
+            return undefined;
+        }
+
+        let off = false;
+        const straight = [pickupPosition, dropPosition];
+        new window.google.maps.DirectionsService().route(
+            {
+                origin: pickupPosition,
+                destination: dropPosition,
+                travelMode: window.google.maps.TravelMode.DRIVING,
+            },
+            (result, status) => {
+                if (off) return;
+                const path = status === 'OK' ? mapDirectionsOverviewPath(result) : [];
+                setTripPreviewPath(path.length > 1 ? path : straight);
+            },
+        );
+        return () => {
+            off = true;
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [showTripPreview, isLoaded, previewPickupKey, previewDropKey]);
+
+    // If the rider cancels while the realtime socket is down, no event arrives. Ask the server every
+    // few seconds so the driver is never left on a trip that no longer exists.
+    const closedHandledRef = React.useRef(false);
+    useEffect(() => {
+        closedHandledRef.current = false;
+        if (!rideId) return undefined;
+        let off = false;
+
+        const check = async () => {
+            if (off || closedHandledRef.current || document.visibilityState === 'hidden') return;
+            try {
+                const res = await api.get(`/rides/${rideId}`, withDriverAuthorization(getLocalDriverToken()));
+                const ride = unwrapApiPayload(res);
+                const live = String(ride?.liveStatus || ride?.status || '').toLowerCase();
+                if (off || closedHandledRef.current) return;
+                if (live !== 'cancelled' && live !== 'canceled') return;
+
+                closedHandledRef.current = true;
+                clearStoredTripPhase(rideId);
+                clearStoredTripUiState(rideId);
+                clearStoredActiveTripSnapshot();
+
+                try {
+                    const billRes = await api.get(`/rides/${rideId}/cancellation-bill`, withDriverAuthorization(getLocalDriverToken()));
+                    const bill = unwrapApiPayload(billRes);
+                    if (!off && bill?.billBreakdown) {
+                        setCancellationBillReceipt(bill);
+                        setShowReceiptModal(true);
+                        return;
+                    }
+                } catch {
+                    // no receipt available: just leave the trip
+                }
+                if (!off) exitToDriverHome('The rider cancelled this ride.');
+            } catch {
+                // transient error: try again on the next tick
+            }
+        };
+
+        check();
+        const timer = window.setInterval(check, 4000);
+        return () => {
+            off = true;
+            window.clearInterval(timer);
+        };
+    }, [rideId, exitToDriverHome]);
+
+    const cancelTripButton = (
+        <button
+            type="button"
+            onClick={openCancelSheet}
+            className="mt-2 w-full rounded-xl border border-red-100 bg-red-50 py-2.5 text-[11px] font-black uppercase tracking-wider text-red-600 active:scale-95 transition-all"
+        >
+            Cancel trip
+        </button>
+    );
+
     const completeRideAndExit = async () => {
         const paymentMode = selectedPaymentMode || effectiveState?.paymentMethod || liveRequest?.payment || '';
 
@@ -1912,59 +2111,6 @@ const ActiveTrip = () => {
         requestRouteRecalculation({ force: true, destinationChanged: true });
     };
 
-    useEffect(() => {
-        const handleKeyDown = (e) => {
-            if (['INPUT', 'TEXTAREA'].includes(e.target?.tagName)) return;
-
-            const STEP = 0.0003;
-
-            if (e.code === 'Space') {
-                e.preventDefault();
-                if (isSimulationRunningRef.current) {
-                    pauseSimulation();
-                } else if (isSimulationEnabledRef.current) {
-                    resumeSimulation();
-                } else {
-                    startSimulation();
-                }
-            } else if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') {
-                e.preventDefault();
-                setDriverPosition((prev) => {
-                    if (!prev || !activeDestination) return prev;
-                    const deltaLat = activeDestination.lat - prev.lat;
-                    const deltaLng = activeDestination.lng - prev.lng;
-                    const dist = Math.sqrt(deltaLat * deltaLat + deltaLng * deltaLng) || 1;
-                    const nextPos = {
-                        lat: prev.lat + (deltaLat / dist) * STEP,
-                        lng: prev.lng + (deltaLng / dist) * STEP,
-                    };
-                    const heading = calculateBearing(prev, nextPos, displayDriverHeading);
-                    setDriverHeading(heading);
-                    publishDriverLocation(nextPos, heading);
-                    return nextPos;
-                });
-            } else if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') {
-                e.preventDefault();
-                setDriverPosition((prev) => {
-                    if (!prev || !activeDestination) return prev;
-                    const deltaLat = activeDestination.lat - prev.lat;
-                    const deltaLng = activeDestination.lng - prev.lng;
-                    const dist = Math.sqrt(deltaLat * deltaLat + deltaLng * deltaLng) || 1;
-                    const nextPos = {
-                        lat: prev.lat - (deltaLat / dist) * STEP,
-                        lng: prev.lng - (deltaLng / dist) * STEP,
-                    };
-                    const heading = calculateBearing(prev, nextPos, displayDriverHeading);
-                    setDriverHeading(heading);
-                    publishDriverLocation(nextPos, heading);
-                    return nextPos;
-                });
-            }
-        };
-
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [activeDestination]);
 
     const generatePaymentQr = async () => {
         if (!rideId || !totalFareAmount) {
@@ -2206,6 +2352,8 @@ const ActiveTrip = () => {
                         coordinates: [nextPosition.lng, nextPosition.lat],
                         lat: nextPosition.lat,
                         lng: nextPosition.lng,
+                        heading: nextHeading,
+                        speed: pos.coords.speed,
                     }).catch(() => {});
                 }
             },
@@ -2294,19 +2442,14 @@ const ActiveTrip = () => {
             return;
         }
 
-        const bounds = new window.google.maps.LatLngBounds();
-
-        if (routePath.length > 1) {
-            routePath.forEach((point) => bounds.extend(point));
-            bounds.extend(driverPosition);
-            bounds.extend(activeDestination);
-            map.fitBounds(bounds, 72);
-            return;
-        }
-
-        bounds.extend(driverPosition);
-        bounds.extend(activeDestination);
-        map.fitBounds(bounds, 80);
+        // Same framing as the rider screens: driver + target, clear of the header and the bottom sheet.
+        frameMapToPoints(map, getStageFramePoints({
+            tripStarted: !(phase === 'to_pickup' || phase === 'otp_verification'),
+            driver: driverPosition,
+            hasDriver: true,
+            pickup: pickupPosition,
+            drop: dropPosition,
+        }));
     }, [activeDestination, driverPosition, isSimulationRunning, map, routePath]);
 
     const handleOTPChange = (index, value) => {
@@ -2427,6 +2570,18 @@ const ActiveTrip = () => {
                         onUnmount={() => setMap(null)}
                         options={mapOptions}
                     >
+                        {showTripPreview && tripPreviewPath.length > 1 && (
+                            <>
+                                <PolylineF
+                                    path={tripPreviewPath}
+                                    options={{ strokeColor: '#000000', strokeOpacity: 0.16, strokeWeight: 9, zIndex: 8 }}
+                                />
+                                <PolylineF
+                                    path={tripPreviewPath}
+                                    options={{ strokeColor: routeStrokeColor, strokeOpacity: 0.95, strokeWeight: 5, zIndex: 9 }}
+                                />
+                            </>
+                        )}
                         {routePath.length > 1 && (
                             <>
                                 <PolylineF
@@ -2452,21 +2607,54 @@ const ActiveTrip = () => {
                         <RotatingVehicleMarker
                             position={driverPosition}
                             iconUrl={vehicleIconUrl}
+                            fallbackIcon={defaultVehicleIcon}
                             heading={displayDriverHeading}
                             title="Driver"
                         />
                         <MarkerF
                             position={activeDestination}
-                            title={phase === 'to_pickup' || phase === 'otp_verification' ? 'Pickup' : 'Drop'}
-                            icon={{
-                                path: window.google.maps.SymbolPath.CIRCLE,
-                                fillColor: routeStrokeColor,
-                                fillOpacity: 1,
-                                strokeColor: '#ffffff',
-                                strokeWeight: 2,
-                                scale: 7,
-                            }}
+                            title={phase === 'to_pickup' || phase === 'otp_verification' ? 'Rider pickup' : 'Drop'}
+                            {...(phase === 'to_pickup' || phase === 'otp_verification'
+                                ? { icon: buildUserPinIcon(), label: riderPinLabel('User') }
+                                : {
+                                    label: { text: 'D', color: '#ffffff', fontSize: '11px', fontWeight: '800' },
+                                    icon: {
+                                        path: window.google.maps.SymbolPath.CIRCLE,
+                                        fillColor: '#ef4444',
+                                        fillOpacity: 1,
+                                        strokeColor: '#ffffff',
+                                        strokeWeight: 2,
+                                        scale: 11,
+                                    },
+                                })}
                         />
+                        {/* the other end of the trip, so pickup and drop are both always visible */}
+                        {(() => {
+                            const heading = phase === 'to_pickup' || phase === 'otp_verification';
+                            // Before pickup the "D" drop is hidden: only the driver and the user are shown.
+                            if (heading) return null;
+                            const other = pickupPosition;
+                            if (!other || !Number.isFinite(Number(other.lat)) || !Number.isFinite(Number(other.lng))) return null;
+                            return (
+                                <MarkerF
+                                    position={other}
+                                    title={heading ? 'Drop' : 'Rider pickup'}
+                                    {...(heading
+                                        ? {
+                                            label: { text: 'D', color: '#ffffff', fontSize: '11px', fontWeight: '800' },
+                                            icon: {
+                                                path: window.google.maps.SymbolPath.CIRCLE,
+                                                fillColor: '#ef4444',
+                                                fillOpacity: 1,
+                                                strokeColor: '#ffffff',
+                                                strokeWeight: 2,
+                                                scale: 11,
+                                            },
+                                        }
+                                        : { icon: buildUserPinIcon() })}
+                                />
+                            );
+                        })()}
                     </GoogleMap>
                 ) : (
                     <div className="flex h-full w-full items-center justify-center bg-slate-200">
@@ -2548,45 +2736,6 @@ const ActiveTrip = () => {
                         <p className="mt-1 text-[10px] font-semibold text-slate-700">Using fallback path while directions load.</p>
                     </div>
                 )}
-
-                <div className="absolute top-44 left-4 z-40 w-36 sm:w-40 max-w-[calc(100vw-2rem)] rounded-xl border border-white/80 bg-white/94 px-2.5 py-2 shadow-md backdrop-blur-md">
-                    <div className="mb-1 flex items-center justify-between gap-1.5">
-                        <div className="min-w-0">
-                            <p className="text-[7px] font-black uppercase tracking-[0.2em] text-slate-400">Simulation</p>
-                            <p className="mt-0.5 truncate text-[10px] font-black text-slate-900">
-                                {isSimulationRunning ? 'Following route' : isSimulationEnabled ? 'Paused' : 'Real GPS'}
-                            </p>
-                        </div>
-                        <span
-                            className={`h-2 w-2 shrink-0 rounded-full ${isSimulationRunning ? 'animate-pulse' : ''}`}
-                            style={{ backgroundColor: isSimulationEnabled ? routeStrokeColor : '#cbd5e1' }}
-                        />
-                    </div>
-                    <div className="mb-1.5 h-1 overflow-hidden rounded-full bg-slate-100">
-                        <div
-                            className="h-full rounded-full transition-all"
-                            style={{ backgroundColor: routeStrokeColor, width: `${isSimulationEnabled ? simulationProgress : 0}%` }}
-                        />
-                    </div>
-                    <div className="grid grid-cols-2 gap-1.5">
-                        <button
-                            type="button"
-                            onClick={isSimulationRunning ? pauseSimulation : isSimulationEnabled ? resumeSimulation : startSimulation}
-                            className="h-7 rounded-lg px-1 text-[8px] font-black uppercase tracking-wide text-white active:scale-95"
-                            style={{ backgroundColor: routeStrokeColor }}
-                        >
-                            {isSimulationRunning ? 'Pause' : isSimulationEnabled ? 'Resume' : 'Start'}
-                        </button>
-                        <button
-                            type="button"
-                            onClick={resetSimulation}
-                            disabled={!isSimulationEnabled}
-                            className="h-7 rounded-lg border border-slate-100 bg-slate-50 px-1 text-[8px] font-black uppercase tracking-wide text-slate-500 active:scale-95 disabled:opacity-40"
-                        >
-                            Reset
-                        </button>
-                    </div>
-                </div>
             </div>
 
             <div className="absolute bottom-0 left-0 right-0 z-40 max-h-[50vh] overflow-y-auto">
@@ -2667,6 +2816,7 @@ const ActiveTrip = () => {
                             >
                                 {isParcel ? 'Arrived at Sender' : 'I Have Arrived'} <CheckCircle2 size={16} strokeWidth={3} />
                             </motion.button>
+                            {cancelTripButton}
                         </motion.div>
                     )}
 
@@ -2773,6 +2923,7 @@ const ActiveTrip = () => {
                                 }} className="flex-1 h-13 border-2 border-slate-100 text-slate-400 rounded-xl text-[12px] font-semibold uppercase tracking-wide active:scale-95 transition-all">Go Back</button>
                                 <button onClick={openSupportChat} className="flex-1 h-13 rounded-xl text-[12px] font-semibold uppercase tracking-wide active:scale-95 transition-all" style={{ backgroundColor: routeAccentSoft, color: routeStrokeColor }}>Support</button>
                             </div>
+                            {cancelTripButton}
                         </motion.div>
                     )}
 
@@ -3173,6 +3324,79 @@ const ActiveTrip = () => {
                 </AnimatePresence>
             </div>
 
+            <AnimatePresence>
+                {showCancelSheet && (
+                    <motion.div
+                        key="cancel-sheet"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[9000] flex items-end justify-center bg-black/55 p-0 sm:items-center sm:p-4"
+                        onClick={() => !isCancelling && setShowCancelSheet(false)}
+                    >
+                        <motion.div
+                            initial={{ y: 60 }}
+                            animate={{ y: 0 }}
+                            exit={{ y: 60 }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="w-full max-w-md rounded-t-3xl bg-white p-5 shadow-2xl sm:rounded-3xl"
+                        >
+                            <h3 className="text-[16px] font-black text-slate-900">Cancel this trip?</h3>
+                            <p className="mt-1 text-[12px] font-medium text-slate-500">The rider will be notified right away.</p>
+
+                            {cancelPreview ? (
+                                Number(cancelPreview.driverPenalty) > 0 ? (
+                                    <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-[12px] font-bold text-amber-800">
+                                        A cancellation penalty of ₹{Number(cancelPreview.driverPenalty)} will be deducted from your wallet.
+                                    </div>
+                                ) : (
+                                    <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-[12px] font-bold text-emerald-800">
+                                        No penalty applies to this cancellation.
+                                    </div>
+                                )
+                            ) : !cancelError ? (
+                                <div className="mt-3 text-[12px] font-semibold text-slate-400">Checking penalty…</div>
+                            ) : null}
+
+                            <p className="mt-4 text-[11px] font-black uppercase tracking-wider text-slate-400">Reason</p>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                                {DRIVER_CANCEL_REASONS.map((r) => (
+                                    <button
+                                        key={r}
+                                        type="button"
+                                        onClick={() => { setCancelReason(r); setCancelError(''); }}
+                                        className={`rounded-full border px-3 py-1.5 text-[12px] font-bold transition ${cancelReason === r ? 'border-red-500 bg-red-500 text-white' : 'border-slate-200 bg-slate-50 text-slate-600'}`}
+                                    >
+                                        {r}
+                                    </button>
+                                ))}
+                            </div>
+
+                            {cancelError && <p className="mt-3 text-[12px] font-bold text-red-600">{cancelError}</p>}
+
+                            <div className="mt-5 flex gap-3">
+                                <button
+                                    type="button"
+                                    disabled={isCancelling}
+                                    onClick={() => setShowCancelSheet(false)}
+                                    className="flex-1 rounded-xl border-2 border-slate-100 py-3 text-[12px] font-black uppercase tracking-wide text-slate-500 active:scale-95"
+                                >
+                                    Keep trip
+                                </button>
+                                <button
+                                    type="button"
+                                    disabled={isCancelling}
+                                    onClick={confirmDriverCancel}
+                                    className="flex-1 rounded-xl bg-red-600 py-3 text-[12px] font-black uppercase tracking-wide text-white shadow-lg active:scale-95 disabled:opacity-60"
+                                >
+                                    {isCancelling ? 'Cancelling…' : 'Cancel trip'}
+                                </button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
             <CancellationReceiptModal
                 isOpen={showReceiptModal}
                 onClose={() => {
@@ -3180,6 +3404,7 @@ const ActiveTrip = () => {
                     exitToDriverHome('Ride cancelled.');
                 }}
                 cancellationBill={cancellationBillReceipt}
+                viewerRole="driver"
             />
         </div>
     );

@@ -143,6 +143,7 @@ const initialFormState = {
   charge_after_driver_accepted: true,
   charge_after_driver_arrived: true,
   driver_compensation_percentage: 0,
+  driver_cancellation_penalty: 30,
   cancellation_grace_period_driver_arrived: 5,
   status: 'active',
   active: 1
@@ -207,7 +208,7 @@ const SetPrices = ({ mode }) => {
         'airport_surge', 'support_airport_fee', 'outstation_base_price', 'outstation_base_distance',
         'outstation_price_per_distance', 'outstation_time_price', 'fixed_cancellation_charge',
         'max_cancellation_fee', 'free_cancellation_time_mins', 'cancellation_grace_period_driver_arrived',
-        'driver_compensation_percentage', 'user_cancellation_fee', 'driver_cancellation_fee'
+        'driver_compensation_percentage', 'driver_cancellation_penalty', 'user_cancellation_fee', 'driver_cancellation_fee'
       ];
       const sanitized = { ...next };
       for (const field of fieldsToClamp) {
@@ -259,6 +260,7 @@ const SetPrices = ({ mode }) => {
           charge_after_driver_accepted: pData.cancellation_policy?.charge_after_driver_accepted ?? pData.charge_after_driver_accepted ?? true,
           charge_after_driver_arrived: pData.cancellation_policy?.charge_after_driver_arrived ?? pData.charge_after_driver_arrived ?? true,
           driver_compensation_percentage: pData.cancellation_policy?.driver_compensation_percentage ?? pData.driver_compensation_percentage ?? 0,
+          driver_cancellation_penalty: pData.cancellation_policy?.driver_cancellation_penalty ?? pData.driver_cancellation_penalty ?? 30,
           cancellation_grace_period_driver_arrived: pData.cancellation_policy?.cancellation_grace_period_driver_arrived ?? pData.cancellation_grace_period_driver_arrived ?? 5,
         });
       }
@@ -326,6 +328,7 @@ const SetPrices = ({ mode }) => {
           charge_after_driver_accepted: Boolean(formData.charge_after_driver_accepted),
           charge_after_driver_arrived: Boolean(formData.charge_after_driver_arrived),
           driver_compensation_percentage: Number(formData.driver_compensation_percentage ?? 0),
+          driver_cancellation_penalty: Number(formData.driver_cancellation_penalty ?? 30),
           cancellation_grace_period_driver_arrived: Number(formData.cancellation_grace_period_driver_arrived ?? 5),
         },
       };
@@ -842,6 +845,11 @@ const SetPrices = ({ mode }) => {
                              <label className={labelClass}>Driver Compensation (%)</label>
                              <input type="number" min="0" max="100" className={inputClass} placeholder="e.g. 0" value={formData.driver_compensation_percentage} onChange={e => setFormData(p => ({...p, driver_compensation_percentage: e.target.value}))} />
                              <p className="mt-1 text-[10px] font-medium text-slate-400">% of cancellation fee that goes to driver (0% = all to Admin)</p>
+                           </div>
+                           <div>
+                             <label className={labelClass}>Driver Cancellation Penalty (₹)</label>
+                             <input type="number" min="0" className={inputClass} placeholder="e.g. 30" value={formData.driver_cancellation_penalty} onChange={e => setFormData(p => ({...p, driver_cancellation_penalty: e.target.value}))} />
+                             <p className="mt-1 text-[10px] font-medium text-slate-400">Deducted from the driver's wallet when the driver cancels a trip that has been accepted (0 = no penalty)</p>
                            </div>
                          </div>
                        </>

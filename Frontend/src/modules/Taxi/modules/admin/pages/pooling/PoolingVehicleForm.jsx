@@ -42,6 +42,9 @@ const PoolingVehicleForm = ({ mode: propMode }) => {
     capacity: 4,
     adminCommissionPercentage: 0,
     serviceTaxPercentage: 0,
+    baseFare: 0,
+    pricePerKm: 0,
+    minFare: 0,
     color: '',
     vehicleType: 'sedan',
     status: 'active',
@@ -95,6 +98,9 @@ const PoolingVehicleForm = ({ mode: propMode }) => {
           capacity: vehicle.capacity || 4,
           adminCommissionPercentage: Number(vehicle.adminCommissionPercentage ?? 0),
           serviceTaxPercentage: Number(vehicle.serviceTaxPercentage ?? 0),
+          baseFare: Number(vehicle.baseFare ?? 0),
+          pricePerKm: Number(vehicle.pricePerKm ?? 0),
+          minFare: Number(vehicle.minFare ?? 0),
           color: vehicle.color || '',
           vehicleType: vehicle.vehicleType || 'sedan',
           status: vehicle.status || 'active',
@@ -158,6 +164,9 @@ const PoolingVehicleForm = ({ mode: propMode }) => {
         ...formData,
         adminCommissionPercentage: Math.min(100, Math.max(0, Number(formData.adminCommissionPercentage || 0))),
         serviceTaxPercentage: Math.min(100, Math.max(0, Number(formData.serviceTaxPercentage || 0))),
+        baseFare: Math.max(0, Number(formData.baseFare || 0)),
+        pricePerKm: Math.max(0, Number(formData.pricePerKm || 0)),
+        minFare: Math.max(0, Number(formData.minFare || 0)),
       };
 
       if (isEditMode) {
@@ -336,6 +345,50 @@ const PoolingVehicleForm = ({ mode: propMode }) => {
                     />
                   </div>
                 </div>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                  <div>
+                    <label className={labelClass}>Base Fare (₹)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={formData.baseFare}
+                      onChange={(e) => setFormData({ ...formData, baseFare: e.target.value })}
+                      placeholder="e.g. 50"
+                      className={inputClass}
+                      readOnly={isViewMode}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Price per km (₹)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.5"
+                      value={formData.pricePerKm}
+                      onChange={(e) => setFormData({ ...formData, pricePerKm: e.target.value })}
+                      placeholder="e.g. 12"
+                      className={inputClass}
+                      readOnly={isViewMode}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Minimum Car Fare (₹)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={formData.minFare}
+                      onChange={(e) => setFormData({ ...formData, minFare: e.target.value })}
+                      placeholder="e.g. 150"
+                      className={inputClass}
+                      readOnly={isViewMode}
+                    />
+                  </div>
+                </div>
+                <p className="text-[11px] font-semibold text-slate-400">
+                  Full car fare = max(minimum, base + price/km × distance). Riders on the same trip split this fare equally per seat.
+                </p>
               </div>
             </div>
 

@@ -153,7 +153,7 @@ const PoolingBookings = () => {
                       <div className="flex items-start gap-2">
                         <MapPin size={14} className="mt-0.5 text-slate-400" />
                         <div>
-                          <p className="text-sm font-bold text-slate-900">{booking.route?.routeName || 'N/A'}</p>
+                          <p className="text-sm font-bold text-slate-900">{booking.route?.routeName || (booking.pickupLabel ? `${booking.pickupLabel.split(',')[0]} → ${booking.dropLabel.split(',')[0]}` : 'N/A')}</p>
                           <p className="text-[11px] font-medium text-slate-500">
                             {new Date(booking.travelDate).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
                           </p>

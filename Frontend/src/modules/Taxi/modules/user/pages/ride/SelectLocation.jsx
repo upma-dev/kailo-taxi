@@ -85,6 +85,11 @@ const SelectLocation = () => {
   const [remoteResults, setRemoteResults] = useState([]);
   const [popularLocations, setPopularLocations] = useState([]);
   const [searchHistory, setSearchHistory] = useState(() => getSearchHistory());
+  // A saved place hundreds of km from the pickup is almost always a wrong match: do not suggest it again.
+  const nearbyHistory = useMemo(
+    () => searchHistory.filter((item) => !pickupCoords || !Array.isArray(item?.coords) || (calculateHaversineDistance(pickupCoords, item.coords, false) ?? 0) <= 150),
+    [searchHistory, pickupCoords],
+  );
   const [isSearchingLocations, setIsSearchingLocations] = useState(false);
   const [isLoadingPopularLocations, setIsLoadingPopularLocations] = useState(false);
   const [roadDistances, setRoadDistances] = useState({});
@@ -258,7 +263,9 @@ const SelectLocation = () => {
     return geocoderRef.current;
   };
 
-  const resolveCoords = async (label, fallback = DEFAULT_COORDS) => {
+  // `near` ([lng, lat]) keeps a text-only place name (e.g. from Rebook / Recent trips) in the same city:
+  // the geocoder is biased to that area and a result far away from it is never accepted.
+  const resolveCoords = async (label, fallback = DEFAULT_COORDS, near = null) => {
     if (!label || !String(label).trim()) {
       return fallback;
     }
@@ -278,11 +285,27 @@ const SelectLocation = () => {
     }
 
     return new Promise((resolve) => {
-      geocoder.geocode({ address: String(label).trim() }, (results, status) => {
-        if (status === 'OK' && results?.[0]?.geometry?.location) {
-          const location = results[0].geometry.location;
-          resolve([location.lng(), location.lat()]);
-          return;
+      const request = { address: String(label).trim(), region: 'in' };
+      const hasNear = Array.isArray(near) && near.length === 2 && Number.isFinite(near[0]) && Number.isFinite(near[1]);
+      if (hasNear && window.google?.maps?.LatLngBounds) {
+        request.bounds = new window.google.maps.LatLngBounds(
+          { lat: near[1] - 0.9, lng: near[0] - 0.9 },
+          { lat: near[1] + 0.9, lng: near[0] + 0.9 },
+        );
+      }
+
+      geocoder.geocode(request, (results, status) => {
+        if (status === 'OK' && Array.isArray(results) && results.length) {
+          const points = results
+            .filter((r) => r?.geometry?.location)
+            .map((r) => [r.geometry.location.lng(), r.geometry.location.lat()]);
+          const usable = hasNear
+            ? points.filter((pt) => calculateHaversineDistance(near, pt, false) <= 150)
+            : points;
+          if (usable.length) {
+            resolve(usable[0]);
+            return;
+          }
         }
 
         resolve(fallback);
@@ -359,11 +382,11 @@ const SelectLocation = () => {
       return {
         title: result?.title || '',
         address: result?.address || result?.title || '',
-        coords: await resolveCoords(result?.address || result?.title || ''),
+        coords: await resolveCoords(result?.address || result?.title || '', DEFAULT_COORDS, pickupCoords),
       };
     }
 
-    const coords = await resolveCoords(result?.address || result?.title || '');
+    const coords = await resolveCoords(result?.address || result?.title || '', DEFAULT_COORDS, pickupCoords);
     return {
       title: result?.title || '',
       address: result?.address || result?.title || '',
@@ -490,6 +513,14 @@ const SelectLocation = () => {
         request.location = new window.google.maps.LatLng(pickupCoords[1], pickupCoords[0]);
         request.radius = 50000;
         request.origin = new window.google.maps.LatLng(pickupCoords[1], pickupCoords[0]);
+        // A radius is only a hint, so a same-named place in another city used to win (e.g. a school 580 km
+        // away). Restrict city bookings to the area around the pickup (about 100 km each way).
+        request.locationRestriction = {
+          north: pickupLat + 0.9,
+          south: pickupLat - 0.9,
+          east: pickupLng + 0.9,
+          west: pickupLng - 0.9,
+        };
       }
 
       autocompleteServiceRef.current.getPlacePredictions(request, (predictions = [], status) => {
@@ -509,7 +540,10 @@ const SelectLocation = () => {
           setIsSearchingLocations(false);
         } else {
           // OpenStreetMap Nominatim Fallback search so query never says "no nearby location"
-          fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query.trim())}&countrycodes=in&limit=6`)
+          const nominatimBox = Number.isFinite(pickupLat) && Number.isFinite(pickupLng) && (pickupLat || pickupLng)
+            ? `&viewbox=${pickupLng - 0.9},${pickupLat + 0.9},${pickupLng + 0.9},${pickupLat - 0.9}&bounded=1`
+            : '';
+          fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query.trim())}&countrycodes=in&limit=6${nominatimBox}`)
             .then((res) => res.json())
             .then((data) => {
               if (latestSearchRef.current !== requestId) return;
@@ -818,7 +852,7 @@ const SelectLocation = () => {
     if (!resolvedDropCoords || !Array.isArray(resolvedDropCoords) || resolvedDropCoords.length !== 2) {
       try {
         resolvedDropCoords = await Promise.race([
-          resolveCoords(finalDrop),
+          resolveCoords(finalDrop, DEFAULT_COORDS, resolvedPickupCoords),
           new Promise(r => setTimeout(() => r(DEFAULT_COORDS), 2500))
         ]);
       } catch {
@@ -1459,7 +1493,7 @@ const SelectLocation = () => {
         onScroll={dismissKeyboard}
         onTouchMove={dismissKeyboard}
       >
-        {query.trim().length === 0 && searchHistory.length > 0 && (
+        {query.trim().length === 0 && nearbyHistory.length > 0 && (
           <div className="mb-5">
             <div className="flex items-center justify-between mb-3 mx-1">
               <h2 className="text-[14px] font-bold text-slate-400 uppercase tracking-widest">Recent Searches</h2>
@@ -1472,7 +1506,7 @@ const SelectLocation = () => {
               </button>
             </div>
             <div className="bg-white/75 backdrop-blur-md rounded-2xl border border-white/80 overflow-hidden shadow-[0_14px_34px_rgba(15,23,42,0.06)]">
-              {searchHistory.map((item) => (
+              {nearbyHistory.map((item) => (
                 <button
                   key={`${item.title}-${item.coords.join(',')}`}
                   type="button"

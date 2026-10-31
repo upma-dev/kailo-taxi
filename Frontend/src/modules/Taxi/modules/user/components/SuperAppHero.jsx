@@ -1,289 +1,263 @@
-import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useEffect, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { 
-  Car, Package, Search, Compass, MapPin, ArrowRight, Sparkles,
-  Users, Bus, Send, Truck
-} from 'lucide-react';
+import { ArrowRight, ArrowUpRight, Search } from 'lucide-react';
+import taxiImg from '../../../assets/3d images/AutoCab/taxi.png';
+import busImg from '../../../assets/3d images/AutoCab/bus.png';
+import outstationImg from '../../../assets/3d images/AutoCab/one way.png';
+import airportImg from '../../../assets/3d images/AutoCab/airoplan.png';
+import parcelImg from '../../../assets/3d images/gifts.png';
+import modernCabImg from '../../../assets/modern_cab.png';
+import { POOLING_ENABLED, RENTAL_ENABLED } from '../../../shared/featureFlags';
+
+const LIME = '#C6F432';
+const AUTO_ADVANCE_MS = 4200;
+
+// Services only; the vehicle types (bike, auto, cab...) live in the "Choose your ride" section below.
+const ALL_SERVICES = [
+  {
+    id: 'parcel',
+    tab: 'Parcel',
+    title: 'Send anything, anywhere',
+    text: 'Pickup in minutes with a secure OTP handover.',
+    cta: 'Send parcel',
+    img: parcelImg,
+    size: 104,
+    path: '/taxi/user/parcel/type',
+  },
+  {
+    id: 'outstation',
+    tab: 'Outstation',
+    title: 'Go beyond the city',
+    text: 'Fixed-fare intercity cabs with no surprises.',
+    cta: 'Plan a trip',
+    img: outstationImg,
+    size: 96,
+    path: '/taxi/user/intercity',
+  },
+  {
+    id: 'airport',
+    tab: 'Airport',
+    title: 'Never miss a flight',
+    text: 'On-time airport pickups and drops.',
+    cta: 'Book transfer',
+    img: airportImg,
+    size: 100,
+    path: '/taxi/user/cab/airport',
+  },
+  {
+    id: 'bus',
+    tab: 'Bus',
+    title: 'Pick your seat',
+    text: 'Book bus tickets right inside the app.',
+    cta: 'Find buses',
+    img: busImg,
+    size: 96,
+    path: '/taxi/user/bus',
+  },
+  {
+    id: 'pooling',
+    tab: 'Pooling',
+    title: 'Share the ride, split the fare',
+    text: 'Travel with people going your way and save more.',
+    cta: 'Find a pool',
+    img: taxiImg,
+    size: 88,
+    path: '/taxi/user/pooling',
+    flag: POOLING_ENABLED,
+  },
+  {
+    id: 'rental',
+    tab: 'Rental',
+    title: 'Rent by the hour or day',
+    text: 'Verified vehicles with simple packages.',
+    cta: 'Book rental',
+    img: modernCabImg,
+    size: 88,
+    path: '/taxi/user/rental',
+    flag: RENTAL_ENABLED,
+  },
+];
+
+const SERVICES = ALL_SERVICES.filter((service) => service.flag !== false);
+
+// 3D platform the artwork stands on: pulsing halo, slowly turning dashed ring and a ground shadow.
+function Platform() {
+  return (
+    <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+      <motion.span
+        className="absolute h-[124px] w-[124px] rounded-full"
+        style={{ background: 'radial-gradient(circle, rgba(198,244,50,0.38) 0%, rgba(198,244,50,0) 68%)' }}
+        animate={{ scale: [1, 1.12, 1], opacity: [0.8, 1, 0.8] }}
+        transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+      />
+      <motion.span
+        className="absolute h-[116px] w-[116px] rounded-full border border-dashed border-white/35"
+        animate={{ rotate: 360 }}
+        transition={{ duration: 22, repeat: Infinity, ease: 'linear' }}
+      />
+      <motion.span
+        className="absolute h-[84px] w-[84px] rounded-full border border-white/20"
+        animate={{ rotate: -360 }}
+        transition={{ duration: 30, repeat: Infinity, ease: 'linear' }}
+      />
+      <span className="absolute bottom-[8px] h-3.5 w-[84px] rounded-[50%] bg-black/35 blur-[6px]" />
+    </div>
+  );
+}
+
+function Stage({ service, onOpen }) {
+  return (
+    <div className="relative mx-4 mt-3 h-[150px] overflow-hidden rounded-[26px] border border-white/15 bg-white/10 shadow-[0_18px_34px_rgba(4,36,32,0.35)] backdrop-blur-md">
+      <div className="pointer-events-none absolute -left-10 -top-12 h-36 w-36 rounded-full bg-[#C6F432]/10 blur-2xl" />
+
+      {/* artwork side */}
+      <div className="absolute inset-y-0 right-0 w-[46%]" style={{ perspective: '600px' }}>
+        <Platform />
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={service.id}
+            initial={{ opacity: 0, scale: 0.55, rotateY: -70, y: 24 }}
+            animate={{ opacity: 1, scale: 1, rotateY: 0, y: 0 }}
+            exit={{ opacity: 0, scale: 0.7, rotateY: 60, y: -12 }}
+            transition={{ type: 'spring', stiffness: 150, damping: 16 }}
+            className="absolute inset-0 flex items-center justify-center"
+          >
+            <motion.img
+              src={service.img}
+              alt=""
+              aria-hidden="true"
+              animate={{ y: [0, -7, 0], rotateZ: [-2, 2, -2] }}
+              transition={{ duration: 3.4, repeat: Infinity, ease: 'easeInOut' }}
+              className="w-auto object-contain drop-shadow-[0_16px_12px_rgba(0,0,0,0.4)]"
+              style={{ height: service.size }}
+            />
+          </motion.div>
+        </AnimatePresence>
+      </div>
+
+      {/* copy side */}
+      <div className="relative z-10 flex h-full w-[58%] flex-col justify-center pl-4">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={service.id}
+            initial={{ opacity: 0, x: -16 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -10 }}
+            transition={{ duration: 0.25 }}
+          >
+            <h2 className="text-[17px] font-black leading-[1.15] tracking-tight text-white">{service.title}</h2>
+            <p className="mt-1 max-w-[150px] text-[11px] font-medium leading-snug text-white/65">{service.text}</p>
+            <button
+              type="button"
+              onClick={() => onOpen(service)}
+              className="mt-3 inline-flex items-center gap-1 rounded-full py-1.5 pl-3.5 pr-2.5 text-[11.5px] font-black text-[#14213D] shadow-[0_8px_16px_rgba(0,0,0,0.22)] transition active:scale-95"
+              style={{ backgroundColor: LIME }}
+            >
+              {service.cta}
+              <ArrowUpRight size={14} strokeWidth={3} />
+            </button>
+          </motion.div>
+        </AnimatePresence>
+      </div>
+    </div>
+  );
+}
 
 export default function SuperAppHero({ onSearchFocus }) {
   const navigate = useNavigate();
-  const [isOpen, setIsOpen] = useState(false);
-  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+  const [index, setIndex] = useState(0);
+  const [userPicked, setUserPicked] = useState(false);
+  const active = SERVICES[index];
 
-  // Trigger the split door animation automatically on load
+  // Rotate through the services on its own until the user picks one.
   useEffect(() => {
-    const timer = setTimeout(() => setIsOpen(true), 1600);
+    if (userPicked) return undefined;
+    const timer = setTimeout(() => setIndex((i) => (i + 1) % SERVICES.length), AUTO_ADVANCE_MS);
     return () => clearTimeout(timer);
-  }, []);
+  }, [index, userPicked]);
 
-  const handleMouseMove = (e) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width - 0.5;
-    const y = (e.clientY - rect.top) / rect.height - 0.5;
-    setMousePos({ x, y });
+  const openService = (service) => navigate(service.path);
+  const pick = (i) => {
+    setUserPicked(true);
+    setIndex(i);
   };
-
-  const handleMouseLeave = () => {
-    setMousePos({ x: 0, y: 0 });
-  };
-
-  // Service chips data
-  const services = [
-    { id: 'taxi', label: 'Taxi', Icon: Car, color: 'from-blue-500 to-indigo-600', path: '/taxi/user/ride/select-location' },
-    { id: 'outstation', label: 'Outstation', Icon: Compass, color: 'from-blue-600 to-cyan-500', path: '/taxi/user/intercity' },
-    { id: 'pooling', label: 'Pooling', Icon: Users, color: 'from-indigo-500 to-blue-600', path: '/taxi/user/pooling' },
-    { id: 'parcel', label: 'Parcel', Icon: Package, color: 'from-violet-500 to-purple-600', path: '/taxi/user/parcel/type' },
-    { id: 'bus', label: 'Bus', Icon: Bus, color: 'from-sky-500 to-blue-500', path: '/taxi/user/bus' }
-  ];
 
   return (
-    <div 
-      onMouseMove={handleMouseMove}
-      onMouseLeave={handleMouseLeave}
-      className="w-full relative h-[255px] overflow-hidden rounded-b-none bg-[#0B172A] select-none"
-    >
-      {/* 1. Animated Background Blobs & Morphing Gradients */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-24 -left-20 w-56 h-56 rounded-full bg-indigo-600/15 blur-3xl" />
-        <div className="absolute -bottom-24 -right-20 w-60 h-60 rounded-full bg-blue-500/10 blur-3xl" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(99,102,241,0.04)_0%,transparent_70%)]" />
+    <div className="relative select-none overflow-hidden pb-6 pt-2">
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute -right-16 -top-10 h-56 w-56 rounded-full bg-[#C6F432]/15 blur-3xl" />
+        <div className="absolute -left-24 top-28 h-60 w-60 rounded-full bg-[#14B8A6]/25 blur-3xl" />
       </div>
 
-      {/* 3. Center Revealed Content */}
-      <div className="absolute inset-0 flex flex-col items-center justify-between py-4.5 px-6 z-10">
-        {/* Top: Header Intro */}
-        <motion.div 
-          initial={{ opacity: 0, y: -10 }}
-          animate={isOpen ? { opacity: 1, y: 0 } : {}}
-          transition={{ delay: 0.8, duration: 0.5 }}
-          className="flex items-center gap-1.5 bg-white/5 border border-white/10 px-3 py-1 rounded-full backdrop-blur-md mt-1"
+      <div className="relative z-10 px-4">
+        <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/60">Kailo Taxi</p>
+        <h1 className="mt-0.5 text-[27px] font-black leading-[1.05] tracking-tight text-white">
+          Where to <span style={{ color: LIME }}>today?</span>
+        </h1>
+
+        <motion.button
+          type="button"
+          onClick={onSearchFocus}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          whileTap={{ scale: 0.98 }}
+          className="mt-4 flex w-full items-center gap-3 rounded-[20px] bg-[#F8FAF7] py-2.5 pl-4 pr-2.5 text-left shadow-[0_16px_30px_rgba(6,40,36,0.4)]"
         >
-          <Sparkles size={10} className="text-amber-400 animate-pulse" />
-          <span className="text-[9px] font-black uppercase tracking-[0.25em] text-indigo-200">
-            Kailo Taxi Experience
+          <Search className="h-[18px] w-[18px] flex-shrink-0 text-[#0F766E]" strokeWidth={2.6} />
+          <span className="min-w-0 flex-1 truncate text-[14px] font-bold text-[#14213D]/70">Search destination</span>
+          <span
+            className="flex h-9 items-center gap-1 rounded-[14px] px-3.5 text-[12px] font-black uppercase tracking-wide text-[#14213D]"
+            style={{ backgroundColor: LIME }}
+          >
+            Go
+            <ArrowRight size={14} strokeWidth={3} />
           </span>
-        </motion.div>
+        </motion.button>
+      </div>
 
-        {/* Center: Glowing Kailo Taxi Logo & Search Bar */}
-        <div className="w-full flex flex-col items-center gap-3.5 my-auto">
-          <motion.div
-            initial={{ scale: 0.8, opacity: 0 }}
-            animate={isOpen ? { scale: 1, opacity: 1 } : {}}
-            transition={{ type: "spring", stiffness: 100, delay: 0.5 }}
-            style={{
-              x: mousePos.x * 10,
-              y: mousePos.y * 10,
-            }}
-            className="relative"
-          >
-            {/* Soft Glow behind Logo */}
-            <div className="absolute -inset-3 rounded-full bg-amber-400/20 blur-lg animate-pulse" />
-            <h1 className="relative text-[36px] font-black tracking-[-0.04em] text-transparent bg-clip-text bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-500 leading-none select-none">
-              Kailo Taxi
-            </h1>
-          </motion.div>
-
-          {/* Sleek Glassmorphic Search Bar */}
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={isOpen ? { opacity: 1, y: 0 } : {}}
-            transition={{ delay: 0.7, duration: 0.6 }}
-            className="w-full max-w-[260px]"
-          >
+      {/* service tabs: the active pill slides between options */}
+      <div className="no-scrollbar relative z-10 mt-4 flex gap-2 overflow-x-auto px-4">
+        {SERVICES.map((service, i) => {
+          const isActive = i === index;
+          return (
             <button
+              key={service.id}
               type="button"
-              onClick={onSearchFocus}
-              className="w-full flex items-center gap-2.5 rounded-xl border border-white/10 bg-white/5 backdrop-blur-xl px-3.5 py-2 text-left shadow-xl transition-all duration-300 hover:bg-white/10 hover:border-white/20 hover:shadow-indigo-500/5 group"
+              onClick={() => pick(i)}
+              className="relative flex-shrink-0 rounded-full px-4 py-2 text-[12px] font-extrabold transition-colors"
+              style={{ color: isActive ? '#14213D' : 'rgba(255,255,255,0.75)' }}
             >
-              <Search className="h-3.5 w-3.5 text-indigo-300/80 group-hover:text-indigo-200" />
-              <span className="flex-1 truncate text-[11px] font-semibold text-indigo-200/60 group-hover:text-indigo-200/80">
-                Where are we going today?
-              </span>
-              <div className="h-4.5 w-4.5 rounded bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center">
-                <ArrowRight size={9} className="text-indigo-300" />
-              </div>
+              {isActive && (
+                <motion.span
+                  layoutId="hero-service-pill"
+                  className="absolute inset-0 rounded-full"
+                  style={{ backgroundColor: LIME }}
+                  transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                />
+              )}
+              {!isActive && <span className="absolute inset-0 rounded-full border border-white/20 bg-white/10" />}
+              <span className="relative">{service.tab}</span>
             </button>
-          </motion.div>
-        </div>
-
-        {/* Bottom: Staggered Animated Service Chips */}
-        <div className="w-full flex justify-center gap-2 px-1 mb-1">
-          {services.map((item, idx) => {
-            const Icon = item.Icon;
-            return (
-              <motion.button
-                key={item.id}
-                initial={{ opacity: 0, y: 15 }}
-                animate={isOpen ? { opacity: 1, y: 0 } : {}}
-                transition={{ delay: 0.9 + idx * 0.08, type: "spring", stiffness: 120 }}
-                whileHover={{ y: -3, scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => {
-                  if (item.id === 'taxi') {
-                    navigate(item.path, { state: { preferredCategory: 'cab' } });
-                  } else {
-                    navigate(item.path);
-                  }
-                }}
-                className="flex flex-col items-center gap-1 flex-1 max-w-[50px] focus:outline-none group"
-              >
-                <div className={`h-9 w-9 rounded-xl bg-gradient-to-br ${item.color} shadow-md border border-white/10 flex items-center justify-center text-white relative overflow-hidden`}>
-                  <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity" />
-                  <Icon size={15} className="transform group-hover:scale-110 transition-transform" />
-                </div>
-                <span className="text-[8px] font-black uppercase tracking-wider text-slate-400 group-hover:text-slate-200 transition-colors">
-                  {item.label}
-                </span>
-              </motion.button>
-            );
-          })}
-        </div>
+          );
+        })}
       </div>
 
-      {/* 4. Left Sliding Panel (Dark Luxury Theme - Taxi & Maps) */}
-      <motion.div
-        animate={{
-          x: isOpen ? '-100%' : '0%',
-        }}
-        transition={{ type: "spring", stiffness: 70, damping: 18, delay: 0.3 }}
-        className="absolute inset-y-0 left-0 w-1/2 bg-gradient-to-br from-slate-900 via-slate-950 to-indigo-950 border-r border-white/5 z-20 flex flex-col justify-between p-4 overflow-hidden origin-right"
-      >
-        {/* Shiny route line design decoration */}
-        <div className="absolute inset-0 pointer-events-none opacity-20">
-          <svg className="w-full h-full" viewBox="0 0 100 100" fill="none">
-            <motion.path 
-              d="M-20,50 Q20,20 50,60 T120,30" 
-              stroke="url(#luxury-grad)" 
-              strokeWidth="2"
-              strokeDasharray="3 3"
-              animate={{ strokeDashoffset: [0, -15] }}
-              transition={{ duration: 6, repeat: Infinity, ease: "linear" }}
-            />
-            <defs>
-              <linearGradient id="luxury-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#3B82F6" />
-                <stop offset="100%" stopColor="#6366F1" />
-              </linearGradient>
-            </defs>
-          </svg>
-        </div>
+      <Stage service={active} onOpen={openService} />
 
-        {/* Top: Luxury branding */}
-        <div className="flex items-center gap-1.5">
-          <div className="h-5 w-5 rounded bg-blue-600 flex items-center justify-center text-white border border-blue-400/30">
-            <Car size={10} />
-          </div>
-          <span className="text-[8px] font-black uppercase tracking-[0.2em] text-blue-400">
-            Luxury Ride
-          </span>
+      {/* auto-advance progress */}
+      {!userPicked && (
+        <div className="relative z-10 mx-auto mt-3 h-[3px] w-24 overflow-hidden rounded-full bg-white/15">
+          <motion.span
+            key={active.id}
+            className="absolute inset-y-0 left-0 rounded-full"
+            style={{ backgroundColor: LIME }}
+            initial={{ width: '0%' }}
+            animate={{ width: '100%' }}
+            transition={{ duration: AUTO_ADVANCE_MS / 1000, ease: 'linear' }}
+          />
         </div>
-
-        {/* Center: wireframe map graphic */}
-        <div className="my-auto relative flex items-center justify-center h-20">
-          <motion.div 
-            animate={{ y: [0, -4, 0] }}
-            transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-            className="relative z-10"
-          >
-            <Compass className="w-12 h-12 text-indigo-400/70 stroke-[1.2]" />
-            <motion.div 
-              animate={{ scale: [1, 1.12, 1], opacity: [0.3, 0.5, 0.3] }}
-              transition={{ duration: 3, repeat: Infinity }}
-              className="absolute -inset-2.5 rounded-full border border-indigo-400/20"
-            />
-          </motion.div>
-          <MapPin className="absolute top-2 left-8 text-blue-500 w-4 h-4 fill-blue-500/10 drop-shadow-[0_0_6px_rgba(59,130,246,0.6)]" />
-          <MapPin className="absolute bottom-4 right-10 text-indigo-500 w-3.5 h-3.5 fill-indigo-500/10" />
-        </div>
-
-        {/* Bottom: Luxury subtext */}
-        <div>
-          <p className="text-[12px] font-black text-white tracking-tight leading-tight">
-            Premium Transport
-          </p>
-          <p className="text-[8px] font-bold text-slate-400 mt-0.5 uppercase tracking-wider">
-            Safe, reliable mobility
-          </p>
-        </div>
-      </motion.div>
-
-      {/* 5. Right Sliding Panel (Blue-Cyan Gradient Theme - Parcel Express) */}
-      <motion.div
-        animate={{
-          x: isOpen ? '100%' : '0%',
-        }}
-        transition={{ type: "spring", stiffness: 70, damping: 18, delay: 0.3 }}
-        className="absolute inset-y-0 right-0 w-1/2 bg-gradient-to-br from-cyan-500 via-blue-600 to-indigo-700 border-l border-white/5 z-20 flex flex-col justify-between p-4 overflow-hidden origin-left"
-      >
-        {/* Floating parcel box particles decoration */}
-        <div className="absolute inset-0 pointer-events-none opacity-15">
-          <motion.div 
-            animate={{ y: [0, -6, 0], rotate: [0, 8, 0] }}
-            transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
-            className="absolute top-6 right-4"
-          >
-            <Send size={24} className="text-white" />
-          </motion.div>
-          <motion.div 
-            animate={{ y: [0, 6, 0], rotate: [0, -8, 0] }}
-            transition={{ duration: 4, repeat: Infinity, ease: "easeInOut", delay: 1 }}
-            className="absolute bottom-8 left-4"
-          >
-            <Truck size={24} className="text-white" />
-          </motion.div>
-        </div>
-
-        {/* Top: Delivery branding */}
-        <div className="flex items-center gap-1.5 self-end">
-          <span className="text-[8px] font-black uppercase tracking-[0.2em] text-blue-100">
-            EXPRESS PARCEL
-          </span>
-          <div className="h-5 w-5 rounded bg-white flex items-center justify-center text-blue-600 shadow-sm">
-            <Package size={10} />
-          </div>
-        </div>
-
-        {/* Center: floating box illustration */}
-        <div className="my-auto flex items-center justify-center h-20">
-          <motion.div 
-            animate={{ 
-              y: [0, -8, 0],
-              rotate: [0, 3, 0]
-            }}
-            transition={{ duration: 3.5, repeat: Infinity, ease: "easeInOut" }}
-            className="relative flex items-center justify-center"
-          >
-            <Package className="w-12 h-12 text-white stroke-[1.2] drop-shadow-2xl" />
-            <div className="absolute -bottom-1.5 w-8 h-1.5 bg-black/20 rounded-full blur-sm" />
-          </motion.div>
-        </div>
-
-        {/* Bottom: Delivery subtext */}
-        <div className="text-right">
-          <p className="text-[12px] font-black text-white tracking-tight leading-tight">
-            Courier & Parcel
-          </p>
-          <p className="text-[8px] font-bold text-blue-100 mt-0.5 uppercase tracking-wider">
-            Send packages anywhere
-          </p>
-        </div>
-      </motion.div>
-
-      {/* 6. Click-to-Reset Door Animation button (subtle top right inside hero container) */}
-      <button
-        type="button"
-        onClick={() => setIsOpen(prev => !prev)}
-        className="absolute top-3 right-3 z-30 h-7 w-7 rounded-full border border-white/10 bg-black/40 hover:bg-black/60 flex items-center justify-center text-white/50 hover:text-white transition-colors"
-        aria-label="Toggle Door Animation"
-      >
-        <motion.div
-          animate={{ rotate: isOpen ? 0 : 180 }}
-          transition={{ duration: 0.3 }}
-        >
-          <ArrowRight size={12} className={isOpen ? "rotate-180" : ""} />
-        </motion.div>
-      </button>
+      )}
     </div>
   );
 }

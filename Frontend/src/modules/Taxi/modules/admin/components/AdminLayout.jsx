@@ -973,6 +973,7 @@ const AdminLayout = () => {
                   icon: Globe,
                   label: 'Website & Pages',
                   subItems: [
+                    { label: 'Landing Page', path: '/taxi/admin/global/cms/landing' },
                     { label: 'Header & Footer', path: '/taxi/admin/global/cms/header-footer' },
                     { label: 'Home', path: '/taxi/admin/global/cms/home' },
                     { label: 'About Us', path: '/taxi/admin/global/cms/about' },

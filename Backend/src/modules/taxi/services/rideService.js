@@ -752,14 +752,12 @@ export const resolveSetPriceForRide = async ({ serviceLocationId = null, transpo
     },
   ];
 
-  for (const filter of filters) {
-    const match = await SetPrice.findOne(filter).sort({ updatedAt: -1, createdAt: -1 }).lean();
-    if (match) {
-      return match;
-    }
-  }
+  // One round trip instead of up to four in a row; the filters are still ordered by priority.
+  const matches = await Promise.all(
+    filters.map((filter) => SetPrice.findOne(filter).sort({ updatedAt: -1, createdAt: -1 }).lean()),
+  );
 
-  return null;
+  return matches.find(Boolean) || null;
 };
 
 /**
@@ -1361,6 +1359,46 @@ export const createRideRecord = async ({
   throw lastError || new ApiError(500, 'Failed to create ride with promo');
 };
 
+const DRIVER_SNAPSHOT_FIELDS = 'name phone profileImage vehicleType vehicleIconType vehicleNumber vehicleColor vehicleMake vehicleModel vehicleImage rating location';
+
+const isRealPoint = (coords) => (
+  Array.isArray(coords)
+  && coords.length >= 2
+  && Number.isFinite(Number(coords[0]))
+  && Number.isFinite(Number(coords[1]))
+  && !(Number(coords[0]) === 0 && Number(coords[1]) === 0)
+);
+
+// The rider's map follows ride.lastDriverLocation. When the driver's device has not pushed a live fix for
+// this ride yet (GPS blocked/slow, socket down), fall back to the driver's last saved position so the rider
+// still sees the driver and the route instead of an empty map. Never exposes the driver's raw location field.
+export const resolveRideDriverLocation = (ride) => {
+  const own = ride?.lastDriverLocation;
+  const driverDoc = ride?.driverId && typeof ride.driverId === 'object' ? ride.driverId : null;
+  const profilePoint = driverDoc?.location?.coordinates;
+
+  const lastDriverLocation = isRealPoint(own?.coordinates)
+    ? {
+      type: own.type || 'Point',
+      coordinates: own.coordinates,
+      heading: own.heading ?? null,
+      speed: own.speed ?? null,
+      updatedAt: own.updatedAt || null,
+    }
+    : (driverDoc && isRealPoint(profilePoint)
+      ? { type: 'Point', coordinates: [Number(profilePoint[0]), Number(profilePoint[1])], heading: null, speed: null, updatedAt: null }
+      : null);
+
+  return lastDriverLocation;
+};
+
+const stripDriverLocation = (driver) => {
+  if (!driver || typeof driver !== 'object') return driver;
+  const plain = typeof driver.toObject === 'function' ? driver.toObject() : { ...driver };
+  delete plain.location;
+  return plain;
+};
+
 export const getRideDetails = async (rideId) => {
   if (!rideId || !mongoose.Types.ObjectId.isValid(rideId)) {
     throw new ApiError(404, 'Ride not found');
@@ -1369,13 +1407,18 @@ export const getRideDetails = async (rideId) => {
   const ride = await Ride.findById(rideId)
     .populate('deliveryId')
     .populate('userId', 'name phone')
-    .populate('driverId', 'name phone profileImage vehicleType vehicleIconType vehicleNumber vehicleColor vehicleMake vehicleModel vehicleImage rating');
+    .populate('driverId', DRIVER_SNAPSHOT_FIELDS);
 
   if (!ride) {
     throw new ApiError(404, 'Ride not found');
   }
 
-  return ride;
+  const plain = ride.toObject();
+  plain.lastDriverLocation = resolveRideDriverLocation(ride);
+  if (plain.driverId && typeof plain.driverId === 'object') {
+    delete plain.driverId.location;
+  }
+  return plain;
 };
 
 const activeRideStatuses = [RIDE_STATUS.SEARCHING, RIDE_STATUS.ACCEPTED, RIDE_STATUS.ONGOING];
@@ -1384,7 +1427,7 @@ const populateRideRealtime = async (rideId) =>
   Ride.findById(rideId)
     .populate('deliveryId')
     .populate('userId', 'name phone')
-    .populate('driverId', 'name phone profileImage vehicleType vehicleIconType vehicleNumber vehicleColor vehicleMake vehicleModel vehicleImage rating');
+    .populate('driverId', DRIVER_SNAPSHOT_FIELDS);
 
 export const serializeRideRealtime = (ride) => ({
   rideId: String(ride._id),
@@ -1491,17 +1534,9 @@ export const serializeRideRealtime = (ride) => ({
   startedAt: ride.startedAt,
   completedAt: ride.completedAt,
   feedback: ride.feedback || null,
-  lastDriverLocation: ride.lastDriverLocation?.coordinates?.length
-    ? {
-      type: ride.lastDriverLocation.type,
-      coordinates: ride.lastDriverLocation.coordinates,
-      heading: ride.lastDriverLocation.heading,
-      speed: ride.lastDriverLocation.speed,
-      updatedAt: ride.lastDriverLocation.updatedAt,
-    }
-    : null,
+  lastDriverLocation: resolveRideDriverLocation(ride),
   user: ride.userId,
-  driver: ride.driverId,
+  driver: stripDriverLocation(ride.driverId),
   messages: (ride.messages || []).slice(-30).map((message) => ({
     id: String(message._id),
     senderRole: message.senderRole,

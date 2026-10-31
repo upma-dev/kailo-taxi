@@ -8,8 +8,8 @@ export const APP_COLOR_KEYS = [
 
 export const DEFAULT_APP_COLORS = {
   admin: { primary: '#4F46E5', secondary: '#3730A3' },
-  taxiUser: { primary: '#F38F24', secondary: '#D97706' },
-  taxiDriver: { primary: '#FF6B00', secondary: '#D95A00' },
+  taxiUser: { primary: '#0F766E', secondary: '#0A4A46' },
+  taxiDriver: { primary: '#0F766E', secondary: '#0A4A46' },
 };
 
 const HEX = /^#([0-9a-fA-F]{6})$/;

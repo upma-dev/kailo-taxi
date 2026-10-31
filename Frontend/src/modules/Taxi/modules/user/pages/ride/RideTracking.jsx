@@ -1,13 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Phone, MessageCircle, AlertTriangle, Shield, Star, ChevronLeft, Share2, Clock3 } from 'lucide-react';
+import { Phone, MessageCircle, AlertTriangle, Shield, Star, ChevronLeft, ChevronUp, ChevronDown, Share2, Clock3 } from 'lucide-react';
 import { GoogleMap, MarkerF, OverlayView, OverlayViewF, PolylineF } from '@react-google-maps/api';
 import { HAS_VALID_GOOGLE_MAPS_KEY, useAppGoogleMapsLoader } from '../../../admin/utils/googleMaps';
 import { socketService } from '../../../../shared/api/socket';
 import api from '../../../../shared/api/axiosInstance';
 import { BACKEND_ORIGIN } from '../../../../shared/api/runtimeConfig';
-import { clearCurrentRide, getCurrentRide, saveCurrentRide } from '../../services/currentRideService';
+import { clearCurrentRide, getCurrentRide, saveCurrentRide, toCurrentRideSnapshot } from '../../services/currentRideService';
 import RideCancellationModal from '../../components/RideCancellationModal';
 import { showChatNotification } from '@/shared/utils/chatNotificationSound';
 import toast from 'react-hot-toast';
@@ -21,8 +21,10 @@ import { useSettings } from '../../../../shared/context/SettingsContext';
 const MAP_CONTAINER_STYLE = { width: '100%', height: '100%' };
 const DEFAULT_CENTER = { lat: 22.7196, lng: 75.8577 };
 const TERMINAL_STATUSES = new Set(['completed', 'cancelled', 'delivered']);
+import { ROUTE_REFRESH_INTERVAL_MS, getDistanceMeters, formatDistanceAway, frameMapToPoints, getStageFramePoints, SHOW_TRIP_PREVIEW_BEFORE_PICKUP, riderPinLabel } from '../../../../shared/trackingConfig';
+
 const ACTIVE_RIDE_VALIDATE_MS = 15000;
-const ROUTE_REFETCH_MIN_MS = 20000;
+const ROUTE_REFETCH_MIN_MS = ROUTE_REFRESH_INTERVAL_MS;
 const COMPLETED_TRACKING_STATUSES = new Set(['completed', 'delivered']);
 const POST_RIDE_REDIRECT_STATUSES = new Set(['arrived', 'completed', 'delivered']);
 
@@ -36,7 +38,7 @@ const toLatLng = (coords, fallback = DEFAULT_CENTER) => {
   return fallback;
 };
 
-const arePositionsNearlyEqual = (first, second, threshold = 0.0002) => (
+const arePositionsNearlyEqual = (first, second, threshold = 0.00002) => (
   Math.abs(Number(first?.lat ?? 0) - Number(second?.lat ?? 0)) < threshold &&
   Math.abs(Number(first?.lng ?? 0) - Number(second?.lng ?? 0)) < threshold
 );
@@ -76,7 +78,30 @@ const getVehicleMarkerOffset = (width, height) => ({
   y: -(height / 2),
 });
 
-const RotatingVehicleMarker = ({ position, iconUrl = carIcon, heading = 0, title = 'Driver' }) => (
+// Rider pickup pin: a person icon (instead of a letter) so it reads as "the rider is here".
+const buildUserPinIcon = () => {
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 36 36">'
+    + '<circle cx="18" cy="18" r="16" fill="#10b981" stroke="#ffffff" stroke-width="3"/>'
+    + '<circle cx="18" cy="14" r="4.6" fill="#ffffff"/>'
+    + '<path d="M9.5 27c0-4.7 3.8-8 8.5-8s8.5 3.3 8.5 8z" fill="#ffffff"/></svg>';
+  return {
+    url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
+    scaledSize: new window.google.maps.Size(36, 36),
+    anchor: new window.google.maps.Point(18, 18),
+    labelOrigin: new window.google.maps.Point(18, 46),
+  };
+};
+
+const getDefaultTrackingIcon = (ride, driver) => {
+  const serviceType = String(ride?.serviceType || ride?.type || '').toLowerCase();
+  const iconType = String(ride?.vehicleIconType || driver?.vehicleIconType || driver?.vehicleType || '').toLowerCase();
+  if (iconType.includes('bike') || iconType.includes('scoot')) return bikeIcon;
+  if (iconType.includes('auto')) return autoIcon;
+  if (serviceType === 'parcel') return deliveryIcon;
+  return carIcon;
+};
+
+const RotatingVehicleMarker = ({ position, iconUrl = carIcon, fallbackIcon = carIcon, heading = 0, title = 'Driver' }) => (
   <OverlayViewF
     position={position}
     mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
@@ -88,10 +113,16 @@ const RotatingVehicleMarker = ({ position, iconUrl = carIcon, heading = 0, title
         style={{ transform: `rotate(${normalizeHeading(heading)}deg)` }}
       >
         <img
-          src={iconUrl || carIcon}
+          src={iconUrl || fallbackIcon}
           alt={title}
           className="h-12 w-12 object-contain drop-shadow-[0_8px_10px_rgba(15,23,42,0.35)]"
           draggable={false}
+          onError={(event) => {
+            // a missing or blocked vehicle icon must never show a broken-image box on the map
+            if (event.currentTarget.dataset.fallback) return;
+            event.currentTarget.dataset.fallback = '1';
+            event.currentTarget.src = fallbackIcon;
+          }}
         />
       </div>
     </div>
@@ -326,6 +357,7 @@ const mergeDriverSnapshot = (baseDriver = {}, incomingDriver = {}) => {
 
 const RideTracking = () => {
   const [drawerOpen, setDrawerOpen] = useState(true);
+  const [headerOpen, setHeaderOpen] = useState(true);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [shareToast, setShareToast] = useState(false);
   const [shareSheetOpen, setShareSheetOpen] = useState(false);
@@ -403,6 +435,48 @@ const RideTracking = () => {
   );
   const hasLiveDriverLocation = Boolean(rideRealtime?.driverLocation?.coordinates?.length);
   const tripStatus = String(rideRealtime?.status || state.liveStatus || state.status || 'accepted').toLowerCase();
+
+  // Safety net for the live driver pin and route line: if no realtime event arrives (socket down),
+  // read the driver's last saved position from the ride every few seconds.
+  const isLiveTrip = ['accepted', 'arriving', 'started', 'ongoing'].includes(tripStatus);
+  useEffect(() => {
+    if (!rideId || !isLiveTrip) return undefined;
+    let off = false;
+    const poll = async () => {
+      if (document.visibilityState === 'hidden') return;
+      try {
+        const payload = unwrapApiPayload(await api.get(`/rides/${rideId}`));
+        const live = String(payload?.liveStatus || payload?.status || '').toLowerCase();
+        if (!off && (live === 'cancelled' || live === 'canceled')) {
+          // e.g. the driver cancelled while the realtime socket was down
+          clearCurrentRide();
+          exitTracking();
+          return;
+        }
+        if (!off && live === 'completed') {
+          latestCompleteTrackingRef.current('completed');
+          return;
+        }
+        const point = payload?.lastDriverLocation;
+        if (off || !Array.isArray(point?.coordinates) || point.coordinates.length < 2) return;
+        setRideRealtime((prev) => ({
+          ...(prev || {}),
+          driverLocation: {
+            coordinates: point.coordinates,
+            heading: point.heading ?? prev?.driverLocation?.heading ?? null,
+          },
+        }));
+      } catch {
+        // next tick will retry
+      }
+    };
+    poll();
+    const timer = window.setInterval(poll, 5000);
+    return () => {
+      off = true;
+      window.clearInterval(timer);
+    };
+  }, [rideId, isLiveTrip]);
   const otp = ['started', 'ongoing', 'arrived', 'completed'].includes(tripStatus)
     ? ''
     : String(rideRealtime?.otp || state.otp || state.ride_otp || '');
@@ -450,6 +524,14 @@ const RideTracking = () => {
       calculateBearing(driverPosition, activeDestination),
     );
   }, [activeDestination, driverPosition, rideRealtime?.driverLocation?.heading, routePath]);
+  // Same straight-line figure and wording the driver sees: driver -> pickup before the trip, driver -> drop after.
+  const liveDistanceLabel = useMemo(() => {
+    if (!hasLiveDriverLocation || ['arrived', 'completed', 'cancelled'].includes(tripStatus)) return '';
+    const meters = getDistanceMeters(driverPosition, activeDestination);
+    const text = formatDistanceAway(meters);
+    if (!text) return '';
+    return `${text} away ${['started', 'ongoing'].includes(tripStatus) ? 'from drop' : 'from pickup'}`;
+  }, [activeDestination, driverPosition, hasLiveDriverLocation, tripStatus]);
   const vehicleLabel = driver.vehicle || driver.vehicleType || (serviceType === 'parcel' ? 'Parcel' : 'Taxi');
   const nextDriverImage = resolveAssetUrl(
     driver.profileImage || driver.profile_image || driver.image || driver.avatar || driver.selfie || '',
@@ -480,6 +562,8 @@ const RideTracking = () => {
   const latestCompleteTrackingRef = useRef(() => {});
   const hasCompletedRedirectRef = useRef(false);
   const hasAutoFramedMapRef = useRef(false);
+  const initialMapCenterRef = useRef(null);
+  if (!initialMapCenterRef.current && pickupPosition) initialMapCenterRef.current = pickupPosition;
   const lastMapPanPositionRef = useRef(null);
   const lastRouteFetchRef = useRef({ at: 0, key: '' });
 
@@ -613,7 +697,19 @@ const RideTracking = () => {
     let active = true;
 
     if (!rideId) {
-      exitTracking();
+      // Opened directly (e.g. typed URL / reload with nothing saved): pick the live ride up from the server.
+      (async () => {
+        try {
+          const live = unwrapApiPayload(await api.get('/rides/active/me'));
+          if (active && (live?._id || live?.rideId)) {
+            navigate(location.pathname, { replace: true, state: toCurrentRideSnapshot(live) });
+            return;
+          }
+        } catch {
+          // fall through to leaving the page
+        }
+        if (active) exitTracking();
+      })();
       return () => {
         active = false;
       };
@@ -1016,37 +1112,54 @@ const RideTracking = () => {
     };
   }, [activeDestination, driverPosition, hasLiveDriverLocation, isLoaded, isScheduledUpcoming]);
 
+  // Camera: before the trip starts show the driver and your pickup; once it starts, show the driver and the
+  // drop. Only these two points are framed (never the whole route or far-away points), with room kept
+  // free for the bottom sheet so nothing hides underneath it. Re-framed when the stage or live fix changes.
+  const isTripStarted = ['started', 'ongoing', 'arrived'].includes(tripStatus);
+  const cameraKey = `${isTripStarted ? 'trip' : 'pickup'}:${hasLiveDriverLocation ? 'live' : 'wait'}`;
   useEffect(() => {
     if (!map || !window.google?.maps) {
       return;
     }
-
-    if (routePath.length > 1) {
-      if (!hasAutoFramedMapRef.current) {
-        const bounds = new window.google.maps.LatLngBounds();
-        routePath.forEach((point) => bounds.extend(point));
-        bounds.extend(driverPosition);
-        bounds.extend(activeDestination);
-        map.fitBounds(bounds, { top: 120, right: 48, bottom: 300, left: 48 });
-        hasAutoFramedMapRef.current = true;
-        lastMapPanPositionRef.current = driverPosition;
-        return;
-      }
-
+    if (hasAutoFramedMapRef.current === cameraKey) {
       lastMapPanPositionRef.current = driverPosition;
       return;
     }
 
-    if (!hasAutoFramedMapRef.current) {
-      map.panTo(driverPosition);
-      map.setZoom(15);
-      hasAutoFramedMapRef.current = true;
-      lastMapPanPositionRef.current = driverPosition;
-      return;
-    }
-
+    // Same framing as the driver app: driver + pickup pin + "D" drop (drop only once the trip has started).
+    frameMapToPoints(map, getStageFramePoints({
+      tripStarted: isTripStarted,
+      driver: driverPosition,
+      hasDriver: hasLiveDriverLocation,
+      pickup: pickupPosition,
+      drop: dropPosition,
+    }));
+    hasAutoFramedMapRef.current = cameraKey;
     lastMapPanPositionRef.current = driverPosition;
-  }, [activeDestination, driverPosition, map, routePath, tripStatus]);
+  }, [cameraKey, dropPosition, driverPosition, hasLiveDriverLocation, isTripStarted, map, pickupPosition]);
+
+  // Before the trip starts, also show where the ride itself goes (pickup -> drop).
+  const [tripPreviewPath, setTripPreviewPath] = useState([]);
+  const previewKey = `${pickupPosition?.lat},${pickupPosition?.lng}|${dropPosition?.lat},${dropPosition?.lng}`;
+  useEffect(() => {
+    if (!SHOW_TRIP_PREVIEW_BEFORE_PICKUP || isTripStarted || !isLoaded || !pickupPosition || !dropPosition || !window.google?.maps?.DirectionsService) {
+      setTripPreviewPath([]);
+      return undefined;
+    }
+    let off = false;
+    new window.google.maps.DirectionsService().route(
+      { origin: pickupPosition, destination: dropPosition, travelMode: window.google.maps.TravelMode.DRIVING },
+      (result, status) => {
+        if (off) return;
+        const path = status === 'OK' ? (result?.routes?.[0]?.overview_path || []).map((pt) => ({ lat: pt.lat(), lng: pt.lng() })) : [];
+        setTripPreviewPath(path.length > 1 ? path : [pickupPosition, dropPosition]);
+      },
+    );
+    return () => {
+      off = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isTripStarted, isLoaded, previewKey]);
 
   const handleShare = async () => {
     const text = buildRideShareText({
@@ -1267,7 +1380,7 @@ const RideTracking = () => {
         ) : isLoaded ? (
           <GoogleMap
             mapContainerStyle={MAP_CONTAINER_STYLE}
-            center={driverPosition}
+            center={initialMapCenterRef.current || pickupPosition}
             zoom={14}
             onLoad={setMap}
             onUnmount={() => setMap(null)}
@@ -1281,42 +1394,55 @@ const RideTracking = () => {
               gestureHandling: 'greedy',
             }}
           >
+            {!isTripStarted && tripPreviewPath.length > 1 && (
+              <>
+                <PolylineF path={tripPreviewPath} options={{ strokeColor: '#000000', strokeOpacity: 0.16, strokeWeight: 9, zIndex: 8 }} />
+                <PolylineF path={tripPreviewPath} options={{ strokeColor: '#111827', strokeOpacity: 0.95, strokeWeight: 5, zIndex: 9 }} />
+              </>
+            )}
             {routePath.length > 1 && hasLiveDriverLocation && (
-              <PolylineF
-                path={routePath}
-                options={{
-                  strokeColor: '#111827',
-                  strokeOpacity: 0,
-                  icons: [
-                    {
-                      icon: { path: 'M 0,-1 0,1', strokeOpacity: 0.95, strokeColor: '#111827', strokeWeight: 4, scale: 2 },
-                      offset: '0',
-                      repeat: '14px',
-                    },
-                  ],
-                }}
-              />
+              <>
+                <PolylineF path={routePath} options={{ strokeColor: '#000000', strokeOpacity: 0.16, strokeWeight: 9, zIndex: 10 }} />
+                <PolylineF path={routePath} options={{ strokeColor: '#111827', strokeOpacity: 0.95, strokeWeight: 5, zIndex: 20 }} />
+              </>
             )}
             {hasLiveDriverLocation ? (
               <RotatingVehicleMarker
                 position={driverPosition}
                 title="Driver"
                 iconUrl={vehicleIcon}
+                fallbackIcon={getDefaultTrackingIcon(trackingSnapshot, driver)}
                 heading={displayDriverHeading}
               />
             ) : null}
             <MarkerF
               position={activeDestination}
-              title={['started', 'ongoing', 'arrived', 'completed'].includes(tripStatus) ? 'Drop' : 'Pickup'}
-              icon={{
-                path: window.google.maps.SymbolPath.CIRCLE,
-                fillColor: ['started', 'ongoing', 'arrived', 'completed'].includes(tripStatus) ? '#ef4444' : '#10b981',
-                fillOpacity: 1,
-                strokeColor: '#ffffff',
-                strokeWeight: 2,
-                scale: 7,
-              }}
+              title={['started', 'ongoing', 'arrived', 'completed'].includes(tripStatus) ? 'Drop' : 'Your pickup'}
+              icon={['started', 'ongoing', 'arrived', 'completed'].includes(tripStatus)
+                ? {
+                  path: window.google.maps.SymbolPath.CIRCLE,
+                  fillColor: '#ef4444',
+                  fillOpacity: 1,
+                  strokeColor: '#ffffff',
+                  strokeWeight: 2,
+                  scale: 7,
+                }
+                : buildUserPinIcon()}
+              {...(['started', 'ongoing', 'arrived', 'completed'].includes(tripStatus) ? {} : { label: riderPinLabel('You') })}
             />
+            {/* Before pickup only the driver and "You" are shown; once the trip starts, your pickup stays as a reference. */}
+            {(() => {
+              const started = ['started', 'ongoing', 'arrived', 'completed'].includes(tripStatus);
+              const other = pickupPosition;
+              if (!started || !other || !Number.isFinite(Number(other.lat)) || !Number.isFinite(Number(other.lng))) return null;
+              return (
+                <MarkerF
+                  position={other}
+                  title="Your pickup"
+                  icon={buildUserPinIcon()}
+                />
+              );
+            })()}
           </GoogleMap>
         ) : (
           <div className="flex h-full w-full items-center justify-center bg-slate-200">
@@ -1335,9 +1461,31 @@ const RideTracking = () => {
         <ChevronLeft size={18} className="text-slate-900" strokeWidth={2.5} />
       </motion.button>
 
-      <div className="absolute top-8 left-16 right-4 z-10 bg-white/90 backdrop-blur-md rounded-[14px] px-3.5 py-2.5 shadow-[0_4px_14px_rgba(15,23,42,0.08)] border border-white/80">
-        <p className="text-[11px] font-black text-slate-500 truncate">{pickupLabel} → {dropLabel}</p>
-      </div>
+      {headerOpen ? (
+        <div className="absolute top-8 left-16 right-4 z-10 flex items-center gap-2 bg-white/90 backdrop-blur-md rounded-[14px] pl-3.5 pr-1.5 py-1.5 shadow-[0_4px_14px_rgba(15,23,42,0.08)] border border-white/80">
+          {/* Pickup until the driver verifies the OTP; the drop only appears once the trip has started. */}
+          <p className="min-w-0 flex-1 text-[11px] font-black text-slate-500 truncate">
+            {isTripStarted ? `To ${dropLabel}` : `Pickup: ${pickupLabel}`}
+          </p>
+          <button
+            type="button"
+            aria-label="Minimize header"
+            onClick={() => setHeaderOpen(false)}
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600"
+          >
+            <ChevronUp size={15} strokeWidth={2.8} />
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          aria-label="Show trip route"
+          onClick={() => setHeaderOpen(true)}
+          className="absolute top-8 left-16 z-10 flex h-10 w-10 items-center justify-center rounded-[12px] border border-white/80 bg-white/90 text-slate-700 shadow-[0_4px_14px_rgba(15,23,42,0.10)] backdrop-blur-md"
+        >
+          <ChevronDown size={18} strokeWidth={2.8} />
+        </button>
+      )}
 
       <motion.button
         whileTap={{ scale: 0.95 }}
@@ -1418,6 +1566,9 @@ const RideTracking = () => {
                 <p className="text-[13px] font-black text-[#f97316] mt-1 tracking-tight">
                   {tripStatus === 'arrived' ? 'Reached destination' : tripStatus === 'started' || tripStatus === 'ongoing' ? 'Trip started' : driverSubtitle}
                 </p>
+                {liveDistanceLabel && (
+                  <p className="text-[11px] font-black text-slate-700 mt-0.5">{liveDistanceLabel}</p>
+                )}
                 <p className="truncate text-[11px] font-bold text-slate-400 mt-0.5 uppercase tracking-[0.14em]">
                   {driver.plate || 'MH12AB1234'} &middot; {vehicleLabel}
                 </p>
