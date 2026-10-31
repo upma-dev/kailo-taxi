@@ -1,7 +1,7 @@
 import React from 'react';
 import { X, CheckCircle2, AlertCircle, ShieldAlert, FileText, Wallet } from 'lucide-react';
 
-export default function CancellationReceiptModal({ isOpen, onClose, cancellationBill, currency = '₹' }) {
+export default function CancellationReceiptModal({ isOpen, onClose, cancellationBill, currency = '₹', viewerRole = 'user' }) {
   if (!isOpen || !cancellationBill) return null;
 
   const {
@@ -15,6 +15,9 @@ export default function CancellationReceiptModal({ isOpen, onClose, cancellation
     paymentDetails = {},
   } = cancellationBill;
 
+  const isDriverView = viewerRole === 'driver';
+  const driverPayout = Number(driverBreakdown.driverPayout || 0);
+  const driverPenalty = Number(driverBreakdown.driverPenalty || 0);
   const isWaived = Boolean(billBreakdown.isWaived);
   const feeAmount = Number(billBreakdown.cancellationFee || 0);
   const taxAmount = Number(billBreakdown.taxAmount || 0);
@@ -25,7 +28,7 @@ export default function CancellationReceiptModal({ isOpen, onClose, cancellation
       <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl border border-gray-100 overflow-hidden flex flex-col max-h-[90vh]">
         
         {/* Header */}
-        <div className={`p-6 text-white text-center relative ${isWaived ? 'bg-gradient-to-br from-emerald-500 to-teal-600' : 'bg-gradient-to-br from-amber-500 to-orange-600'}`}>
+        <div className={`p-6 text-white text-center relative ${(isDriverView ? driverPenalty === 0 : isWaived) ? 'bg-gradient-to-br from-emerald-500 to-teal-600' : 'bg-gradient-to-br from-amber-500 to-orange-600'}`}>
           <button
             onClick={onClose}
             className="absolute top-4 right-4 p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-full transition"
@@ -34,12 +37,18 @@ export default function CancellationReceiptModal({ isOpen, onClose, cancellation
           </button>
           
           <div className="w-14 h-14 mx-auto mb-3 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center border border-white/30 shadow-inner">
-            {isWaived ? <CheckCircle2 size={32} /> : <AlertCircle size={32} />}
+            {(isDriverView ? driverPenalty === 0 : isWaived) ? <CheckCircle2 size={32} /> : <AlertCircle size={32} />}
           </div>
 
           <h2 className="text-xl font-bold tracking-tight">Cancellation Receipt</h2>
           <p className="text-xs text-white/90 mt-1 font-medium">
-            {isWaived ? 'Fee Waived (₹0 Charged)' : `Cancellation Fee Applied (${currency}${totalAmount.toFixed(2)})`}
+            {isDriverView
+              ? driverPayout > 0
+                ? `You receive ${currency}${driverPayout.toFixed(2)} as compensation`
+                : driverPenalty > 0
+                  ? `Penalty of ${currency}${driverPenalty.toFixed(2)} deducted from your wallet`
+                  : `No charge and no penalty (${currency}0)`
+              : isWaived ? 'Fee Waived (₹0 Charged)' : `Cancellation Fee Applied (${currency}${totalAmount.toFixed(2)})`}
           </p>
         </div>
 
@@ -98,7 +107,7 @@ export default function CancellationReceiptModal({ isOpen, onClose, cancellation
                     </div>
                   )}
                   <div className="pt-2.5 border-t border-gray-100 flex justify-between items-center text-sm font-bold text-gray-900">
-                    <span>Total Amount</span>
+                    <span>{isDriverView ? 'Charged to rider' : 'Total Amount'}</span>
                     <span className="text-orange-600">{currency}{totalAmount.toFixed(2)}</span>
                   </div>
                 </>

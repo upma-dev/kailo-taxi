@@ -8,6 +8,7 @@ import {
   updateBusinessSettings,
   upsertAdminPage,
 } from '../controllers/cmsController.js';
+import { deleteLead, listLeads, submitLead, updateLead, uploadLandingImage } from '../controllers/landingController.js';
 import { getPublicEnv } from '../controllers/publicEnvController.js';
 
 export const cmsRouter = Router();
@@ -27,3 +28,10 @@ cmsRouter.patch(
   upload.fields([{ name: 'logo', maxCount: 1 }, { name: 'favicon', maxCount: 1 }]),
   updateBusinessSettings,
 );
+
+// Landing site: public registration form + admin lead inbox and image upload.
+cmsRouter.post('/landing/leads', submitLead);
+cmsRouter.get('/admin/landing/leads', authenticate(['admin']), listLeads);
+cmsRouter.patch('/admin/landing/leads/:id', authenticate(['admin']), updateLead);
+cmsRouter.delete('/admin/landing/leads/:id', authenticate(['admin']), deleteLead);
+cmsRouter.post('/admin/landing/upload', authenticate(['admin']), upload.single('image'), uploadLandingImage);

@@ -577,6 +577,83 @@ const cleanupExpiredBusSeatHolds = async () => {
     status: 'held',
     expiresAt: { $lte: now },
   });
+
+  // Seats must go back to inventory when a hold lapses, otherwise they stay "held" forever.
+  await TripSeatInventory.updateMany(
+    { status: 'held', holdExpiresAt: { $ne: null, $lte: now } },
+    { $set: { status: 'available', bookingId: null, holdId: null, holdExpiresAt: null, bookedBy: {} } },
+  );
+};
+
+const releaseHeldSeats = async ({ tripId, bookingId }) => {
+  await TripSeatInventory.updateMany(
+    { tripId, bookingId, status: 'held' },
+    { $set: { status: 'available', bookingId: null, holdId: null, holdExpiresAt: null, bookedBy: {} } },
+  );
+};
+
+// Atomically claim seats: each seat flips available -> held only if still available, so two
+// users can never hold the same seat. Rolls back partial claims.
+const claimSeatsAtomically = async ({ tripId, seatIds, bookingId, userId, expiresAt }) => {
+  const claimed = [];
+  for (const seatId of seatIds) {
+    const doc = await TripSeatInventory.findOneAndUpdate(
+      { tripId, seatId, status: 'available' },
+      {
+        $set: {
+          status: 'held',
+          bookingId,
+          holdExpiresAt: expiresAt,
+          bookedBy: { userId, bookingSource: 'user' },
+        },
+      },
+      { new: true },
+    );
+    if (!doc) {
+      if (claimed.length > 0) {
+        await TripSeatInventory.updateMany(
+          { tripId, seatId: { $in: claimed }, bookingId, status: 'held' },
+          { $set: { status: 'available', bookingId: null, holdId: null, holdExpiresAt: null, bookedBy: {} } },
+        );
+      }
+      return null;
+    }
+    claimed.push(seatId);
+  }
+  return claimed;
+};
+
+const refundBusPayment = async ({ booking, paymentId, reason }) => {
+  if (!paymentId || !(booking.amount > 0)) return;
+  try {
+    const { keyId, keySecret } = await resolveRazorpayCredentials();
+    const credentials = Buffer.from(`${keyId}:${keySecret}`).toString('base64');
+    const refundResponse = await fetch(`https://api.razorpay.com/v1/payments/${paymentId}/refund`, {
+      method: 'POST',
+      headers: { Authorization: `Basic ${credentials}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        amount: Math.round(booking.amount * 100),
+        notes: { bookingId: String(booking._id), bookingCode: booking.bookingCode, reason },
+      }),
+    });
+    const refundPayload = await refundResponse.json().catch(() => null);
+    if (refundResponse.ok) {
+      booking.cancellation.refundStatus = 'completed';
+      booking.cancellation.refundId = refundPayload?.id || '';
+      booking.cancellation.refundAmount = booking.amount;
+      booking.cancellation.refundProcessedAt = new Date();
+      booking.financialSnapshot.refundedAmount = booking.amount;
+      booking.payment.status = 'refunded';
+    } else {
+      booking.cancellation.refundStatus = 'failed';
+      booking.failureMetadata = { ...(booking.failureMetadata || {}), refundError: refundPayload?.error?.description || 'refund_failed' };
+    }
+    await booking.save();
+  } catch (refundErr) {
+    console.error('Failed to trigger automatic refund for bus booking:', refundErr);
+    booking.cancellation.refundStatus = 'failed';
+    await booking.save().catch(() => {});
+  }
 };
 
 const createBusBookingCode = () =>
@@ -2309,37 +2386,49 @@ export const verifyRentalAdvancePayment = async (req, res) => {
 };
 
 export const processBusPaymentConfirmation = async ({ bookingId, paymentId = '', signature = '', eventId = '' }) => {
-  const booking = await BusBooking.findById(bookingId);
-  if (!booking) {
+  const existing = await BusBooking.findById(bookingId);
+  if (!existing) {
     throw new ApiError(404, 'Bus booking not found');
   }
 
-  if (booking.status === 'confirmed') {
-    return booking;
+  if (existing.status === 'confirmed') {
+    return existing;
   }
 
-  const busService = booking.busServiceId
-    ? await BusService.findById(booking.busServiceId).lean()
-    : null;
-
-  if (booking.status !== 'pending') {
-    return booking;
+  // Only one caller (verify API or webhook) may move the booking out of pending/expired.
+  // Late payments on an already-expired booking are still processed so money is never lost.
+  const booking = await BusBooking.findOneAndUpdate(
+    { _id: bookingId, status: { $in: ['pending', 'expired'] } },
+    { $set: { 'payment.status': 'processing' } },
+    { new: true },
+  );
+  if (!booking) {
+    return BusBooking.findById(bookingId);
   }
 
   const now = new Date();
-  const trip = booking.tripId ? await TripInstance.findById(booking.tripId) : null;
-  const seatInventories = booking.tripId
-    ? await TripSeatInventory.find({ tripId: booking.tripId, seatId: { $in: booking.seatIds } })
-    : [];
 
-  const heldOrBookedByUs = seatInventories.filter(
-    (inv) =>
-      inv.status === 'held' && String(inv.bookingId || '') === String(booking._id),
-  );
+  // If the hold lapsed (or was released) re-claim the same seats when nobody else took them.
+  const stillOurs = await TripSeatInventory.countDocuments({
+    tripId: booking.tripId,
+    seatId: { $in: booking.seatIds },
+    status: 'held',
+    bookingId: booking._id,
+  });
+  let seatsSecured = stillOurs === booking.seatIds.length;
 
-  const holdValid = booking.expiresAt && booking.expiresAt > now && heldOrBookedByUs.length === booking.seatIds.length;
+  if (!seatsSecured && booking.tripId) {
+    const reclaimed = await claimSeatsAtomically({
+      tripId: booking.tripId,
+      seatIds: booking.seatIds,
+      bookingId: booking._id,
+      userId: booking.userId,
+      expiresAt: new Date(now.getTime() + 60 * 1000),
+    });
+    seatsSecured = Boolean(reclaimed);
+  }
 
-  if (!holdValid) {
+  if (!seatsSecured) {
     booking.status = 'failed';
     booking.failureReason = 'seat_conflict_after_payment';
     booking.failureMetadata = {
@@ -2353,49 +2442,14 @@ export const processBusPaymentConfirmation = async ({ bookingId, paymentId = '',
     if (signature) booking.payment.signature = signature;
     await booking.save();
 
-    if (booking.tripId) {
-      await TripSeatInventory.updateMany(
-        { tripId: booking.tripId, bookingId: booking._id, status: 'held' },
-        { $set: { status: 'available', bookingId: null, holdId: null, holdExpiresAt: null, bookedBy: {} } },
-      );
-    }
     await BusSeatHold.updateMany({ bookingId: booking._id, status: 'held' }, { $set: { status: 'expired' } });
+    await refundBusPayment({
+      booking,
+      paymentId,
+      reason: 'Automatic refund: seats were no longer available when payment was confirmed',
+    });
 
-    if (paymentId && booking.amount > 0) {
-      try {
-        const { keyId, keySecret } = await resolveRazorpayCredentials();
-        const credentials = Buffer.from(`${keyId}:${keySecret}`).toString('base64');
-        const refundResponse = await fetch(`https://api.razorpay.com/v1/payments/${paymentId}/refund`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Basic ${credentials}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            amount: Math.round(booking.amount * 100),
-            notes: {
-              bookingId: String(booking._id),
-              bookingCode: booking.bookingCode,
-              reason: 'Automatic refund: Seat hold expired before payment confirmation',
-            },
-          }),
-        });
-
-        const refundPayload = await refundResponse.json().catch(() => null);
-        if (refundResponse.ok) {
-          booking.cancellation.refundStatus = 'completed';
-          booking.cancellation.refundId = refundPayload?.id || '';
-          booking.cancellation.refundAmount = booking.amount;
-          booking.cancellation.refundProcessedAt = new Date();
-          booking.financialSnapshot.refundedAmount = booking.amount;
-          await booking.save();
-        }
-      } catch (refundErr) {
-        console.error('Failed to trigger automatic refund for expired hold:', refundErr);
-      }
-    }
-
-    throw new ApiError(409, 'Seat hold expired before payment verification. Automatic refund has been initiated.');
+    throw new ApiError(409, 'Seats were no longer available when payment was confirmed. Automatic refund has been initiated.');
   }
 
   booking.status = 'confirmed';
@@ -2403,27 +2457,29 @@ export const processBusPaymentConfirmation = async ({ bookingId, paymentId = '',
   if (paymentId) booking.payment.paymentId = paymentId;
   if (signature) booking.payment.signature = signature;
   booking.payment.paidAt = now;
+  booking.failureReason = '';
   await booking.save();
-  await syncBusBookingOwnerEarning(booking._id);
 
-  if (booking.tripId) {
-    await TripSeatInventory.updateMany(
-      { tripId: booking.tripId, seatId: { $in: booking.seatIds } },
-      {
-        $set: {
-          status: 'booked',
-          bookingId: booking._id,
-          holdExpiresAt: null,
-          bookedBy: {
-            userId: booking.userId,
-            bookingSource: booking.bookingSource || 'user',
-          },
+  await TripSeatInventory.updateMany(
+    { tripId: booking.tripId, seatId: { $in: booking.seatIds }, bookingId: booking._id },
+    {
+      $set: {
+        status: 'booked',
+        holdExpiresAt: null,
+        bookedBy: {
+          userId: booking.userId,
+          bookingSource: booking.bookingSource || 'user',
         },
       },
-    );
-  }
-
+    },
+  );
   await BusSeatHold.updateMany({ bookingId: booking._id, status: 'held' }, { $set: { status: 'converted' } });
+
+  try {
+    await syncBusBookingOwnerEarning(booking._id);
+  } catch (earningErr) {
+    console.error('Owner earning sync failed for bus booking:', booking._id, earningErr);
+  }
 
   return booking;
 };
@@ -2437,24 +2493,26 @@ export const handleRazorpayBusWebhook = async (req, res) => {
     return res.status(400).json({ success: false, message: 'Missing webhook headers or event' });
   }
 
-  const existingEvent = await RazorpayWebhookEvent.findOne({ eventId });
+  const existingEvent = await RazorpayWebhookEvent.findOne({ eventId, status: 'processed' });
   if (existingEvent) {
     return res.status(200).json({ success: true, message: 'Event already processed', eventId });
   }
 
   const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET || (await resolveRazorpayCredentials()).keySecret;
-  const bodyString = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
+  const rawBody = req.rawBody || (typeof req.body === 'string' ? req.body : JSON.stringify(req.body));
   const expectedSignature = crypto
     .createHmac('sha256', webhookSecret)
-    .update(bodyString)
+    .update(rawBody)
     .digest('hex');
 
   if (expectedSignature !== signature) {
-    await RazorpayWebhookEvent.create({ eventId, eventType, status: 'failed', error: 'Signature mismatch' });
+    await RazorpayWebhookEvent.findOneAndUpdate(
+      { eventId },
+      { eventId, eventType, status: 'failed', error: 'Signature mismatch' },
+      { upsert: true },
+    ).catch(() => {});
     return res.status(400).json({ success: false, message: 'Invalid webhook signature' });
   }
-
-  await RazorpayWebhookEvent.create({ eventId, eventType, status: 'processed' });
 
   if (eventType === 'payment.captured' || eventType === 'order.paid') {
     const paymentEntity = req.body?.payload?.payment?.entity || {};
@@ -2463,15 +2521,25 @@ export const handleRazorpayBusWebhook = async (req, res) => {
 
     if (orderId) {
       const booking = await BusBooking.findOne({ 'payment.orderId': orderId });
-      if (booking && booking.status === 'pending') {
+      if (booking && ['pending', 'expired'].includes(booking.status)) {
         try {
           await processBusPaymentConfirmation({ bookingId: booking._id, paymentId, eventId });
         } catch (err) {
-          console.error(`Webhook processing failed for order ${orderId}:`, err);
+          // A seat-conflict refund is a handled outcome; anything else must be retried by Razorpay.
+          if (err?.statusCode !== 409 && err?.status !== 409) {
+            console.error(`Webhook processing failed for order ${orderId}:`, err);
+            return res.status(500).json({ success: false, message: 'Webhook processing failed, please retry' });
+          }
         }
       }
     }
   }
+
+  await RazorpayWebhookEvent.findOneAndUpdate(
+    { eventId },
+    { eventId, eventType, status: 'processed' },
+    { upsert: true },
+  );
 
   res.status(200).json({ success: true, message: 'Webhook event processed', eventId });
 };
@@ -2711,10 +2779,20 @@ export const createBusBookingOrder = async (req, res) => {
     throw new ApiError(400, 'Booking is closed (less than 15 minutes remaining before departure)');
   }
 
+  // Drop this user's earlier unpaid attempt on the same trip (double tap / re-select).
+  const staleBookingIds = await TripSeatInventory.distinct('bookingId', {
+    tripId: trip._id,
+    'bookedBy.userId': userId,
+    status: 'held',
+  });
   await TripSeatInventory.updateMany(
     { tripId: trip._id, 'bookedBy.userId': userId, status: 'held' },
     { $set: { status: 'available', bookingId: null, holdId: null, holdExpiresAt: null, bookedBy: {} } },
   );
+  if (staleBookingIds.length > 0) {
+    await BusBooking.updateMany({ _id: { $in: staleBookingIds }, status: 'pending' }, { $set: { status: 'expired' } });
+    await BusSeatHold.updateMany({ bookingId: { $in: staleBookingIds }, status: 'held' }, { $set: { status: 'released' } });
+  }
 
   const availableSeatDocs = await TripSeatInventory.find({
     tripId: trip._id,
@@ -2723,7 +2801,7 @@ export const createBusBookingOrder = async (req, res) => {
   });
 
   if (availableSeatDocs.length !== seatIds.length) {
-    throw new ApiError(409, 'One or more selected seats are no longer available (Hold None rule enforced)');
+    throw new ApiError(409, 'One or more selected seats are no longer available');
   }
 
   const seatCellMap = new Map(availableSeatDocs.map((doc) => [doc.seatId, doc]));
@@ -2740,27 +2818,46 @@ export const createBusBookingOrder = async (req, res) => {
   const compactUserId = String(userId || '').replace(/[^a-zA-Z0-9]/g, '').slice(-8) || 'usr';
   const receipt = `ubus_${compactUserId}_${Date.now().toString(36)}`;
 
-  const order = await razorpayRequest({
-    method: 'POST',
-    path: '/orders',
-    body: {
-      amount: amountPaise,
-      currency: busService.fareCurrency || 'INR',
-      receipt,
-      notes: {
-        userId: String(userId || ''),
-        tripId: String(trip._id),
-        busServiceId,
-        scheduleId,
-        travelDate,
-        seats: seatIds.join(','),
-      },
-    },
-    keyId,
-    keySecret,
-  });
-
+  // Claim the seats first (atomic, per seat) so no payment order exists for seats we cannot hold.
   const expiresAt = new Date(now.getTime() + BUS_HOLD_MINUTES * 60 * 1000);
+  const bookingObjectId = new mongoose.Types.ObjectId();
+  const claimedSeats = await claimSeatsAtomically({
+    tripId: trip._id,
+    seatIds,
+    bookingId: bookingObjectId,
+    userId,
+    expiresAt,
+  });
+  if (!claimedSeats) {
+    throw new ApiError(409, 'One or more selected seats were just taken by another passenger. Please pick different seats.');
+  }
+
+  let order;
+  try {
+    order = await razorpayRequest({
+      method: 'POST',
+      path: '/orders',
+      body: {
+        amount: amountPaise,
+        currency: busService.fareCurrency || 'INR',
+        receipt,
+        notes: {
+          userId: String(userId || ''),
+          tripId: String(trip._id),
+          busServiceId,
+          scheduleId,
+          travelDate,
+          seats: seatIds.join(','),
+        },
+      },
+      keyId,
+      keySecret,
+    });
+  } catch (orderErr) {
+    await releaseHeldSeats({ tripId: trip._id, bookingId: bookingObjectId });
+    throw orderErr;
+  }
+
   const commissionRule = await resolveBusCommissionRule({ busService });
   let calculatedPlatformEarning = 0;
 
@@ -2790,7 +2887,10 @@ export const createBusBookingOrder = async (req, res) => {
     settlementStatus: 'pending',
   };
 
-  const booking = await BusBooking.create({
+  let booking;
+  try {
+  booking = await BusBooking.create({
+    _id: bookingObjectId,
     userId,
     tripId: trip._id,
     busServiceId,
@@ -2843,17 +2943,13 @@ export const createBusBookingOrder = async (req, res) => {
   });
 
   await TripSeatInventory.updateMany(
-    { tripId: trip._id, seatId: { $in: seatIds } },
-    {
-      $set: {
-        status: 'held',
-        bookingId: booking._id,
-        holdId: hold._id,
-        holdExpiresAt: expiresAt,
-        bookedBy: { userId, bookingSource: 'user' },
-      },
-    },
+    { tripId: trip._id, seatId: { $in: seatIds }, bookingId: booking._id, status: 'held' },
+    { $set: { holdId: hold._id } },
   );
+  } catch (persistErr) {
+    await releaseHeldSeats({ tripId: trip._id, bookingId: bookingObjectId });
+    throw persistErr;
+  }
 
   res.status(201).json({
     success: true,

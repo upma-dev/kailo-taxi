@@ -12,6 +12,7 @@ import {
 
 import { useSettings } from '../../../../shared/context/SettingsContext';
 import { RENTAL_ENABLED } from '../../../../shared/featureFlags';
+import { useLandingContent } from '../../../../shared/hooks/useLandingContent';
 import LegalSheetModal from '../../components/LegalSheetModal';
 import FloatingAuthLayout, { AUTH_THEMES, AuthButton, AuthError, AuthPhoneField } from '@/shared/components/auth/FloatingAuthLayout';
 
@@ -19,6 +20,8 @@ const PhoneRegistration = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const { settings } = useSettings();
+    const { content: landing } = useLandingContent();
+    const driverScreen = landing?.appScreens?.driver;
     const storedSession = getStoredDriverRegistrationSession();
     const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
     const sharedReferralCode = String(
@@ -91,19 +94,23 @@ const PhoneRegistration = () => {
         const isServiceCenter = role === 'service_center';
         const isServiceCenterStaff = role === 'service_center_staff';
 
+        const isDriverRole = !isBusDriver && !isServiceCenter && !isServiceCenterStaff;
+        const cmsHighlight = isDriverRole && driverScreen?.highlight ? `${driverScreen.title || ''} ${driverScreen.highlight}`.trim() : '';
+        const cmsSubtitle = isDriverRole && isLoginPage ? driverScreen?.subtitle : '';
+
         return {
             badge: isOwner ? 'Enterprise' : isBusDriver ? 'Transit' : isServiceCenter ? 'Operations' : isServiceCenterStaff ? 'Team' : 'Captain',
             title: isLoginPage
                 ? `${isOwner ? 'Owner' : isBusDriver ? 'Bus Driver' : isServiceCenter ? 'Service Center' : isServiceCenterStaff ? 'Service Staff' : 'Driver'} Login`
                 : `Join ${appName}`,
             subtitle: isLoginPage
-                ? `Enter your number to access account.`
+                ? (cmsSubtitle || `Enter your number to access account.`)
                 : `Start your journey as a ${isOwner ? 'owner' : isBusDriver ? 'captain' : isServiceCenter ? 'operator' : isServiceCenterStaff ? 'staff' : 'driver'}.`,
-            highlight: isOwner ? 'Manage fleet, payouts & drivers.' : isBusDriver ? 'Manage your coach, schedules and seat desk.' : isServiceCenter ? 'Manage your center profile, staff and rental vehicle catalog.' : isServiceCenterStaff ? 'Handle assigned bookings and work queues for your center.' : 'Go online, get trips & earn daily.',
+            highlight: cmsHighlight || (isOwner ? 'Manage fleet, payouts & drivers.' : isBusDriver ? 'Manage your coach, schedules and seat desk.' : isServiceCenter ? 'Manage your center profile, staff and rental vehicle catalog.' : isServiceCenterStaff ? 'Handle assigned bookings and work queues for your center.' : 'Go online, get trips & earn daily.'),
             accentColor: isOwner ? '#1C2833' : isBusDriver ? '#0f3d3e' : isServiceCenter ? '#14342b' : isServiceCenterStaff ? '#1e3a5f' : '#4F46E5',
             Icon: isOwner ? Briefcase : isBusDriver ? ShieldCheck : isServiceCenter ? Building2 : isServiceCenterStaff ? ShieldCheck : UserRound,
         };
-    }, [appName, isLoginPage, role]);
+    }, [appName, isLoginPage, role, driverScreen]);
 
     useEffect(() => {
         saveDriverRegistrationSession({

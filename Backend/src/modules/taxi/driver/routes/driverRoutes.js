@@ -45,6 +45,9 @@ import {
   getDriverIncentives,
   getDriverNotifications,
   cancelDriverScheduledRide,
+  cancelDriverActiveRide,
+  acceptDriverRide,
+  previewDriverRideCancellation,
   getDriverScheduledRides,
   getServiceCenterBookings,
   getServiceCenterBookingBiometrics,
@@ -180,6 +183,21 @@ driverRouter.get(
   "/scheduled-rides",
   authenticate(["driver", "owner"]),
   asyncHandler(getDriverScheduledRides),
+);
+driverRouter.post(
+  "/rides/:rideId/accept",
+  authenticate(["driver"]),
+  asyncHandler(acceptDriverRide),
+);
+driverRouter.get(
+  "/rides/:rideId/cancel-preview",
+  authenticate(["driver"]),
+  asyncHandler(previewDriverRideCancellation),
+);
+driverRouter.post(
+  "/rides/:rideId/cancel",
+  authenticate(["driver"]),
+  asyncHandler(cancelDriverActiveRide),
 );
 driverRouter.post(
   "/scheduled-rides/:rideId/cancel",

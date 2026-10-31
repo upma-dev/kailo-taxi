@@ -116,7 +116,6 @@ const CabSharing = lazy(() => import('./modules/user/pages/cabsharing/CabSharing
 // Car Pooling flow
 const UserPoolingHome = lazy(() => import('./modules/user/pages/pooling/PoolingHome'));
 const UserPoolingList = lazy(() => import('./modules/user/pages/pooling/PoolingList'));
-const UserPoolingSeats = lazy(() => import('./modules/user/pages/pooling/PoolingSeats'));
 const UserPoolingConfirm = lazy(() => import('./modules/user/pages/pooling/PoolingConfirm'));
 
 // Profile Settings Sub-pages
@@ -294,6 +293,7 @@ const AdminCMSHome = lazy(() => import('./modules/admin/pages/cms/CMSHome'));
 const AdminCMSAbout = lazy(() => import('./modules/admin/pages/cms/CMSAbout'));
 const AdminCMSDriver = lazy(() => import('./modules/admin/pages/cms/CMSDriver'));
 const AdminCMSUser = lazy(() => import('./modules/admin/pages/cms/CMSUser'));
+const AdminCMSLanding = lazy(() => import('./modules/admin/pages/cms/CMSLanding'));
 const AdminCMSContact = lazy(() => import('./modules/admin/pages/cms/CMSContact'));
 const AdminGlobalSettings = lazy(() => import('./modules/admin/pages/settings/GlobalSettings'));
 const AdminGeneralSettings = lazy(() => import('./modules/admin/pages/settings/GeneralSettings'));
@@ -935,7 +935,6 @@ function TaxiApp() {
                   <>
                     <Route path="user/pooling" element={<UserPoolingHome />} />
                     <Route path="user/pooling/list" element={<UserPoolingList />} />
-                    <Route path="user/pooling/seats/:id" element={<UserPoolingSeats />} />
                     <Route path="user/pooling/confirm" element={<UserPoolingConfirm />} />
                   </>
                 ) : null}
@@ -1726,6 +1725,7 @@ function TaxiApp() {
                   <Route path="cms/about" element={<AdminCMSAbout />} />
                   <Route path="cms/driver" element={<AdminCMSDriver />} />
                   <Route path="cms/user" element={<AdminCMSUser />} />
+                  <Route path="cms/landing" element={<AdminCMSLanding />} />
                   <Route path="cms/contact" element={<AdminCMSContact />} />
                   <Route path="legal" element={<AdminCMSLegal />} />
                 </Route>

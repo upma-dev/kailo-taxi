@@ -8,6 +8,7 @@ import {
   getPublicPageByKey,
   upsertAboutPage,
   upsertHomePage,
+  upsertLandingPage,
   upsertLegalPage,
 } from '../services/pageContentService.js';
 
@@ -40,6 +41,10 @@ export const upsertAdminPage = asyncHandler(async (req, res) => {
 
   if (key === 'home') {
     const result = await upsertHomePage(req.body ?? {}, updatedBy);
+    return send(res, 'Page updated successfully', result.data);
+  }
+  if (key === 'landing') {
+    const result = await upsertLandingPage(req.body ?? {}, updatedBy);
     return send(res, 'Page updated successfully', result.data);
   }
   if (key === 'about') {

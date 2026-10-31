@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Kailo Taxi">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#14B8A6"/>
+      <stop offset="0.55" stop-color="#0F766E"/>
+      <stop offset="1" stop-color="#0A4A46"/>
+    </linearGradient>
+    <linearGradient id="lime" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#D9FF5A"/>
+      <stop offset="1" stop-color="#B5E31C"/>
+    </linearGradient>
+    <clipPath id="clip"><rect width="512" height="512" rx="120"/></clipPath>
+  </defs>
+  <g clip-path="url(#clip)">
+    <rect width="512" height="512" fill="url(#bg)"/>
+    <circle cx="430" cy="70" r="170" fill="#C6F432" opacity="0.14"/>
+    <!-- K monogram -->
+    <path d="M142 168h50v102l92-102h64L256 282l112 130h-64l-98-114v114h-50z" fill="#F8FAF7"/>
+    <!-- taxi roof light sitting on the K -->
+    <rect x="124" y="104" width="86" height="42" rx="13" fill="url(#lime)"/>
+    <rect x="146" y="88" width="42" height="22" rx="8" fill="url(#lime)"/>
+    <path d="M142 125h50" stroke="#14213D" stroke-width="7" stroke-linecap="round"/>
+    <!-- road dashes -->
+    <g fill="#C6F432">
+      <rect x="110" y="440" width="64" height="12" rx="6"/>
+      <rect x="224" y="440" width="64" height="12" rx="6"/>
+      <rect x="338" y="440" width="64" height="12" rx="6"/>
+    </g>
+  </g>
+</svg>

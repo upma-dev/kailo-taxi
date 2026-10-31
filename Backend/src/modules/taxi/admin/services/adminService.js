@@ -3372,8 +3372,10 @@ export const forgotPassword = async (email) => {
   admin.resetPasswordExpires = otpExpires;
   await admin.save();
 
-  // Send real email
-  await sendEmail({
+  // Send real email. A mail-server problem (e.g. a rejected Gmail app password) must not leak raw SMTP
+  // details to the login screen; the real error is logged on the server instead.
+  try {
+    await sendEmail({
     to: email,
     subject: `Password Reset OTP for ${process.env.APP_NAME || 'Kailo Taxi'}`,
     text: `Your OTP for password reset is: ${otp}. It will expire in 10 minutes.`,
@@ -3390,9 +3392,18 @@ export const forgotPassword = async (email) => {
         <p style="font-size: 12px; color: #666;">Regards,<br>Team ${process.env.APP_NAME || 'Kailo Taxi'}</p>
       </div>
     `,
-  });
-
-  console.log(`[ADMIN FORGOT PASSWORD] OTP for ${email}: ${otp}`);
+    });
+  } catch (mailError) {
+    console.error('[ADMIN FORGOT PASSWORD] OTP email failed:', mailError?.message || mailError);
+    if (process.env.NODE_ENV !== 'production') {
+      // Local development only: the code is readable in this console so you are never locked out by mail setup.
+      console.log(`[ADMIN FORGOT PASSWORD] (dev) OTP for ${email}: ${otp}`);
+    }
+    throw new ApiError(
+      503,
+      'We could not send the OTP email right now. The email settings on the server need to be fixed. Please contact the administrator.',
+    );
+  }
 
   return { message: 'OTP sent to your email' };
 };
@@ -5840,7 +5851,7 @@ export const listOngoingRides = async (query = {}) => {
       date: booking.travelDate,
       userName: booking.user?.name || 'Unknown User',
       driverName: 'Unassigned',
-      transportType: booking.route?.routeName || 'Pooling',
+      transportType: booking.route?.routeName || (booking.pickupLabel && booking.dropLabel ? `Pooling: ${booking.pickupLabel.split(',')[0]} → ${booking.dropLabel.split(',')[0]}` : 'Pooling'),
       rideType: 'pooling',
       scheduledAt: booking.travelDate,
       isScheduled: false,

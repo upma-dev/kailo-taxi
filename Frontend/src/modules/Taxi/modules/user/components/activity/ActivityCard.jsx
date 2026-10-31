@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { Calendar, ChevronRight, Clock } from 'lucide-react';
 import { buildAvatarFallback } from './activityHelpers';
 
-const ActivityCard = ({ type, title, address, date, time, status, statusTone, price, onClick, driverName, driverImage, vehicleImage, eyebrow }) => {
+const ActivityCard = ({ type, title, address, date, time, status, statusTone, price, onClick, driverName, driverImage, vehicleImage, eyebrow, onContinue, continueLabel = 'Continue ride' }) => {
   const [vehicleBroken, setVehicleBroken] = useState(false);
   const [driverBroken, setDriverBroken] = useState(false);
   const isParcelType = type === 'parcel';
@@ -15,6 +15,7 @@ const ActivityCard = ({ type, title, address, date, time, status, statusTone, pr
   const vehicleAlt = type === 'parcel' ? 'Parcel' : type === 'bus' ? 'Bus' : type === 'pooling' ? 'Pooling vehicle' : 'Vehicle';
 
   return (
+    <div className="space-y-2">
     <motion.button
       type="button"
       whileTap={{ scale: 0.98 }}
@@ -81,6 +82,16 @@ const ActivityCard = ({ type, title, address, date, time, status, statusTone, pr
         </div>
       </div>
     </motion.button>
+    {onContinue && (
+      <button
+        type="button"
+        onClick={onContinue}
+        className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#0F766E] py-3 text-[13px] font-black uppercase tracking-wide text-white shadow-md transition active:scale-[0.98]"
+      >
+        {continueLabel} <ChevronRight size={16} strokeWidth={3} />
+      </button>
+    )}
+    </div>
   );
 };
 

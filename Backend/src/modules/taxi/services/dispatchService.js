@@ -428,6 +428,8 @@ export const cancelRideByUser = async ({ rideId, userId, reason = '', comment = 
   const session = await mongoose.startSession();
   let ride = null;
   let cancellationBill = null;
+  // Promo restore and driver wallet credit/penalty run right after the driver has been told (see below).
+  const deferredSideEffects = {};
 
   try {
     session.startTransaction();
@@ -455,6 +457,7 @@ export const cancelRideByUser = async ({ rideId, userId, reason = '', comment = 
       comment,
       cancellerId: userId,
       session,
+      deferredSideEffects,
     });
 
     ride.status = RIDE_STATUS.CANCELLED;
@@ -538,6 +541,13 @@ export const cancelRideByUser = async ({ rideId, userId, reason = '', comment = 
     liveStatus: ride.liveStatus,
     cancellationBill,
   });
+
+  // Everyone has been notified; now settle the money (promo restore, driver compensation/penalty).
+  if (typeof deferredSideEffects.run === 'function') {
+    deferredSideEffects.run().catch((err) => {
+      console.error(`[cancelRideByUser] Cancellation settlement failed for ride ${String(ride._id)}:`, err);
+    });
+  }
 
   // Create persistent cancellation notification in driver inbox
   const cancelReasonText = String(reason || comment || 'User cancelled the ride').trim();

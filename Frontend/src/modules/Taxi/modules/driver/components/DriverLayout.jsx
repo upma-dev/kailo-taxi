@@ -9,6 +9,7 @@ import {
 } from '../services/registrationService';
 import { RENTAL_ENABLED } from '../../../shared/featureFlags';
 import DriverRideRequestListener from './DriverRideRequestListener';
+import DriverActiveTripBar from './DriverActiveTripBar';
 
 import OwnerHeaderNav from './OwnerHeaderNav';
 
@@ -371,6 +372,7 @@ const DriverLayout = () => {
                     {isAllowed && isOwnerPortal && <OwnerHeaderNav />}
                     <Outlet context={{ isAllowed }} />
                     {isAllowed && getStoredRole() === 'driver' && <DriverRideRequestListener />}
+                    {isAllowed && getStoredRole() === 'driver' && <DriverActiveTripBar />}
                 </>
             )}
         </div>

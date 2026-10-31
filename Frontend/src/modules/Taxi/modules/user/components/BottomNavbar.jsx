@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Home, Clock, Map, User, BusFront } from 'lucide-react';
 import { useSettings } from '../../../shared/context/SettingsContext';
 import { useHideOnScroll } from '@/shared/hooks/useHideOnScroll';
+import ActiveRideBar from './ActiveRideBar';
 
 const BottomNavbar = () => {
   const navigate = useNavigate();
@@ -20,6 +21,8 @@ const BottomNavbar = () => {
   ];
 
   return (
+    <>
+    <ActiveRideBar />
     <div
       className={`fixed bottom-0 left-0 right-0 max-w-lg mx-auto z-[100] will-change-transform transition-all duration-300 ease-in-out transform ${
         isVisible
@@ -69,6 +72,7 @@ const BottomNavbar = () => {
         })}
       </div>
     </div>
+    </>
   );
 };
 

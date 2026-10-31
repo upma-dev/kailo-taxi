@@ -35,7 +35,7 @@ import {
   hashPassword,
   signAccessToken,
 } from "../services/authService.js";
-import { cancelScheduledRideByDriver, emitToDriver } from "../../services/dispatchService.js";
+import { cancelScheduledRideByDriver, emitToDriver, emitToRoom, getRideRoom, notifyRideAccepted } from "../../services/dispatchService.js";
 import { calculateCancellationBill, getStoredCancellationBill } from "../../services/cancellationService.js";
 import { notifyLateAvailableDriver, getActivePendingDispatchForDriver } from "../../services/dispatchService.js";
 import { findZoneByPickup } from "../services/locationService.js";
@@ -51,7 +51,8 @@ import {
   verifyDriverLoginOtp,
 } from "../services/loginOtpService.js";
 import { verifyAccessToken } from "../../services/tokenService.js";
-import { clearDriverActiveRideIfStale } from "../../services/rideService.js";
+import { acceptRideAssignment, clearDriverActiveRideIfStale, updateRideDriverLocation } from "../../services/rideService.js";
+import { SOCKET_EVENTS } from "../../socket/events.js";
 import { getWalletSettings } from "../../services/appSettingsService.js";
 import { RIDE_LIVE_STATUS, RIDE_STATUS } from "../../constants/index.js";
 import {
@@ -2420,6 +2421,28 @@ export const updateDriverLocation = async (req, res) => {
     throw new ApiError(404, "Driver not found");
   }
 
+  // While a trip is live, the rider's map follows ride.lastDriverLocation. The socket path can silently
+  // fail, so this HTTP ping also stores the position on the ride and tells the ride room.
+  try {
+    const liveRide = await Ride.findOne({
+      driverId: req.auth.sub,
+      liveStatus: { $in: [RIDE_LIVE_STATUS.ACCEPTED, RIDE_LIVE_STATUS.ARRIVING, RIDE_LIVE_STATUS.STARTED] },
+    }).select("_id").lean();
+
+    if (liveRide) {
+      const update = await updateRideDriverLocation({
+        rideId: String(liveRide._id),
+        driverId: req.auth.sub,
+        coordinates,
+        heading: req.body?.heading,
+        speed: req.body?.speed,
+      });
+      emitToRoom(getRideRoom(liveRide._id), SOCKET_EVENTS.RIDE_DRIVER_LOCATION_UPDATED, update);
+    }
+  } catch (error) {
+    console.warn("[driver-location] could not update live ride location:", error?.message);
+  }
+
   res.json({
     success: true,
     data: {
@@ -2514,8 +2537,20 @@ const resolveDriverPreferenceOptions = async (driver) => {
     : null;
   const transport = String(vehicle?.transport_type || '').toLowerCase();
   const dispatch = String(vehicle?.dispatch_type || '').toLowerCase();
-  const allowedServicePreferences =
+  // The vehicle type sets the base rule, and the services the admin enabled for this driver can widen it:
+  // a taxi vehicle driver with "delivery" enabled can also take parcels (and the other way round).
+  const enabled = new Set(
+    [...(Array.isArray(driver?.serviceCategories) ? driver.serviceCategories : []), ...(Array.isArray(driver?.service_categories) ? driver.service_categories : [])]
+      .flatMap((c) => String(c || '').toLowerCase().split(','))
+      .map((c) => c.trim())
+      .filter(Boolean),
+  );
+  const parcelEnabled = ['delivery', 'parcel', 'both'].some((c) => enabled.has(c));
+  const rideEnabled = ['taxi', 'ride', 'both'].some((c) => enabled.has(c));
+  let allowedServicePreferences =
     transport === 'taxi' || transport === 'pooling' ? ['ride'] : transport === 'delivery' ? ['parcel'] : ['ride', 'parcel', 'both'];
+  if ((transport === 'taxi' || transport === 'pooling') && parcelEnabled) allowedServicePreferences = ['ride', 'parcel', 'both'];
+  if (transport === 'delivery' && rideEnabled) allowedServicePreferences = ['ride', 'parcel', 'both'];
   const allowedRideModes =
     dispatch === 'normal' ? ['normal'] : dispatch === 'bidding' ? ['bidding'] : ['normal', 'bidding', 'both'];
   const pick = (stored, allowed) => {
@@ -2870,6 +2905,99 @@ export const cancelDriverScheduledRide = async (req, res) => {
       rideId: String(ride._id || ""),
       status: ride.status || RIDE_STATUS.CANCELLED,
       liveStatus: ride.liveStatus || RIDE_LIVE_STATUS.CANCELLED,
+      cancellationBill,
+    },
+  });
+};
+
+// HTTP twin of the socket "acceptRide" event. The app falls back to it when the socket is down or the
+// accept confirmation never arrives, so the driver is never left on "Accepting..." forever.
+export const acceptDriverRide = async (req, res) => {
+  const rideId = toCleanString(req.params?.rideId);
+  if (!rideId) {
+    throw new ApiError(400, "Ride id is required");
+  }
+
+  const ride = await acceptRideAssignment({ rideId, driverId: req.auth.sub });
+  await notifyRideAccepted(ride);
+
+  res.json({
+    success: true,
+    message: "Ride accepted",
+    data: {
+      rideId: String(ride._id),
+      status: ride.status,
+      liveStatus: ride.liveStatus,
+      acceptedAt: ride.acceptedAt,
+    },
+  });
+};
+
+const CANCELLABLE_BY_DRIVER_STATUSES = [RIDE_LIVE_STATUS.ACCEPTED, RIDE_LIVE_STATUS.ARRIVING];
+
+const findDriverCancellableRide = async (req) => {
+  const rideId = toCleanString(req.params?.rideId);
+  if (!rideId) {
+    throw new ApiError(400, "Ride id is required");
+  }
+
+  const ride = await Ride.findOne({ _id: rideId, driverId: req.auth.sub });
+  if (!ride) {
+    throw new ApiError(404, "Ride not found for this driver");
+  }
+
+  const live = String(ride.liveStatus || ride.status || "").toLowerCase();
+  if (!CANCELLABLE_BY_DRIVER_STATUSES.includes(live)) {
+    throw new ApiError(409, "This trip can no longer be cancelled by the driver");
+  }
+
+  return ride;
+};
+
+// Shows the driver what cancelling now would cost. The amounts come from the admin cancellation policy.
+export const previewDriverRideCancellation = async (req, res) => {
+  const ride = await findDriverCancellableRide(req);
+  const cancellationBill = await calculateCancellationBill({ ride, cancelledBy: "driver" });
+
+  res.json({
+    success: true,
+    data: {
+      rideId: String(ride._id),
+      driverPenalty: Number(cancellationBill?.driverBreakdown?.driverPenalty || 0),
+      riderCharge: Number(cancellationBill?.billBreakdown?.totalAmount || 0),
+      stage: cancellationBill?.cancellationStage || "",
+    },
+  });
+};
+
+// Driver cancels a live trip before it starts; the penalty (if any) is taken from the wallet per admin policy.
+export const cancelDriverActiveRide = async (req, res) => {
+  const ride = await findDriverCancellableRide(req);
+  const reason = String(req.body?.reason || "").trim();
+
+  const cancelled = await cancelScheduledRideByDriver({
+    rideId: String(ride._id),
+    driverId: req.auth.sub,
+    reason,
+  });
+
+  if (!cancelled) {
+    throw new ApiError(404, "Ride not found for this driver");
+  }
+
+  const cancellationBill = getStoredCancellationBill(cancelled) || await calculateCancellationBill({
+    ride: cancelled,
+    cancelledBy: "driver",
+    reason,
+  });
+
+  res.json({
+    success: true,
+    message: "Ride cancelled successfully",
+    data: {
+      rideId: String(cancelled._id || ""),
+      status: cancelled.status || RIDE_STATUS.CANCELLED,
+      liveStatus: cancelled.liveStatus || RIDE_LIVE_STATUS.CANCELLED,
       cancellationBill,
     },
   });
@@ -4568,22 +4696,35 @@ export const createBusDriverReservation = async (req, res) => {
     throw new ApiError(409, "This trip has been cancelled by the operator");
   }
 
-  const availableSeatDocs = await TripSeatInventory.find({
-    tripId: trip._id,
-    seatId: { $in: seatIds },
-    status: "available",
-  });
-
-  if (availableSeatDocs.length !== seatIds.length) {
-    throw new ApiError(409, "One or more selected seats are no longer available");
+  // Atomically lock each seat (available -> booked) so an online hold and a counter sale can't overlap.
+  const bookingObjectId = new mongoose.Types.ObjectId();
+  const lockedSeatDocs = [];
+  for (const seatId of seatIds) {
+    const doc = await TripSeatInventory.findOneAndUpdate(
+      { tripId: trip._id, seatId, status: "available" },
+      { $set: { status: "booked", bookingId: bookingObjectId, holdExpiresAt: null, bookedBy: { driverId: busDriver._id, bookingSource: "bus_driver" } } },
+      { new: true },
+    );
+    if (!doc) {
+      await TripSeatInventory.updateMany(
+        { tripId: trip._id, bookingId: bookingObjectId },
+        { $set: { status: "available", bookingId: null, holdId: null, holdExpiresAt: null, bookedBy: {} } },
+      );
+      throw new ApiError(409, "One or more selected seats are no longer available");
+    }
+    lockedSeatDocs.push(doc);
   }
 
+  const availableSeatDocs = lockedSeatDocs;
   const seatCellMap = new Map(availableSeatDocs.map((doc) => [doc.seatId, doc]));
   const amount = Math.round(
     seatIds.reduce((sum, seatId) => sum + Number(seatCellMap.get(seatId)?.price || resolveBusSeatPrice(busService, { id: seatId })), 0) * 100,
   ) / 100;
 
-  const booking = await BusBooking.create({
+  let booking;
+  try {
+  booking = await BusBooking.create({
+    _id: bookingObjectId,
     userId: busDriver._id,
     tripId: trip._id,
     busServiceId: busService._id,
@@ -4623,21 +4764,6 @@ export const createBusDriverReservation = async (req, res) => {
     notes,
   });
 
-  await TripSeatInventory.updateMany(
-    { tripId: trip._id, seatId: { $in: seatIds } },
-    {
-      $set: {
-        status: "booked",
-        bookingId: booking._id,
-        holdExpiresAt: null,
-        bookedBy: {
-          driverId: busDriver._id,
-          bookingSource: "bus_driver",
-        },
-      },
-    },
-  );
-
   await BusSeatHold.create({
     tripId: trip._id,
     busServiceId: busService._id,
@@ -4651,6 +4777,13 @@ export const createBusDriverReservation = async (req, res) => {
     status: "converted",
     expiresAt: null,
   });
+  } catch (persistErr) {
+    await TripSeatInventory.updateMany(
+      { tripId: trip._id, bookingId: bookingObjectId },
+      { $set: { status: "available", bookingId: null, holdId: null, holdExpiresAt: null, bookedBy: {} } },
+    );
+    throw persistErr;
+  }
 
   res.status(201).json({
     success: true,

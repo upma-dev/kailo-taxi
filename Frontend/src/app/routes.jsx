@@ -38,7 +38,15 @@ const RedirectToTaxi = ({ prefix, fallback }) => {
 }
 
 const RootLandingOrAppRedirect = () => {
-  const home = resolveCurrentAppHomeRoute('/')
+  // The website root always shows the landing page. Only the installed app shells
+  // (webview / file://) resume the last-used panel.
+  const ua = String(window.navigator?.userAgent || '').toLowerCase()
+  const inAppShell =
+    Boolean(window.flutter_inappwebview) ||
+    Boolean(window.ReactNativeWebView) ||
+    window.location?.protocol === 'file:' ||
+    ua.includes('; wv')
+  const home = inAppShell ? resolveCurrentAppHomeRoute('/') : ''
   if (home && home !== '/') {
     return <Navigate to={home} replace />
   }
@@ -173,6 +181,7 @@ const AppRoutes = () => {
       <Route path="/" element={<RootLandingOrAppRedirect />} />
       <Route path="/landing" element={<Suspense fallback={<PageLoader />}><LandingPage /></Suspense>} />
       <Route path="/login/*" element={<Navigate to="/taxi/user/login" replace />} />
+      <Route path="/contact" element={<Navigate to="/taxi/contact" replace />} />
       <Route path="/terms" element={<Navigate to="/taxi/terms" replace />} />
       <Route path="/privacy" element={<Navigate to="/taxi/privacy" replace />} />
       <Route path="/refund" element={<Navigate to="/taxi/refund" replace />} />

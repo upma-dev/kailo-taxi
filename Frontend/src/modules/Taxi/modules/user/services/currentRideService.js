@@ -74,6 +74,49 @@ export const saveCurrentRide = (ride) => {
   notifyCurrentRideChange();
 };
 
+// Turns an API ride (from /rides or /rides/active/me) into the shape the tracking screens expect.
+export const toCurrentRideSnapshot = (rideData = {}) => ({
+  rideId: rideData._id || rideData.rideId || rideData.id,
+  pickup: rideData.pickupAddress || rideData.pickup,
+  drop: rideData.dropAddress || rideData.drop,
+  pickupCoords: rideData.pickupLocation?.coordinates || rideData.pickupCoords || null,
+  dropCoords: rideData.dropLocation?.coordinates || rideData.dropCoords || null,
+  fare: rideData.fare,
+  baseFare: rideData.baseFare || rideData.fare || 0,
+  status: rideData.status,
+  liveStatus: rideData.liveStatus,
+  serviceType: rideData.serviceType,
+  scheduledAt: rideData.scheduledAt || null,
+  acceptedAt: rideData.acceptedAt || null,
+  arrivedAt: rideData.arrivedAt || null,
+  estimatedDistanceMeters: rideData.estimatedDistanceMeters || 0,
+  estimatedDurationMinutes: rideData.estimatedDurationMinutes || 0,
+  paymentMethod: rideData.paymentMethod || 'Cash',
+  pricingSnapshot: rideData.pricingSnapshot || null,
+  otp: rideData.otp || '',
+  driver: rideData.driverId || rideData.driver,
+  vehicleIconUrl: rideData.vehicleIconUrl,
+  vehicleIconType: rideData.vehicleIconType,
+});
+
+// A ride the rider can still open: waiting for a captain, or already assigned and not finished.
+export const isResumableRide = (ride) => isActiveCurrentRide(ride) || isSearchingCurrentRide(ride);
+
+// Where "Continue" should send the rider for this ride, plus the router state to pass along.
+export const getRideResume = (ride, routePrefix = '/taxi/user') => {
+  const snapshot = ride?.rideId ? ride : toCurrentRideSnapshot(ride);
+  const serviceType = String(snapshot.serviceType || snapshot.type || 'ride').toLowerCase();
+  const searching = isSearchingCurrentRide(snapshot);
+  const path = searching
+    ? `${routePrefix}/ride/searching`
+    : serviceType === 'parcel'
+      ? `${routePrefix}/parcel/tracking`
+      : serviceType === 'rental'
+        ? `${routePrefix}/rental/confirmed`
+        : `${routePrefix}/ride/tracking`;
+  return { path, state: searching ? { ...snapshot, resumeRideId: snapshot.rideId } : snapshot };
+};
+
 export const clearCurrentRide = () => {
   if (typeof window === 'undefined') {
     return;

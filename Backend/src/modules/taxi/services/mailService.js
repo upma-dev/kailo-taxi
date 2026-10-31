@@ -6,7 +6,8 @@ const transporter = nodemailer.createTransport({
   secure: process.env.EMAIL_PORT === '465',
   auth: {
     user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
+    // Google shows app passwords as "abcd efgh ijkl mnop"; the spaces are not part of the password.
+    pass: process.env.EMAIL_PASS ? String(process.env.EMAIL_PASS).replace(/\s/g, '') : process.env.EMAIL_PASS,
   },
 });
 

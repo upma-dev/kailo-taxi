@@ -263,6 +263,9 @@ export const getDriverPendingDispatch = (params = {}) =>
 export const getDriverRideHistory = (params = {}) =>
   api.get("/rides", withDriverAuth({ params }));
 
+export const getRideCancellationBill = (rideId) =>
+  api.get(`/rides/${rideId}/cancellation-bill`, withDriverAuth());
+
 export const updateDriverProfile = (payload) =>
   api.patch("/drivers/me", payload, withDriverAuth());
 export const deleteCurrentDriverAccount = () =>

@@ -17,7 +17,83 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import DriverBottomNav from '../../shared/components/DriverBottomNav';
-import { getDriverRideHistory } from '../services/registrationService';
+import { getDriverRideHistory, getRideCancellationBill } from '../services/registrationService';
+
+const CANCELLER_LABELS = { user: 'Rider', customer: 'Rider', driver: 'You (Driver)', admin: 'Admin', system: 'System' };
+
+// Shows who cancelled the trip and what it means for the driver: compensation received or penalty deducted.
+const CancelledRideSummary = ({ rideId }) => {
+  const [bill, setBill] = useState(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    getRideCancellationBill(rideId)
+      .then((response) => {
+        if (active) setBill(response?.data?.data || response?.data || response || null);
+      })
+      .catch(() => {
+        if (active) setFailed(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, [rideId]);
+
+  if (failed) return null;
+  if (!bill) {
+    return <div className="border-t border-slate-100 pt-3 text-[10px] font-bold text-slate-400">Loading cancellation details...</div>;
+  }
+
+  const cancelledBy = String(bill.cancelledBy || '').toLowerCase();
+  const byLabel = CANCELLER_LABELS[cancelledBy] || (cancelledBy ? cancelledBy.charAt(0).toUpperCase() + cancelledBy.slice(1) : 'Rider');
+  const payout = Math.round(Number(bill.driverBreakdown?.driverPayout || 0));
+  const penalty = Math.round(Number(bill.driverBreakdown?.driverPenalty || 0));
+  const net = Math.round(Number(bill.driverBreakdown?.netWalletChange ?? payout - penalty));
+  const riderFee = Math.round(Number(bill.billBreakdown?.totalAmount || 0));
+  const reason = bill.cancellationReason || bill.billBreakdown?.feeWaivedReason || '';
+  const money = (value) => `Rs ${Math.abs(value)}.00`;
+
+  return (
+    <div className="border-t border-slate-100 pt-3">
+      <div className="space-y-2 rounded-2xl border border-rose-100 bg-rose-50/60 p-4 text-[12px] font-bold text-slate-700">
+        <div className="flex justify-between">
+          <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Cancelled by</span>
+          <span className="font-black text-rose-600">{byLabel}</span>
+        </div>
+        {reason && (
+          <div className="flex justify-between gap-4">
+            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Reason</span>
+            <span className="text-right font-black text-slate-700">{reason}</span>
+          </div>
+        )}
+        <div className="flex justify-between">
+          <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Cancellation fee (rider)</span>
+          <span className="font-black text-slate-900">{riderFee > 0 ? money(riderFee) : 'Waived'}</span>
+        </div>
+        {payout > 0 && (
+          <div className="flex justify-between text-emerald-600">
+            <span className="text-[10px] font-black uppercase tracking-wider">Compensation to you</span>
+            <span className="font-black">+{money(payout)}</span>
+          </div>
+        )}
+        {penalty > 0 && (
+          <div className="flex justify-between text-rose-600">
+            <span className="text-[10px] font-black uppercase tracking-wider">Penalty deducted</span>
+            <span className="font-black">-{money(penalty)}</span>
+          </div>
+        )}
+        <div className="my-1 border-t border-rose-100" />
+        <div className="flex justify-between text-[13px] font-black text-slate-900">
+          <span>Your wallet impact</span>
+          <span className={net > 0 ? 'text-emerald-600' : net < 0 ? 'text-rose-600' : ''}>
+            {net > 0 ? '+' : net < 0 ? '-' : ''}{money(net)}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const TABS = [
   { id: 'all', label: 'All' },
@@ -145,7 +221,8 @@ const normalizeRide = (ride) => {
   const status = formatStatus(ride?.status || ride?.liveStatus);
   const timeSource = getRideTimeSource(ride);
   const passengerName = ride?.user?.name || 'Passenger';
-  const earnings = getDriverEarnings(ride);
+  // A cancelled trip earns nothing from the fare; compensation/penalty is shown in the cancellation summary.
+  const earnings = status === 'Cancelled' ? 0 : getDriverEarnings(ride);
   const isScheduled = Boolean(ride?.scheduledAt);
 
   return {
@@ -449,6 +526,8 @@ const RideRequests = () => {
                   </div>
                 </div>
               </div>
+
+              {item.status === 'Cancelled' && <CancelledRideSummary rideId={item.id} />}
 
               {/* Earnings Breakdown Accordion */}
               {['Completed', 'Delivered'].includes(item.status) && (

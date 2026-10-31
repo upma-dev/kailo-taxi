@@ -76,11 +76,35 @@ const RideDetail = () => {
     };
   }, [id, ride]);
 
+  const isCancelledRide = ['cancelled', 'canceled'].includes(String(ride?.liveStatus || ride?.status || '').toLowerCase());
+  const [cancelBill, setCancelBill] = useState(null);
+  useEffect(() => {
+    if (!isCancelledRide || !(ride?._id || ride?.rideId || id)) return undefined;
+    let active = true;
+    api.get(`/rides/${ride?._id || ride?.rideId || id}/cancellation-bill`)
+      .then((response) => {
+        if (active) setCancelBill(unwrap(response));
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [isCancelledRide, ride?._id, ride?.rideId, id]);
+
   const details = useMemo(() => {
     const driver = ride?.driver || ride?.driverId || {};
     const timeSource = ride?.completedAt || ride?.startedAt || ride?.acceptedAt || ride?.createdAt || ride?.updatedAt;
     const fare = Math.round(Number(ride?.fare || 0));
     const taxes = Math.round(Math.max(fare * 0.18, 0));
+    // A cancelled ride is only charged the cancellation fee set by the admin policy (often Rs 0).
+    const storedCancel = ride?.cancellation || {};
+    const billTotal = cancelBill?.billBreakdown?.totalAmount;
+    const cancelCharge = Math.round(Number(
+      billTotal !== undefined && billTotal !== null ? billTotal : (storedCancel.cancellation_charge || 0),
+    ));
+    const cancelWaived = cancelBill?.billBreakdown
+      ? Boolean(cancelBill.billBreakdown.isWaived) || cancelCharge === 0
+      : storedCancel.is_fee_applied === false || cancelCharge === 0;
     const status = String(ride?.status || ride?.liveStatus || 'trip').toLowerCase();
     const rideCode = String(ride?.rideId || ride?._id || ride?.id || id || 'ride');
 
@@ -99,6 +123,9 @@ const RideDetail = () => {
       fare,
       taxes,
       baseFare: Math.max(fare - taxes, 0),
+      cancelCharge,
+      cancelWaived,
+      cancelReason: cancelBill?.billBreakdown?.feeWaivedReason || storedCancel.fee_waived_reason || '',
       timeSource,
       startTime: ride?.startedAt || ride?.acceptedAt || timeSource,
       endTime: ride?.completedAt || timeSource,
@@ -230,6 +257,25 @@ const RideDetail = () => {
             </div>
           </div>
 
+          {isCancelledRide ? (
+            <div className="space-y-3 pt-2">
+              <div className="flex justify-between items-center text-[13px] font-bold text-gray-400">
+                <span>Trip fare (ride cancelled)</span>
+                <span className="line-through">Rs {details.fare}.00</span>
+              </div>
+              <div className="flex justify-between items-center text-[13px] font-bold text-gray-500">
+                <span>Cancellation charge</span>
+                <span className="text-gray-900">{details.cancelWaived ? 'Waived' : `Rs ${details.cancelCharge}.00`}</span>
+              </div>
+              {details.cancelWaived && details.cancelReason && (
+                <p className="text-[11px] font-semibold text-emerald-600">{details.cancelReason}</p>
+              )}
+              <div className="flex justify-between items-center text-[16px] font-black text-gray-900 border-t border-gray-50 pt-3">
+                <span>Total Paid</span>
+                <span>Rs {details.cancelWaived ? 0 : details.cancelCharge}.00</span>
+              </div>
+            </div>
+          ) : (
           <div className="space-y-3 pt-2">
             <div className="flex justify-between items-center text-[13px] font-bold text-gray-500">
               <span>Base Fare</span>
@@ -244,6 +290,7 @@ const RideDetail = () => {
               <span>Rs {details.fare}.00</span>
             </div>
           </div>
+          )}
         </div>
 
         <div className="flex items-center justify-between p-5 bg-orange-50/50 rounded-[28px] border border-orange-50">
@@ -279,9 +326,15 @@ const RideDetail = () => {
           onClick={() => navigate(`${routePrefix}/ride/select-location`, {
             state: {
               pickup: details.pickup,
-              drop: details.drop,
-              pickupCoords: ride?.pickupLocation?.coordinates || ride?.pickup?.coordinates || null,
-              dropCoords: ride?.dropLocation?.coordinates || ride?.drop?.coordinates || null,
+              ...(() => {
+                const pc = ride?.pickupLocation?.coordinates || ride?.pickup?.coordinates || null;
+                const dc = ride?.dropLocation?.coordinates || ride?.drop?.coordinates || null;
+                // an earlier booking with a drop hundreds of km away was almost certainly a wrong match
+                const dx = pc && dc ? Math.hypot((pc[0] - dc[0]) * 101, (pc[1] - dc[1]) * 111) : 0;
+                return dx > 150
+                  ? { pickupCoords: pc, dropCoords: null }
+                  : { drop: details.drop, pickupCoords: pc, dropCoords: dc };
+              })(),
             },
           })}
           className="flex-[2] bg-[#1C2833] text-white py-5 rounded-[24px] text-[14px] font-black uppercase tracking-widest shadow-xl flex items-center justify-center gap-3 active:scale-95 transition-all"

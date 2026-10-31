@@ -4,23 +4,26 @@ import { motion } from 'framer-motion';
 import { ArrowLeft, X, Car } from 'lucide-react';
 import heroImg from '@/assets/landing/hero.png';
 import { useSettings } from '../../../shared/context/SettingsContext';
+import { useLandingContent } from '../../../shared/hooks/useLandingContent';
 
 import mobilityBanner from '@/assets/images/mobility-banner-cartoony.png';
 
 const AuthLayout = ({ children, title, subtitle }) => {
   const navigate = useNavigate();
   const { settings } = useSettings();
+  const { content: landing } = useLandingContent();
+  const screen = landing?.appScreens?.user || {};
   const appName = settings.general?.app_name || 'Kailo Taxi';
-  const appLogo = settings.general?.logo || settings.customization?.logo || settings.general?.favicon || '';
+  const appLogo = settings.general?.logo || settings.customization?.logo || settings.general?.favicon || '/kailo-taxi-logo.png';
 
   const handleClose = () => {
-    navigate('/user', { replace: true });
+    navigate('/taxi/user', { replace: true });
   };
 
   return (
     <div className="h-screen w-screen bg-[#F8F9FA] flex flex-col lg:flex-row font-display overflow-hidden fixed inset-0">
       {/* Left side (Desktop Only) */}
-      <div className="hidden lg:flex flex-col justify-between lg:w-[45%] xl:w-[50%] bg-[#1A1A1A] p-12 text-white relative overflow-hidden shadow-[20px_0_40px_rgba(0,0,0,0.1)] z-10">
+      <div className="hidden lg:flex flex-col justify-between lg:w-[45%] xl:w-[50%] bg-gradient-to-br from-[#0F766E] via-[#0D625C] to-[#0A4A46] p-12 text-white relative overflow-hidden shadow-[20px_0_40px_rgba(0,0,0,0.1)] z-10">
         {/* Top Header Actions (Single Back Button) */}
         <div className="absolute top-6 left-6 right-6 z-30 flex items-center justify-start">
           <button
@@ -35,7 +38,7 @@ const AuthLayout = ({ children, title, subtitle }) => {
 
         {/* Subtle orange accent glow */}
         <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
-          <div className="absolute -top-[20%] -left-[10%] w-[70%] h-[70%] bg-[color:var(--app-primary,#F38F24)]/5 rounded-full blur-[120px]" />
+          <div className="absolute -top-[20%] -left-[10%] w-[70%] h-[70%] bg-[#C6F432]/10 rounded-full blur-[120px]" />
           <div className="absolute top-[60%] right-[10%] w-[50%] h-[50%] bg-white/5 rounded-full blur-[100px]" />
         </div>
 
@@ -54,7 +57,7 @@ const AuthLayout = ({ children, title, subtitle }) => {
             )}
             <div className="flex items-center gap-2">
               <span className="text-3xl font-black tracking-tight">{appName}</span>
-              <span className="px-2.5 py-0.5 rounded-full bg-[color:var(--app-primary,#F38F24)]/20 border border-[color:var(--app-primary,#F38F24)]/40 text-[color:var(--app-primary,#F38F24)] text-xs font-black uppercase tracking-widest flex items-center gap-1">
+              <span className="px-2.5 py-0.5 rounded-full bg-[#C6F432] text-[#14213D] text-xs font-black uppercase tracking-widest flex items-center gap-1">
                 <Car size={12} />
                 TAXI
               </span>
@@ -68,19 +71,20 @@ const AuthLayout = ({ children, title, subtitle }) => {
               transition={{ delay: 0.2 }}
             >
               <h2 className="text-5xl font-bold tracking-tight leading-[1.1] mb-6">
-                Move with <br/>
-                <span className="text-[color:var(--app-primary,#F38F24)]">Safety & Style.</span>
+                {screen.title || 'Move with'} <br/>
+                <span className="text-[#C6F432]">{screen.highlight || 'Safety & Style.'}</span>
               </h2>
               <p className="text-gray-400 text-lg leading-relaxed mb-12">
-                Experience the next generation of urban mobility with {appName} Taxi. Reliable, fast, and always at your service.
+                {screen.subtitle || `Experience the next generation of urban mobility with ${appName}. Reliable, fast, and always at your service.`}
               </p>
+              {screen.image && <img src={screen.image} alt="" className="max-h-56 w-auto object-contain" />}
             </motion.div>
           </div>
 
           <div className="flex items-center gap-6 text-xs font-semibold text-gray-500 uppercase tracking-wider mt-12">
             <span>© {appName} 2026</span>
-            <a href="/terms" className="hover:text-white transition-colors">Terms</a>
-            <a href="/privacy" className="hover:text-white transition-colors">Privacy</a>
+            <a href="/taxi/terms" className="hover:text-white transition-colors">Terms</a>
+            <a href="/taxi/privacy" className="hover:text-white transition-colors">Privacy</a>
           </div>
         </div>
       </div>
@@ -89,8 +93,8 @@ const AuthLayout = ({ children, title, subtitle }) => {
       <div className="flex-1 h-full flex flex-col items-center justify-start lg:justify-center relative w-full bg-[#F8F9FA] overflow-y-auto lg:overflow-hidden">
         
         {/* Premium Mobile Background (Hidden on Desktop) */}
-        <div className="lg:hidden absolute top-0 left-0 w-full h-[300px] bg-[#1A1A1A] rounded-b-[2.5rem] z-0 overflow-hidden shadow-lg">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-[color:var(--app-primary,#F38F24)]/10 rounded-full blur-[60px] -mr-20 -mt-20" />
+        <div className="lg:hidden absolute top-0 left-0 w-full h-[300px] bg-gradient-to-b from-[#0F766E] to-[#0A4A46] rounded-b-[2.5rem] z-0 overflow-hidden shadow-lg">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-[#C6F432]/15 rounded-full blur-[60px] -mr-20 -mt-20" />
           <div className="absolute bottom-0 left-0 w-40 h-40 bg-white/5 rounded-full blur-[40px] -ml-10 -mb-10" />
         </div>
 
@@ -121,7 +125,7 @@ const AuthLayout = ({ children, title, subtitle }) => {
             )}
             <div className="flex items-center gap-2">
               <h2 className="text-2xl font-black text-white tracking-tight">{appName}</h2>
-              <span className="px-2.5 py-0.5 rounded-full bg-[color:var(--app-primary,#F38F24)] text-white text-xs font-black uppercase tracking-widest flex items-center gap-1 shadow-md">
+              <span className="px-2.5 py-0.5 rounded-full bg-[#C6F432] text-[#14213D] text-xs font-black uppercase tracking-widest flex items-center gap-1 shadow-md">
                 <Car size={12} />
                 TAXI
               </span>
@@ -154,7 +158,7 @@ const AuthLayout = ({ children, title, subtitle }) => {
         <div className="mt-auto lg:mt-12 text-center w-full max-w-[420px] z-20 pb-8 lg:pb-0">
             <p className="text-xs text-gray-400 flex items-center justify-center gap-2">
               <span className="w-4 h-4 rounded-full border border-gray-300 flex items-center justify-center font-bold text-[10px]">?</span>
-              Need assistance? <a href="/support" className="text-[#1A1A1A] font-semibold hover:text-[color:var(--app-primary,#F38F24)] transition-colors ml-1">Contact Support</a>
+              Need assistance? <a href="/taxi/user/support" className="text-[#1A1A1A] font-semibold hover:text-[color:var(--app-primary,#0F766E)] transition-colors ml-1">Contact Support</a>
             </p>
         </div>
       </div>

@@ -2,6 +2,8 @@ import { PoolingVehicle } from '../models/PoolingVehicle.js';
 import { PoolingBooking } from '../models/PoolingBooking.js';
 import { PoolingRoute } from '../models/PoolingRoute.js';
 import { PoolingSeatReservation } from '../models/PoolingSeatReservation.js';
+import { PoolingTrip } from '../models/PoolingTrip.js';
+import { UserWallet } from '../../user/models/UserWallet.js';
 import { ApiError } from '../../../../utils/ApiError.js';
 import { asyncHandler } from '../../../../utils/asyncHandler.js';
 import { uploadDataUrlToCloudinary } from '../../../../utils/cloudinaryUpload.js';
@@ -46,12 +48,49 @@ export const getPoolingBookings = asyncHandler(async (req, res) => {
 
 export const updatePoolingBookingStatus = asyncHandler(async (req, res) => {
   const { status } = req.body;
+  const previous = await PoolingBooking.findById(req.params.id);
+  if (!previous) throw new ApiError(404, 'Booking not found');
+
   const booking = await PoolingBooking.findByIdAndUpdate(
     req.params.id,
     { bookingStatus: status },
     { new: true }
   );
-  if (!booking) throw new ApiError(404, 'Booking not found');
+
+  // A cancelled car-pool rider gives their seat back and gets what they currently owe
+  // returned to the wallet. Remaining riders keep the (lower) fare they already have.
+  const normalizedStatus = String(status || '').toLowerCase();
+  if (previous.bookingStatus === 'confirmed' && booking.trip && ['cancelled', 'no_show'].includes(normalizedStatus)) {
+    await PoolingTrip.updateOne(
+      { _id: booking.trip, occupiedSeats: { $gte: booking.seatsBooked } },
+      { $inc: { occupiedSeats: -booking.seatsBooked } },
+    );
+
+    const refundAmount = Math.round(Number(booking.fare || 0) * 100) / 100;
+    if (normalizedStatus === 'cancelled' && refundAmount > 0) {
+      await UserWallet.updateOne(
+        { userId: booking.user },
+        {
+          $inc: { balance: refundAmount },
+          $push: {
+            transactions: {
+              $each: [{
+                kind: 'credit',
+                amount: refundAmount,
+                title: 'Pool ride cancelled - refund',
+                provider: 'pooling',
+                referenceKey: `pool-cancel:${booking._id}`,
+              }],
+              $slice: -50,
+            },
+          },
+        },
+        { upsert: true },
+      );
+      booking.paymentStatus = 'refunded';
+      await booking.save();
+    }
+  }
 
   if (['cancelled', 'no_show'].includes(String(status || '').toLowerCase())) {
     await PoolingSeatReservation.deleteMany({ booking: booking._id });
