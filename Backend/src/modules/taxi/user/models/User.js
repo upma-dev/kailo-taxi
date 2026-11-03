@@ -224,6 +224,11 @@ userSchema.index({ 'addresses.location': '2dsphere' });
 userSchema.index({ 'deletionRequest.status': 1, deletedAt: 1 });
 
 const UserModel = mongoose.models.TaxiUser || mongoose.model('TaxiUser', userSchema);
+if (!mongoose.models.User) {
+  try {
+    mongoose.model('User', userSchema);
+  } catch (_) {}
+}
 
 export const User = UserModel;
 export const FoodUser = UserModel;

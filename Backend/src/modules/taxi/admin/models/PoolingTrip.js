@@ -15,7 +15,7 @@ const poolingTripSchema = new mongoose.Schema(
   {
     tripCode: { type: String, required: true, unique: true },
     vehicle: { type: mongoose.Schema.Types.ObjectId, ref: 'TaxiPoolingVehicle', required: true },
-    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'TaxiUser', required: true },
     origin: { type: tripPointSchema, required: true },
     destination: { type: tripPointSchema, required: true },
     travelDate: { type: String, required: true, trim: true },

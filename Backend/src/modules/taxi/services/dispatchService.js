@@ -221,11 +221,9 @@ const emitRideRequestToDrivers = async ({
       type: ride.serviceType || 'ride',
       serviceType: ride.serviceType || 'ride',
       userId: String(ride.userId),
+      // Rider name/phone are deliberately withheld here; the driver only gets them after accepting.
       user: {
         id: ride.userId?._id ? String(ride.userId._id) : String(ride.userId || ''),
-        name: ride.userId?.name || 'Customer',
-        phone: ride.userId?.phone || '',
-        countryCode: ride.userId?.countryCode || '',
       },
       pickupLocation: ride.pickupLocation,
       pickupAddress: ride.pickupAddress || '',
@@ -1338,11 +1336,9 @@ export const getActivePendingDispatchForDriver = async (driverId, requestedRideI
         type: ride.serviceType || 'ride',
         serviceType: ride.serviceType || 'ride',
         userId: String(ride.userId?._id || ride.userId || ''),
+        // Rider name/phone are deliberately withheld here; the driver only gets them after accepting.
         user: {
           id: ride.userId?._id ? String(ride.userId._id) : String(ride.userId || ''),
-          name: ride.userId?.name || 'Customer',
-          phone: ride.userId?.phone || '',
-          countryCode: ride.userId?.countryCode || '',
         },
         pickupLocation: ride.pickupLocation,
         pickupAddress: ride.pickupAddress || '',

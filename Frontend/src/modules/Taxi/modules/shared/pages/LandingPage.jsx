@@ -20,12 +20,11 @@ import {
   Package,
   Route,
 } from 'lucide-react';
-import taxiImg from '@/assets/3d images/AutoCab/taxi.png';
 import mapImg from '@/assets/premium_grid_map.webp';
 import taxiCut from '@/assets/landing/cutout/taxi.webp';
 import aboutPhoto from '@/assets/driver_welcome_hero.webp';
-import cityIllu from '@/assets/images/mobility-illustration.png';
-import coastImg from '@/assets/landing/options.png';
+import cityIllu from '@/assets/images/mobility-illustration.webp';
+import coastImg from '@/assets/landing/options.webp';
 import bikeImg from '@/assets/landing/cutout/bike.webp';
 import busImg from '@/assets/landing/cutout/bus.webp';
 import parcelImg from '@/assets/landing/cutout/parcel.webp';
@@ -75,7 +74,7 @@ function useGo() {
 
 function SectionHead({ eyebrow, title, subtitle, light }) {
   return (
-    <div className="mx-auto mb-12 max-w-2xl text-center">
+    <div className="mx-auto mb-8 max-w-2xl text-center sm:mb-12">
       {eyebrow && (
         <span
           className={`inline-block rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-[0.2em] ${
@@ -265,7 +264,7 @@ function Hero({ data, download }) {
 
   return (
     <section
-      className="relative min-h-[100svh] overflow-hidden bg-[#031a19] pt-20 text-white sm:pt-24 lg:min-h-[760px]"
+      className="relative overflow-hidden bg-[#031a19] pt-20 text-white sm:min-h-[100svh] sm:pt-24 lg:min-h-[760px]"
       onMouseLeave={() => {
         mx.set(0);
         my.set(0);
@@ -278,10 +277,10 @@ function Hero({ data, download }) {
             key={bg}
             className="absolute inset-0 bg-cover bg-center"
             style={{ backgroundImage: `url(${bg})` }}
-            initial={{ opacity: 0, scale: 1.06 }}
-            animate={{ opacity: 1, scale: desktop ? 1.12 : 1 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ opacity: { duration: 0.9 }, scale: { duration: 14, ease: 'linear' } }}
+            transition={{ opacity: { duration: 0.9 } }}
           />
         </AnimatePresence>
       </motion.div>
@@ -356,7 +355,7 @@ function Hero({ data, download }) {
           </div>
         </div>
 
-        <div className="grid items-center gap-2 pb-16 sm:pb-24 lg:grid-cols-[1fr_1.05fr] lg:pb-32">
+        <div className="grid items-center gap-2 pb-8 sm:pb-24 lg:grid-cols-[1fr_1.05fr] lg:pb-32">
           <AnimatePresence mode="wait">
             <motion.div
               key={`text-${active}`}
@@ -470,7 +469,7 @@ function Hero({ data, download }) {
 function About({ data }) {
   const points = arr(data.points);
   return (
-    <section id="about" className="relative overflow-hidden bg-gradient-to-b from-[#E6F7EE] via-[#EEFBE0] to-[#DDF3EC] px-4 py-24 sm:px-6 lg:px-8">
+    <section id="about" className="relative overflow-hidden bg-gradient-to-b from-[#E6F7EE] via-[#EEFBE0] to-[#DDF3EC] px-4 py-10 sm:px-6 sm:py-24 lg:px-8">
       <div className="pointer-events-none absolute -left-32 top-10 h-80 w-80 rounded-full bg-[#C6F432]/25 blur-3xl max-sm:hidden" />
       <div className="pointer-events-none absolute -right-24 bottom-0 h-96 w-96 rounded-full bg-[#0F766E]/15 blur-3xl max-sm:hidden" />
 
@@ -510,7 +509,7 @@ function About({ data }) {
         <Stage className="relative h-[440px] sm:h-[520px]" tilt={4}>
           <Layer depth={-60} className="absolute inset-0">
             <div className="absolute inset-x-4 inset-y-8 overflow-hidden rounded-[2.5rem] bg-gradient-to-br from-[#14B8A6] via-[#0F766E] to-[#052E2B] shadow-[0_50px_80px_-40px_rgba(5,46,43,0.9)]">
-              <div className="absolute inset-0 bg-cover bg-center opacity-25 mix-blend-luminosity" style={{ backgroundImage: `url(${mapImg})` }} />
+              <div className="absolute inset-0 bg-cover bg-center opacity-20" style={{ backgroundImage: `url(${mapImg})` }} />
               <div className="absolute -right-10 -top-10 h-56 w-56 rounded-full bg-[#C6F432]/30 blur-3xl max-sm:hidden" />
               <div className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/40 to-transparent" />
             </div>
@@ -573,80 +572,25 @@ function FloatCard({ card, accent }) {
 }
 
 // Vision & mission: a compact strip; the values cycle automatically in a 3D flip card.
-function VisionCarousel({ data }) {
+// Vision & mission as plain text inside the rider content (no separate card).
+function VisionInline({ data }) {
   const values = arr(data.values);
-  const [i, setI] = useState(0);
-  const [hold, setHold] = useState(false);
-
-  useEffect(() => {
-    if (hold || values.length < 2) return undefined;
-    const t = setTimeout(() => setI((n) => (n + 1) % values.length), 4200);
-    return () => clearTimeout(t);
-  }, [i, hold, values.length]);
-
   if (!values.length && !data.description) return null;
-  const cur = values[Math.min(i, values.length - 1)];
-
   return (
-    <div
-      id="vision"
-      className="relative mb-14 scroll-mt-24 rounded-3xl border border-white/10 bg-white/5 p-5 sm:p-6"
-      onMouseEnter={() => setHold(true)}
-      onMouseLeave={() => setHold(false)}
-    >
-      <div className="grid items-center gap-5 md:grid-cols-[1.1fr_1fr]">
-        <div>
-          <span className="inline-block rounded-full bg-white/15 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em]">Vision &amp; mission</span>
-          <h3 className="mt-2 text-2xl font-black tracking-tight">{data.title}</h3>
-          <p className="mt-1.5 text-sm leading-relaxed text-white/75">{data.description}</p>
-          {data.mission && <p className="mt-2 text-sm font-bold text-[#C6F432]">{data.mission}</p>}
+    <div id="vision" className="mt-6 scroll-mt-24 border-l-4 border-[#C6F432] pl-4">
+      <p className="text-[11px] font-black uppercase tracking-[0.2em] text-white/60">Vision &amp; mission</p>
+      {data.title && <h3 className="mt-1 text-lg font-black tracking-tight">{data.title}</h3>}
+      {data.description && <p className="mt-1 text-sm leading-relaxed text-white/75">{data.description}</p>}
+      {data.mission && <p className="mt-1.5 text-sm font-bold text-[#C6F432]">{data.mission}</p>}
+      {values.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {values.map((v, n) => (
+            <span key={n} title={v.description} className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold text-white/90">
+              {v.title}
+            </span>
+          ))}
         </div>
-
-        {cur && (
-          <div style={{ perspective: 1000 }}>
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={i}
-                initial={{ opacity: 0, rotateX: -70, y: 20 }}
-                animate={{ opacity: 1, rotateX: 0, y: 0 }}
-                exit={{ opacity: 0, rotateX: 70, y: -20 }}
-                transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-                style={{ transformStyle: 'preserve-3d' }}
-                className="flex items-center gap-4 rounded-2xl border border-white/15 bg-white/10 p-4"
-              >
-                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#C6F432] text-2xl font-black text-[#14213D]">{i + 1}</span>
-                <div className="min-w-0">
-                  <div className="text-lg font-black">{cur.title}</div>
-                  <p className="text-sm leading-snug text-white/75">{cur.description}</p>
-                </div>
-              </motion.div>
-            </AnimatePresence>
-            <div className="mt-3 flex items-center justify-center gap-2">
-              {values.map((v, n) => (
-                <button
-                  key={n}
-                  type="button"
-                  aria-label={v.title}
-                  onClick={() => setI(n)}
-                  className="relative h-1.5 overflow-hidden rounded-full bg-white/25 transition-all"
-                  style={{ width: n === i ? 36 : 8 }}
-                >
-                  {n === i && !hold && values.length > 1 && (
-                    <motion.span
-                      key={`p-${i}`}
-                      className="absolute inset-y-0 left-0 bg-[#C6F432]"
-                      initial={{ width: '0%' }}
-                      animate={{ width: '100%' }}
-                      transition={{ duration: 4.2, ease: 'linear' }}
-                    />
-                  )}
-                  {n === i && hold && <span className="absolute inset-0 bg-[#C6F432]" />}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
+      )}
     </div>
   );
 }
@@ -656,33 +600,30 @@ function Rider({ data, vision }) {
   const cards = arr(data.floatCards);
   const bg = data.background || mapImg;
   return (
-    <section id="rider" className="relative overflow-hidden bg-[#052E2B] px-4 py-16 text-white sm:px-6 lg:px-8" style={{ perspective: 1400 }}>
-      {/* 3D city map floor: a tilted plane that slowly drifts */}
+    <section id="rider" className="relative overflow-hidden bg-[#052E2B] px-4 py-10 text-white sm:px-6 sm:py-16 lg:px-8">
+      {/* one continuous background for Vision + Riders */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
-        <div
-          className="absolute -inset-x-1/4 -bottom-1/3 top-0 bg-cover bg-center opacity-40"
-          style={{ backgroundImage: `url(${bg})`, transform: 'rotateX(58deg) scale(1.5)', transformOrigin: '50% 100%' }}
-        />
-        <div className="absolute inset-0 bg-gradient-to-b from-[#052E2B] via-[#052E2B]/70 to-[#0F766E]/60" />
+        <div className="absolute inset-0 bg-cover bg-center opacity-25" style={{ backgroundImage: `url(${bg})` }} />
+        <div className="absolute inset-0 bg-gradient-to-b from-[#052E2B]/80 via-[#052E2B]/50 to-[#0F766E]/50" />
         <div className="absolute -right-24 top-10 h-96 w-96 rounded-full bg-[#C6F432]/20 blur-3xl max-sm:hidden" />
       </div>
 
       <div className="relative mx-auto max-w-7xl">
-        {vision && <VisionCarousel data={vision} />}
-        <div className="grid items-center gap-10 lg:grid-cols-2">
+        <div className="grid items-center gap-6 sm:gap-10 lg:grid-cols-2">
           <div>
             {data.eyebrow && (
               <Reveal y={12}>
                 <span className="inline-block rounded-full bg-white/15 px-3 py-1 text-[11px] font-black uppercase tracking-[0.2em]">{data.eyebrow}</span>
               </Reveal>
             )}
-            <h2 className="mt-4 text-4xl font-black leading-[1.05] tracking-tight sm:text-5xl lg:text-6xl">
+            <h2 className="mt-4 text-4xl font-black leading-[1.05] tracking-tight sm:text-5xl">
               <SplitText text={data.title} />
               <br />
               <SplitText text={data.highlight} className="text-[#C6F432]" delay={0.2} />
             </h2>
             <Reveal delay={0.35}>
               <p className="mt-5 max-w-lg text-lg leading-relaxed text-white/75">{data.description}</p>
+              {vision && <VisionInline data={vision} />}
               <ul className="mt-7 space-y-3">
                 {arr(data.bullets).map((b, i) => (
                   <li key={i} className="flex items-center gap-3 font-semibold text-white/90">
@@ -702,7 +643,8 @@ function Rider({ data, vision }) {
             </Reveal>
           </div>
 
-          <Stage className="relative flex h-[330px] items-center justify-center sm:h-[420px]" tilt={5}>
+          <div>
+          <Stage className="relative flex h-[300px] items-center justify-center sm:h-[380px]" tilt={5}>
             <Layer depth={-80} className="absolute">
               <div className="h-72 w-72 rounded-[2.5rem] border border-white/15 bg-white/5 sm:h-96 sm:w-96" style={{ transform: 'rotate(3deg)' }} />
             </Layer>
@@ -736,6 +678,7 @@ function Rider({ data, vision }) {
               </Layer>
             )}
           </Stage>
+          </div>
         </div>
 
       </div>
@@ -789,7 +732,7 @@ function Audiences({ data, download }) {
   const go = useGo();
   const items = arr(data.items).filter((it) => it.key !== 'user');
   return (
-    <section id="audiences" className="relative overflow-hidden bg-gradient-to-b from-[#DDF3EC] via-[#EAF8D8] to-[#D9F1EA] px-4 py-24 sm:px-6 lg:px-8">
+    <section id="audiences" className="relative overflow-hidden bg-gradient-to-b from-[#DDF3EC] via-[#EAF8D8] to-[#D9F1EA] px-4 py-10 sm:px-6 sm:py-24 lg:px-8">
       <div className="pointer-events-none absolute -left-24 top-24 h-80 w-80 rounded-full bg-[#0F766E]/10 blur-3xl max-sm:hidden" />
       <div className="pointer-events-none absolute -right-24 bottom-10 h-80 w-80 rounded-full bg-[#C6F432]/25 blur-3xl max-sm:hidden" />
       <div className="relative mx-auto max-w-7xl">
@@ -883,7 +826,7 @@ function Faq({ data }) {
   const items = arr(data.items);
   if (!items.length) return null;
   return (
-    <section id="faq" className="bg-gradient-to-b from-[#D9F1EA] to-[#CDEBE4] px-4 py-20 sm:px-6 lg:px-8">
+    <section id="faq" className="bg-gradient-to-b from-[#D9F1EA] to-[#CDEBE4] px-4 py-10 sm:px-6 sm:py-20 lg:px-8">
       <div className="mx-auto max-w-3xl">
         <SectionHead eyebrow="FAQ" title={data.title} />
         <div className="space-y-3">
@@ -942,9 +885,9 @@ function Footer({ data, brand, logo, download }) {
       : download?.qrImage ||
         (qrTarget ? `https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=4&data=${encodeURIComponent(qrTarget)}` : '');
   return (
-    <footer className="bg-[#052E2B] px-4 pb-8 pt-16 text-white sm:px-6 lg:px-8">
+    <footer className="bg-[#052E2B] px-4 pb-8 pt-10 text-white sm:px-6 sm:pt-16 lg:px-8">
       <div className="mx-auto max-w-7xl">
-        <div className="grid gap-10 border-b border-white/10 pb-12 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-8 border-b border-white/10 pb-8 sm:gap-10 sm:pb-12 md:grid-cols-2 lg:grid-cols-4">
           <div className="space-y-4 lg:col-span-2">
             <div className="flex items-center gap-3">
               <img src={logo || '/kailo-taxi-logo.png'} alt="" className="h-10 w-10 rounded-xl object-cover" />
@@ -1005,34 +948,10 @@ function Footer({ data, brand, logo, download }) {
   );
 }
 
-// Sections stack like cards: a layer sticks once its bottom reaches the bottom of the
-// viewport (so tall sections can still be read), and the next layer slides over it.
-function StackLayer({ z, first, children }) {
-  const ref = useRef(null);
-  const desktop = useIsDesktop();
-  const [top, setTop] = useState(0);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el || !desktop) return undefined;
-    const calc = () => setTop(Math.min(0, window.innerHeight - el.offsetHeight));
-    calc();
-    const ro = new ResizeObserver(calc);
-    ro.observe(el);
-    window.addEventListener('resize', calc);
-    return () => {
-      ro.disconnect();
-      window.removeEventListener('resize', calc);
-    };
-  }, [desktop]);
-  return (
-    <div
-      ref={ref}
-      style={desktop ? { position: 'sticky', top, zIndex: z } : undefined}
-      className={first || !desktop ? '' : 'overflow-hidden rounded-t-[2.75rem] shadow-[0_-20px_40px_-24px_rgba(5,46,43,0.55)]'}
-    >
-      {children}
-    </div>
-  );
+// Sections used to stack as sticky cards. That forced the browser to repaint huge layers on every
+// scroll frame and made scrolling heavy, so layers are now plain blocks.
+function StackLayer({ children }) {
+  return <div>{children}</div>;
 }
 
 export default function LandingPage() {
@@ -1060,7 +979,7 @@ export default function LandingPage() {
           <StackLayer z={3}>
             <section className="landing-hero px-4 py-20 text-white sm:px-6 lg:px-8">
               <div className="mx-auto max-w-7xl">
-                <VisionCarousel data={c.vision} />
+                <VisionInline data={c.vision} />
               </div>
             </section>
           </StackLayer>
