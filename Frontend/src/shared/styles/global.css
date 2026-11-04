@@ -36,9 +36,9 @@ html[data-theme="light"] {
 }
 
 :root {
-  font-family: 'Poppins', system-ui, Avenir, Helvetica, Arial, sans-serif;
-  --font-poppins: 'Poppins', sans-serif;
-  --font-outfit: 'Outfit', sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-poppins: 'Inter', sans-serif;
+  --font-outfit: 'Inter', sans-serif;
   line-height: 1.5;
   font-weight: 400;
 

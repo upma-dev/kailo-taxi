@@ -73,7 +73,7 @@ const Deliveries = () => {
   }, [activeTab, pageSize, search]);
 
   return (
-    <div className="min-h-screen bg-gray-50 font-['Inter',system-ui,sans-serif]">
+    <div className="min-h-screen bg-gray-50">
       <div className="overflow-hidden rounded-[22px] border border-gray-200 bg-white shadow-[0_10px_32px_rgba(17,24,39,0.05)]">
         <div className="border-b border-gray-200 px-5 py-5 lg:px-6">
           <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">

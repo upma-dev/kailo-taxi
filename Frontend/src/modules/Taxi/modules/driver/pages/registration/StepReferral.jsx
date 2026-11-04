@@ -61,7 +61,7 @@ const StepReferral = () => {
     return (
         <div 
             className="min-h-screen bg-[linear-gradient(180deg,#f6efe4_0%,#fcfaf6_28%,#ffffff_100%)] px-4 sm:px-5 pb-8 pt-5 select-none flex flex-col justify-between"
-            style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}
+            style={{ fontFamily: "'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" }}
         >
             <main className="mx-auto w-full max-w-sm flex-1 flex flex-col justify-between space-y-4">
                 {/* Header Section */}
@@ -89,7 +89,7 @@ const StepReferral = () => {
                                     Rewards Program
                                 </span>
                             </div>
-                            <h1 className="font-['Outfit'] text-3xl sm:text-4xl font-black leading-tight tracking-tight text-slate-900">
+                            <h1 className=" text-3xl sm:text-4xl font-black leading-tight tracking-tight text-slate-900">
                                 Got a <span className="text-slate-400">Code?</span>
                             </h1>
                             <p className="text-xs sm:text-sm font-bold text-slate-600 leading-relaxed max-w-[32ch]">

@@ -10,8 +10,8 @@ import React from 'react';
  * seat map) has no breakpoint prefix and is left untouched.
  */
 const APP_SKIN_CSS = `
-.app-skin { font-family: 'Plus Jakarta Sans', system-ui, sans-serif; }
-.app-skin h1, .app-skin h2 { font-family: 'Outfit', 'Plus Jakarta Sans', system-ui, sans-serif; letter-spacing: -0.03em; }
+.app-skin { font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
+.app-skin h1, .app-skin h2 { font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; letter-spacing: -0.03em; }
 .app-skin [class*="sm:grid-cols-"], .app-skin [class*="md:grid-cols-"] { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
 .app-skin [class*="lg:grid-cols-"], .app-skin [class*="xl:grid-cols-"], .app-skin [class*="2xl:grid-cols-"] { grid-template-columns: minmax(0, 1fr) !important; }
 .app-skin [class*="sm:flex-row"], .app-skin [class*="md:flex-row"], .app-skin [class*="lg:flex-row"], .app-skin [class*="xl:flex-row"] { flex-direction: column !important; align-items: stretch !important; }

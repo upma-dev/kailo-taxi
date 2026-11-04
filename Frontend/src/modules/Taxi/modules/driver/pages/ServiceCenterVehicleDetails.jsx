@@ -282,7 +282,7 @@ const ServiceCenterVehicleDetails = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#f6f7fb] p-4 pb-28 pt-6" style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}>
+    <div className="min-h-screen bg-[#f6f7fb] p-4 pb-28 pt-6" style={{ fontFamily: "'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" }}>
       <div className="mx-auto max-w-5xl space-y-6">
         <div className="flex items-center justify-between gap-4">
           <div>

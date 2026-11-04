@@ -121,7 +121,7 @@ const StepPersonal = () => {
     return (
         <div
             className="min-h-screen overflow-x-hidden bg-[linear-gradient(180deg,#f6efe4_0%,#fcfaf6_28%,#ffffff_100%)] px-5 pb-32 pt-8 select-none"
-            style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}
+            style={{ fontFamily: "'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" }}
         >
             <main className="mx-auto max-w-sm space-y-6">
                 <header className="space-y-6">
@@ -140,7 +140,7 @@ const StepPersonal = () => {
                                 Profile Setup
                             </span>
                         </div>
-                        <h1 className="font-['Outfit'] text-[48px] font-black leading-[1] tracking-[-0.04em] text-slate-900">
+                        <h1 className=" text-[48px] font-black leading-[1] tracking-[-0.04em] text-slate-900">
                             Personal <span className="text-slate-400">Info</span>
                         </h1>
                         <p className="text-[15px] leading-relaxed text-slate-500 font-bold opacity-80 max-w-[28ch]">

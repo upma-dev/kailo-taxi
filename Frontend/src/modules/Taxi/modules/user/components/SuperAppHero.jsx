@@ -184,7 +184,7 @@ export default function SuperAppHero({ onSearchFocus }) {
   };
 
   return (
-    <div className="relative select-none overflow-hidden pb-4 pt-1" style={{ fontFamily: "'Outfit', 'Poppins', system-ui, sans-serif" }}>
+    <div className="relative select-none overflow-hidden pb-4 pt-1" style={{ fontFamily: "'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" }}>
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute -right-16 -top-10 h-56 w-56 rounded-full bg-[#C6F432]/15 blur-3xl" />
         <div className="absolute -left-24 top-28 h-60 w-60 rounded-full bg-[#14B8A6]/25 blur-3xl" />

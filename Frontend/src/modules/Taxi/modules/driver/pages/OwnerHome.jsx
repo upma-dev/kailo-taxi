@@ -223,7 +223,7 @@ const OwnerHome = () => {
   return (
     <div
       className="min-h-screen bg-[linear-gradient(180deg,#f6efe4_0%,#fcfaf6_28%,#ffffff_100%)] pb-32"
-      style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}
+      style={{ fontFamily: "'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" }}
     >
       <div className="mx-auto w-full max-w-md px-5 pt-6">
         {/* Top bar */}
@@ -276,7 +276,7 @@ const OwnerHome = () => {
         <section className="mt-7">
           <h1
             className="text-[32px] font-black leading-tight tracking-tight text-slate-900"
-            style={{ fontFamily: "'Outfit', 'Plus Jakarta Sans', system-ui, sans-serif" }}
+            style={{ fontFamily: "'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" }}
           >
             Home
           </h1>
