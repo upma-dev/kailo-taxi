@@ -5,12 +5,22 @@ import { Car, ChevronRight, Package, Users } from 'lucide-react';
 
 import api from '../../../shared/api/axiosInstance';
 import { BACKEND_ORIGIN } from '../../../shared/api/runtimeConfig';
+import { POOLING_ENABLED } from '../../../shared/featureFlags';
+import outstationImg from '../../../assets/modern_cab_cutout.png';
+import airportImg from '../../../assets/3d images/AutoCab/airoplan.png';
+import poolImg from '../../../assets/3d images/AutoCab/taxi.png';
 
 const LIME = '#C6F432';
 const TINTS = ['#FFF3D6', '#E3F6F2', '#E6EEFB', '#EAF0FF', '#F1EAFB', '#FCE7F0'];
 
 // Parcel has its own booking flow (what to send, sender and receiver), not the ride location screen.
 const PARCEL_CARD = { id: 'parcel', label: 'Parcel', note: 'Send anything', seats: null, img: '', tint: '#FFEFE0', path: '/taxi/user/parcel/type' };
+
+// Pooling vehicles live in their own collection (not Vehicle Types), so the card links to the pooling flow.
+const POOLING_CARD = { id: 'pooling', label: 'Pooling', note: 'Share & save', seats: null, img: poolImg, tint: '#E3F6F2', path: '/taxi/user/pooling' };
+
+const OUTSTATION_CARD = { id: 'outstation', label: 'Outstation', note: 'Intercity trips', seats: null, img: outstationImg, tint: '#E6EEFB', path: '/taxi/user/intercity' };
+const AIRPORT_CARD = { id: 'airport', label: 'Airport', note: 'Pickup & drop', seats: null, img: airportImg, tint: '#EAF0FF', path: '/taxi/user/cab/airport' };
 
 const resolveAssetUrl = (value = '') => {
   const raw = String(value || '').trim();
@@ -108,6 +118,7 @@ const VehicleCard = ({ vehicle, index }) => {
 const ServiceGrid = ({ plain = false }) => {
   const navigate = useNavigate();
   const [rides, setRides] = useState([]);
+  const [services, setServices] = useState({ outstation: false, airport: false });
 
   useEffect(() => {
     let active = true;
@@ -125,6 +136,8 @@ const ServiceGrid = ({ plain = false }) => {
           })
           .map(toRideCard);
         setRides(cards);
+        const flags = (response?.data ?? response)?.services || {};
+        setServices({ outstation: Boolean(flags.outstation), airport: Boolean(flags.airport) });
       })
       .catch(() => {
         // The Parcel card below still works; ride types show up once the catalog loads.
@@ -135,7 +148,7 @@ const ServiceGrid = ({ plain = false }) => {
     };
   }, []);
 
-  const vehicles = [...rides, PARCEL_CARD];
+  const vehicles = [...rides, ...(services.outstation ? [OUTSTATION_CARD] : []), ...(services.airport ? [AIRPORT_CARD] : []), ...(POOLING_ENABLED ? [POOLING_CARD] : []), PARCEL_CARD];
 
   const containerClass = plain
     ? 'relative z-10 mt-1'
@@ -162,7 +175,7 @@ const ServiceGrid = ({ plain = false }) => {
         </button>
       </div>
 
-      <div className="no-scrollbar mt-4 flex gap-3 overflow-x-auto px-5 pb-3">
+      <div className="scrollbar-hide mt-4 flex gap-3 overflow-x-auto px-5 pb-3">
         {vehicles.map((vehicle, index) => (
           <VehicleCard key={vehicle.id} vehicle={vehicle} index={index} />
         ))}

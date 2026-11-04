@@ -6240,8 +6240,15 @@ export const listPublicVehicleCatalog = async () => {
     active: item.active !== false && Number(item.status ?? 1) !== 0,
   }));
 
+  // Which long-distance services the admin has switched on in Set Price (shown as cards on the user home).
+  const [outstationOn, airportOn] = await Promise.all([
+    SetPrice.exists({ enable_outstation_ride: true, active: { $ne: 0 }, status: { $ne: 'inactive' } }),
+    SetPrice.exists({ enable_airport_ride: true, active: { $ne: 0 }, status: { $ne: 'inactive' } }),
+  ]);
+
   const payload = {
     results,
+    services: { outstation: Boolean(outstationOn), airport: Boolean(airportOn) },
     paginator: {
       data: results,
       total: results.length,

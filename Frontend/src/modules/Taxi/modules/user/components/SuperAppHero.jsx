@@ -4,10 +4,10 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowRight, ArrowUpRight, Search } from 'lucide-react';
 import taxiImg from '../../../assets/3d images/AutoCab/taxi.png';
 import busImg from '../../../assets/3d images/AutoCab/bus.png';
-import outstationImg from '../../../assets/3d images/AutoCab/one way.png';
+import outstationImg from '../../../assets/modern_cab_cutout.png';
 import airportImg from '../../../assets/3d images/AutoCab/airoplan.png';
 import parcelImg from '../../../assets/3d images/gifts.png';
-import modernCabImg from '../../../assets/modern_cab.png';
+import modernCabImg from '../../../assets/modern_cab_cutout.png';
 import { POOLING_ENABLED, RENTAL_ENABLED } from '../../../shared/featureFlags';
 
 const LIME = '#C6F432';
@@ -108,12 +108,12 @@ function Platform() {
 
 function Stage({ service, onOpen }) {
   return (
-    <div className="relative mx-4 mt-3 h-[150px] overflow-hidden rounded-[26px] border border-white/15 bg-white/10 shadow-[0_18px_34px_rgba(4,36,32,0.35)] backdrop-blur-md">
+    <div className="relative mx-4 mt-2.5 h-[118px] overflow-hidden rounded-[26px] border border-white/15 bg-white/10 shadow-[0_18px_34px_rgba(4,36,32,0.35)] backdrop-blur-md">
       <div className="pointer-events-none absolute -left-10 -top-12 h-36 w-36 rounded-full bg-[#C6F432]/10 blur-2xl" />
 
       {/* artwork side */}
       <div className="absolute inset-y-0 right-0 w-[46%]" style={{ perspective: '600px' }}>
-        <Platform />
+        <div className="absolute inset-0 scale-[0.78]"><Platform /></div>
         <AnimatePresence mode="wait">
           <motion.div
             key={service.id}
@@ -130,7 +130,7 @@ function Stage({ service, onOpen }) {
               animate={{ y: [0, -7, 0], rotateZ: [-2, 2, -2] }}
               transition={{ duration: 3.4, repeat: Infinity, ease: 'easeInOut' }}
               className="w-auto object-contain drop-shadow-[0_16px_12px_rgba(0,0,0,0.4)]"
-              style={{ height: service.size }}
+              style={{ height: Math.round(service.size * 0.78) }}
             />
           </motion.div>
         </AnimatePresence>
@@ -146,16 +146,16 @@ function Stage({ service, onOpen }) {
             exit={{ opacity: 0, x: -10 }}
             transition={{ duration: 0.25 }}
           >
-            <h2 className="text-[17px] font-black leading-[1.15] tracking-tight text-white">{service.title}</h2>
-            <p className="mt-1 max-w-[150px] text-[11px] font-medium leading-snug text-white/65">{service.text}</p>
+            <h2 className="text-[15px] font-semibold leading-[1.2] text-white">{service.title}</h2>
+            <p className="mt-0.5 max-w-[150px] text-[10.5px] font-normal leading-snug text-white/65">{service.text}</p>
             <button
               type="button"
               onClick={() => onOpen(service)}
-              className="mt-3 inline-flex items-center gap-1 rounded-full py-1.5 pl-3.5 pr-2.5 text-[11.5px] font-black text-[#14213D] shadow-[0_8px_16px_rgba(0,0,0,0.22)] transition active:scale-95"
+              className="mt-2 inline-flex items-center gap-1 rounded-full py-1 pl-3 pr-2 text-[11px] font-semibold text-[#14213D] shadow-[0_8px_16px_rgba(0,0,0,0.22)] transition active:scale-95"
               style={{ backgroundColor: LIME }}
             >
               {service.cta}
-              <ArrowUpRight size={14} strokeWidth={3} />
+              <ArrowUpRight size={13} strokeWidth={2.5} />
             </button>
           </motion.div>
         </AnimatePresence>
@@ -184,16 +184,16 @@ export default function SuperAppHero({ onSearchFocus }) {
   };
 
   return (
-    <div className="relative select-none overflow-hidden pb-6 pt-2">
+    <div className="relative select-none overflow-hidden pb-4 pt-1" style={{ fontFamily: "'Outfit', 'Poppins', system-ui, sans-serif" }}>
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute -right-16 -top-10 h-56 w-56 rounded-full bg-[#C6F432]/15 blur-3xl" />
         <div className="absolute -left-24 top-28 h-60 w-60 rounded-full bg-[#14B8A6]/25 blur-3xl" />
       </div>
 
       <div className="relative z-10 px-4">
-        <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/60">Kailo Taxi</p>
-        <h1 className="mt-0.5 text-[27px] font-black leading-[1.05] tracking-tight text-white">
-          Where to <span style={{ color: LIME }}>today?</span>
+        <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-white/60">Kailo Taxi</p>
+        <h1 className="mt-0.5 text-[22px] font-semibold leading-[1.1] text-white">
+          Your ride, <span style={{ color: LIME }}>anywhere.</span>
         </h1>
 
         <motion.button
@@ -202,22 +202,22 @@ export default function SuperAppHero({ onSearchFocus }) {
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           whileTap={{ scale: 0.98 }}
-          className="mt-4 flex w-full items-center gap-3 rounded-[20px] bg-[#F8FAF7] py-2.5 pl-4 pr-2.5 text-left shadow-[0_16px_30px_rgba(6,40,36,0.4)]"
+          className="mt-3 flex w-full items-center gap-3 rounded-[18px] bg-[#F8FAF7] py-2 pl-4 pr-2 text-left shadow-[0_16px_30px_rgba(6,40,36,0.4)]"
         >
           <Search className="h-[18px] w-[18px] flex-shrink-0 text-[#0F766E]" strokeWidth={2.6} />
-          <span className="min-w-0 flex-1 truncate text-[14px] font-bold text-[#14213D]/70">Search destination</span>
+          <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-[#14213D]/70">Search destination</span>
           <span
-            className="flex h-9 items-center gap-1 rounded-[14px] px-3.5 text-[12px] font-black uppercase tracking-wide text-[#14213D]"
+            className="flex h-8 items-center gap-1 rounded-[12px] px-3 text-[11.5px] font-semibold uppercase tracking-wide text-[#14213D]"
             style={{ backgroundColor: LIME }}
           >
             Go
-            <ArrowRight size={14} strokeWidth={3} />
+            <ArrowRight size={13} strokeWidth={2.5} />
           </span>
         </motion.button>
       </div>
 
       {/* service tabs: the active pill slides between options */}
-      <div className="no-scrollbar relative z-10 mt-4 flex gap-2 overflow-x-auto px-4">
+      <div className="scrollbar-hide relative z-10 mt-2 flex gap-1.5 overflow-x-auto px-4 py-1.5">
         {SERVICES.map((service, i) => {
           const isActive = i === index;
           return (
@@ -225,7 +225,7 @@ export default function SuperAppHero({ onSearchFocus }) {
               key={service.id}
               type="button"
               onClick={() => pick(i)}
-              className="relative flex-shrink-0 rounded-full px-4 py-2 text-[12px] font-extrabold transition-colors"
+              className="relative flex-shrink-0 rounded-full px-3.5 py-1.5 text-[11.5px] font-medium leading-none transition-colors"
               style={{ color: isActive ? '#14213D' : 'rgba(255,255,255,0.75)' }}
             >
               {isActive && (
@@ -247,7 +247,7 @@ export default function SuperAppHero({ onSearchFocus }) {
 
       {/* auto-advance progress */}
       {!userPicked && (
-        <div className="relative z-10 mx-auto mt-3 h-[3px] w-24 overflow-hidden rounded-full bg-white/15">
+        <div className="relative z-10 mx-auto mt-2.5 h-[3px] w-20 overflow-hidden rounded-full bg-white/15">
           <motion.span
             key={active.id}
             className="absolute inset-y-0 left-0 rounded-full"

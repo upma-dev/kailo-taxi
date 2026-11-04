@@ -60,17 +60,6 @@ const ROUTE_WATCH_INTERVAL_MS = 5000;
 const LOCATION_EMIT_MIN_MS = 2000;
 const LOCATION_PATCH_MIN_MS = 10000;
 
-const mapStyles = [
-    { elementType: 'geometry', stylers: [{ color: '#f8fafc' }] },
-    { elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
-    { elementType: 'labels.text.fill', stylers: [{ color: '#475569' }] },
-    { elementType: 'labels.text.stroke', stylers: [{ color: '#ffffff' }] },
-    { featureType: 'poi', elementType: 'geometry', stylers: [{ color: '#eef2f7' }] },
-    { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#ffffff' }] },
-    { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#e2e8f0' }] },
-    { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#dbeafe' }] },
-];
-
 const toLatLng = (coordinates, fallback = DEFAULT_CENTER) => {
     const [lng, lat] = coordinates || [];
 
@@ -2527,7 +2516,6 @@ const ActiveTrip = () => {
     };
 
     const mapOptions = useMemo(() => ({
-        styles: mapStyles,
         disableDefaultUI: true,
         zoomControl: true,
         clickableIcons: false,
@@ -2738,7 +2726,7 @@ const ActiveTrip = () => {
                 )}
             </div>
 
-            <div className="absolute bottom-0 left-0 right-0 z-40 max-h-[50vh] overflow-y-auto">
+            <div className={`absolute bottom-0 left-0 right-0 max-h-[50vh] overflow-y-auto ${phase === 'payment_confirm' ? 'z-[90]' : 'z-40'}`}>
                 <AnimatePresence mode="wait">
                     {phase === 'to_pickup' && (
                         <motion.div
@@ -2944,6 +2932,13 @@ const ActiveTrip = () => {
                                         </p>
                                     </div>
                                     <button
+                                        onClick={openGoogleMapsNavigation}
+                                        className="shrink-0 w-8 h-8 rounded-lg border border-slate-200 bg-white flex items-center justify-center text-slate-700 active:scale-90 transition-transform shadow-sm"
+                                        aria-label="Navigate to destination in Google Maps"
+                                    >
+                                        <Navigation size={15} strokeWidth={2.5} />
+                                    </button>
+                                    <button
                                         onClick={triggerEmergencySos}
                                         className="shrink-0 w-8 h-8 rounded-lg border flex items-center justify-center active:scale-90 transition-transform shadow-sm"
                                         style={{ backgroundColor: routeAccentSoft, color: routeStrokeColor, borderColor: routeAccentBorder }}
@@ -3035,10 +3030,10 @@ const ActiveTrip = () => {
                     {phase === 'payment_confirm' && (
                         <motion.div
                             key="payment_confirm"
-                            initial={{ y: '100%' }}
-                            animate={{ y: 0 }}
-                            exit={{ y: '100%' }}
-                            className="bg-white rounded-t-[2.5rem] p-6 pb-8 shadow-2xl border-t border-slate-100"
+                            initial={{ opacity: 0, y: 24 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0 }}
+                            className="fixed inset-0 z-[80] mx-auto flex max-w-lg flex-col overflow-y-auto bg-slate-50 px-5 pb-8 pt-10"
                         >
                             <div className="text-center mb-6">
                                 <div className="w-16 h-16 rounded-2xl mx-auto flex items-center justify-center mb-3 shadow-lg transition-all duration-500 text-white" style={{ backgroundColor: driverPaymentStatus === 'success' ? routeStrokeColor : '#0f172a' }}>

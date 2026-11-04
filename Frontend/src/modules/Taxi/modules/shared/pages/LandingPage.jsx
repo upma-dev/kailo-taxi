@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import api from '../../../shared/api/axiosInstance';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   ArrowRight,
@@ -22,7 +23,7 @@ import {
 } from 'lucide-react';
 import mapImg from '@/assets/premium_grid_map.webp';
 import taxiCut from '@/assets/landing/cutout/taxi.webp';
-import aboutPhoto from '@/assets/driver_welcome_hero.webp';
+import aboutCab from '@/assets/modern_cab_cutout.png';
 import cityIllu from '@/assets/images/mobility-illustration.webp';
 import coastImg from '@/assets/landing/options.webp';
 import bikeImg from '@/assets/landing/cutout/bike.webp';
@@ -77,14 +78,14 @@ function SectionHead({ eyebrow, title, subtitle, light }) {
     <div className="mx-auto mb-8 max-w-2xl text-center sm:mb-12">
       {eyebrow && (
         <span
-          className={`inline-block rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-[0.2em] ${
+          className={`inline-block rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wider ${
             light ? 'bg-white/15 text-white' : 'bg-[#0F766E]/10 text-[#0F766E]'
           }`}
         >
           {eyebrow}
         </span>
       )}
-      <h2 className={`mt-4 text-3xl font-black tracking-tight sm:text-4xl ${light ? 'text-white' : 'text-[#14213D]'}`}>{title}</h2>
+      <h2 className={`mt-4 text-3xl font-bold tracking-normal sm:text-4xl ${light ? 'text-white' : 'text-[#14213D]'}`}>{title}</h2>
       {subtitle && <p className={`mt-3 text-base ${light ? 'text-white/75' : 'text-[#14213D]/60'}`}>{subtitle}</p>}
     </div>
   );
@@ -99,7 +100,7 @@ function MiniStoreBadge({ href, store, label, children, full }) {
       <span className="flex h-5 w-5 items-center justify-center">{children}</span>
       <span className="text-left leading-none">
         <span className="block text-[8px] font-semibold uppercase tracking-wider text-white/60">{href ? label : 'Coming soon'}</span>
-        <span className="mt-0.5 block text-[13px] font-black">{store}</span>
+        <span className="mt-0.5 block text-[13px] font-bold">{store}</span>
       </span>
     </>
   );
@@ -111,8 +112,38 @@ function MiniStoreBadge({ href, store, label, children, full }) {
   );
 }
 
+// The logo the admin set in Settings wins; the landing CMS logo and the bundled one are only fallbacks.
+// The landing page renders outside SettingsProvider, so the setting is fetched here once and shared.
+let adminLogoPromise = null;
+const loadAdminLogo = () => {
+  if (!adminLogoPromise) {
+    adminLogoPromise = api
+      .get('/common/settings')
+      .then((res) => {
+        const d = res?.data?.data || res?.data || {};
+        const logo = String(d.general?.logo || d.customization?.logo || '').trim();
+        return /eqosy/i.test(logo) ? '' : logo;
+      })
+      .catch(() => '');
+  }
+  return adminLogoPromise;
+};
+
+function useAdminLogo(cmsLogo) {
+  const [adminLogo, setAdminLogo] = useState('');
+  useEffect(() => {
+    let live = true;
+    loadAdminLogo().then((logo) => live && setAdminLogo(logo));
+    return () => {
+      live = false;
+    };
+  }, []);
+  return adminLogo || cmsLogo || '/kailo-taxi-logo.png';
+}
+
 function Header({ data, download }) {
   const go = useGo();
+  const logo = useAdminLogo(data.logo);
   const [open, setOpen] = useState(false);
   const links = arr(data.links);
   const badges = (full) => (
@@ -129,8 +160,8 @@ function Header({ data, download }) {
     <header className="fixed inset-x-0 top-0 z-50 border-b border-[#14213D]/5 bg-white/90">
       <nav className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
         <button type="button" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="flex items-center gap-3">
-          <img src={data.logo || '/kailo-taxi-logo.png'} alt="" className="h-10 w-10 rounded-xl object-cover" />
-          <span className="text-xl font-black tracking-tight text-[#14213D]">{data.brandName}</span>
+          <img src={logo} alt="" className="h-10 w-10 rounded-xl object-cover" />
+          <span className="text-xl font-bold tracking-normal text-[#14213D]">{data.brandName}</span>
         </button>
 
         <div className="hidden items-center gap-8 text-[13px] font-bold text-[#14213D]/65 md:flex">
@@ -334,7 +365,7 @@ function Hero({ data, download }) {
                     clearTimeout(resumeRef.current);
                     resumeRef.current = setTimeout(() => setPaused(false), 10000);
                   }}
-                  className={`relative flex shrink-0 items-center gap-2 overflow-hidden rounded-xl px-4 py-2.5 text-[12px] font-black uppercase tracking-wider transition-colors duration-500 ${
+                  className={`relative flex shrink-0 items-center gap-2 overflow-hidden rounded-xl px-4 py-2.5 text-[12px] font-bold uppercase tracking-wider transition-colors duration-500 ${
                     on ? 'text-[#031a19]' : 'text-white/75 hover:bg-white/10'
                   }`}
                   style={on ? { background: ACCENT[s.key] || '#C6F432' } : undefined}
@@ -367,13 +398,13 @@ function Hero({ data, download }) {
               {slide.badge && (
                 <motion.span
                   variants={{ hidden: { opacity: 0, y: 14 }, show: { opacity: 1, y: 0 }, gone: { opacity: 0, y: -10 } }}
-                  className="inline-block rounded-full border border-white/15 bg-white/10 px-4 py-1.5 text-[11px] font-black uppercase tracking-[0.2em]"
+                  className="inline-block rounded-full border border-white/15 bg-white/10 px-4 py-1.5 text-[11px] font-bold uppercase tracking-wider"
                   style={{ color: accent }}
                 >
                   {slide.badge}
                 </motion.span>
               )}
-              <h1 className="mt-4 text-[2.5rem] font-black leading-[1.06] tracking-tight sm:mt-5 sm:text-6xl lg:text-7xl">
+              <h1 className="mt-4 text-[2.5rem] font-bold leading-[1.06] tracking-normal sm:mt-5 sm:text-6xl lg:text-7xl">
                 <motion.span
                   className="block"
                   variants={{ hidden: { opacity: 0, y: 46, rotateX: -50 }, show: { opacity: 1, y: 0, rotateX: 0 }, gone: { opacity: 0, y: -30 } }}
@@ -404,7 +435,7 @@ function Hero({ data, download }) {
                   <a
                     href={slide.ctaTarget}
                     onClick={go(slide.ctaTarget)}
-                    className="inline-flex items-center gap-2 rounded-2xl px-6 py-3.5 text-sm font-black uppercase tracking-wide text-[#031a19] transition hover:brightness-95 active:scale-95 sm:px-7 sm:py-4 sm:text-[15px]"
+                    className="inline-flex items-center gap-2 rounded-2xl px-6 py-3.5 text-sm font-bold uppercase tracking-wide text-[#031a19] transition hover:brightness-95 active:scale-95 sm:px-7 sm:py-4 sm:text-[15px]"
                     style={{ background: accent, boxShadow: `0 16px 34px -12px ${accent}` }}
                   >
                     {slide.ctaText} <ArrowRight size={18} strokeWidth={3} />
@@ -476,11 +507,11 @@ function About({ data }) {
       <div className="relative mx-auto grid max-w-7xl items-center gap-16 lg:grid-cols-[1fr_1.05fr]">
         <div>
           <Reveal y={12}>
-            <span className="inline-block rounded-full bg-[#0F766E]/10 px-3 py-1 text-[11px] font-black uppercase tracking-[0.2em] text-[#0F766E]">
+            <span className="inline-block rounded-full bg-[#0F766E]/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-[#0F766E]">
               About us
             </span>
           </Reveal>
-          <h2 className="mt-4 text-4xl font-black leading-[1.05] tracking-tight text-[#14213D] sm:text-5xl">
+          <h2 className="mt-4 text-4xl font-bold leading-[1.05] tracking-normal text-[#14213D] sm:text-5xl">
             <SplitText text={data.title} />
           </h2>
           <Reveal delay={0.2}>
@@ -491,11 +522,11 @@ function About({ data }) {
               <Reveal key={i} delay={0.1 + i * 0.1}>
                 <Tilt className="group rounded-2xl border border-[#14213D]/5 bg-white p-5 shadow-[0_18px_40px_-28px_rgba(20,33,61,0.55)]" max={5}>
                   <div className="flex items-start gap-4" style={{ transform: 'translateZ(24px)' }}>
-                    <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#14B8A6] to-[#0F766E] text-lg font-black text-[#C6F432] shadow-lg shadow-[#0F766E]/30">
+                    <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#14B8A6] to-[#0F766E] text-lg font-bold text-[#C6F432] shadow-lg shadow-[#0F766E]/30">
                       {String(i + 1).padStart(2, '0')}
                     </span>
                     <div>
-                      <div className="font-black text-[#14213D]">{p.title}</div>
+                      <div className="font-bold text-[#14213D]">{p.title}</div>
                       <div className="mt-0.5 text-sm text-[#14213D]/60">{p.description}</div>
                     </div>
                   </div>
@@ -506,7 +537,7 @@ function About({ data }) {
         </div>
 
         {/* layered 3D composition */}
-        <Stage className="relative h-[440px] sm:h-[520px]" tilt={4}>
+        <Stage className="relative h-[440px] sm:h-[520px]" tilt={0}>
           <Layer depth={-60} className="absolute inset-0">
             <div className="absolute inset-x-4 inset-y-8 overflow-hidden rounded-[2.5rem] bg-gradient-to-br from-[#14B8A6] via-[#0F766E] to-[#052E2B] shadow-[0_50px_80px_-40px_rgba(5,46,43,0.9)]">
               <div className="absolute inset-0 bg-cover bg-center opacity-20" style={{ backgroundImage: `url(${mapImg})` }} />
@@ -522,17 +553,25 @@ function About({ data }) {
             />
           </Layer>
           <Layer depth={40} float={10} className="absolute inset-x-0 top-[9%] flex justify-center">
-            <img
-              src={data.image || aboutPhoto}
-              alt=""
-              className="aspect-square w-[78%] max-w-[420px] rotate-[-1deg] rounded-[2rem] border-[6px] border-white/80 object-cover shadow-[0_45px_60px_-20px_rgba(0,0,0,0.6)]"
-            />
+            {data.image ? (
+              <img
+                src={data.image}
+                alt=""
+                className="aspect-square w-[78%] max-w-[420px] rounded-[2rem] border-[6px] border-white/80 object-cover shadow-[0_45px_60px_-20px_rgba(0,0,0,0.6)]"
+              />
+            ) : (
+              <img
+                src={aboutCab}
+                alt=""
+                className="mt-10 w-[92%] max-w-[460px] object-contain drop-shadow-[0_30px_30px_rgba(0,0,0,0.45)]"
+              />
+            )}
           </Layer>
           {points[0] && (
             <Layer depth={60} float={8} className="absolute left-0 top-[6%]">
               <div className="flex items-center gap-2 rounded-2xl bg-white px-4 py-3 shadow-2xl">
                 <ShieldCheck size={18} className="text-[#0F766E]" />
-                <span className="text-sm font-black text-[#14213D]">{points[0].title}</span>
+                <span className="text-sm font-bold text-[#14213D]">{points[0].title}</span>
               </div>
             </Layer>
           )}
@@ -540,7 +579,7 @@ function About({ data }) {
             <Layer depth={70} float={10} className="absolute right-0 top-[40%]">
               <div className="flex items-center gap-2 rounded-2xl bg-[#C6F432] px-4 py-3 shadow-2xl">
                 <CheckCircle2 size={18} className="text-[#14213D]" />
-                <span className="text-sm font-black text-[#14213D]">{points[1].title}</span>
+                <span className="text-sm font-bold text-[#14213D]">{points[1].title}</span>
               </div>
             </Layer>
           )}
@@ -548,7 +587,7 @@ function About({ data }) {
             <Layer depth={50} float={8} className="absolute bottom-[5%] left-[6%]">
               <div className="flex items-center gap-2 rounded-2xl bg-white px-4 py-3 shadow-2xl">
                 <Users size={18} className="text-[#0F766E]" />
-                <span className="text-sm font-black text-[#14213D]">{points[2].title}</span>
+                <span className="text-sm font-bold text-[#14213D]">{points[2].title}</span>
               </div>
             </Layer>
           )}
@@ -565,8 +604,8 @@ function FloatCard({ card, accent }) {
         accent ? 'bg-[#C6F432] text-[#14213D]' : 'bg-white/95 text-[#14213D]'
       }`}
     >
-      <div className="text-[10px] font-black uppercase tracking-widest opacity-60">{card.label}</div>
-      <div className="text-lg font-black">{card.value}</div>
+      <div className="text-[10px] font-bold uppercase tracking-widest opacity-60">{card.label}</div>
+      <div className="text-lg font-bold">{card.value}</div>
     </div>
   );
 }
@@ -578,8 +617,8 @@ function VisionInline({ data }) {
   if (!values.length && !data.description) return null;
   return (
     <div id="vision" className="mt-6 scroll-mt-24 border-l-4 border-[#C6F432] pl-4">
-      <p className="text-[11px] font-black uppercase tracking-[0.2em] text-white/60">Vision &amp; mission</p>
-      {data.title && <h3 className="mt-1 text-lg font-black tracking-tight">{data.title}</h3>}
+      <p className="text-[11px] font-bold uppercase tracking-wider text-white/60">Vision &amp; mission</p>
+      {data.title && <h3 className="mt-1 text-lg font-bold tracking-normal">{data.title}</h3>}
       {data.description && <p className="mt-1 text-sm leading-relaxed text-white/75">{data.description}</p>}
       {data.mission && <p className="mt-1.5 text-sm font-bold text-[#C6F432]">{data.mission}</p>}
       {values.length > 0 && (
@@ -613,10 +652,10 @@ function Rider({ data, vision }) {
           <div>
             {data.eyebrow && (
               <Reveal y={12}>
-                <span className="inline-block rounded-full bg-white/15 px-3 py-1 text-[11px] font-black uppercase tracking-[0.2em]">{data.eyebrow}</span>
+                <span className="inline-block rounded-full bg-white/15 px-3 py-1 text-[11px] font-bold uppercase tracking-wider">{data.eyebrow}</span>
               </Reveal>
             )}
-            <h2 className="mt-4 text-4xl font-black leading-[1.05] tracking-tight sm:text-5xl">
+            <h2 className="mt-4 text-4xl font-bold leading-[1.05] tracking-normal sm:text-5xl">
               <SplitText text={data.title} />
               <br />
               <SplitText text={data.highlight} className="text-[#C6F432]" delay={0.2} />
@@ -635,7 +674,7 @@ function Rider({ data, vision }) {
                 <a
                   href={data.ctaTarget}
                   onClick={go(data.ctaTarget)}
-                  className="mt-9 inline-flex items-center gap-2 rounded-2xl bg-[#C6F432] px-7 py-4 text-[15px] font-black text-[#14213D] shadow-[0_16px_30px_-12px_rgba(198,244,50,0.8)] transition hover:brightness-95 active:scale-95"
+                  className="mt-9 inline-flex items-center gap-2 rounded-2xl bg-[#C6F432] px-7 py-4 text-[15px] font-bold text-[#14213D] shadow-[0_16px_30px_-12px_rgba(198,244,50,0.8)] transition hover:brightness-95 active:scale-95"
                 >
                   {data.ctaText} <ArrowRight size={18} strokeWidth={3} />
                 </a>
@@ -716,7 +755,7 @@ function PlayBadge({ href, theme }) {
       <PlayIcon />
       <span className="text-left leading-tight">
         <span className={`block text-[9px] font-semibold uppercase tracking-wider ${theme.storeSub}`}>{href ? 'Get it on' : 'Coming soon on'}</span>
-        <span className="block text-sm font-black">Google Play</span>
+        <span className="block text-sm font-bold">Google Play</span>
       </span>
     </>
   );
@@ -757,7 +796,7 @@ function Audiences({ data, download }) {
                     <span className={`mb-5 flex h-14 w-14 items-center justify-center rounded-2xl shadow-lg ${t.icon}`}>
                       <Icon size={26} />
                     </span>
-                    <h3 className="text-3xl font-black tracking-tight">{it.name}</h3>
+                    <h3 className="text-3xl font-bold tracking-normal">{it.name}</h3>
                     <p className={`mt-2 text-[15px] leading-relaxed ${t.muted}`}>{it.description}</p>
                     <ul className="mt-5 space-y-2.5">
                       {arr(it.bullets).map((b, j) => (
@@ -772,7 +811,7 @@ function Audiences({ data, download }) {
                         <a
                           href={it.ctaTarget}
                           onClick={go(it.ctaTarget)}
-                          className={`inline-flex items-center gap-2 text-sm font-black transition group-hover:gap-3 ${t.cta}`}
+                          className={`inline-flex items-center gap-2 text-sm font-bold transition group-hover:gap-3 ${t.cta}`}
                         >
                           {it.ctaText} <ArrowRight size={16} strokeWidth={3} />
                         </a>
@@ -815,7 +854,7 @@ function StoreButton({ href, label, store, children }) {
       {children}
       <span className="text-left leading-tight">
         <span className="block text-[10px] font-semibold uppercase tracking-wider text-white/60">{label}</span>
-        <span className="block text-base font-black">{store}</span>
+        <span className="block text-base font-bold">{store}</span>
       </span>
     </a>
   );
@@ -833,7 +872,7 @@ function Faq({ data }) {
           {items.map((f, i) => (
             <div key={i} className="overflow-hidden rounded-2xl border border-white/60 bg-white/70 shadow-[0_14px_30px_-22px_rgba(5,46,43,0.5)]">
               <button type="button" onClick={() => setOpen(open === i ? -1 : i)} className="flex w-full items-center justify-between gap-4 px-6 py-5 text-left">
-                <span className="font-black text-[#14213D]">{f.question}</span>
+                <span className="font-bold text-[#14213D]">{f.question}</span>
                 <ChevronDown size={20} className={`shrink-0 text-[#0F766E] transition ${open === i ? 'rotate-180' : ''}`} />
               </button>
               {open === i && <p className="px-6 pb-5 text-sm leading-relaxed text-[#14213D]/65">{f.answer}</p>}
@@ -875,7 +914,8 @@ function FooterLink({ link }) {
   );
 }
 
-function Footer({ data, brand, logo, download }) {
+function Footer({ data, brand, logo: cmsLogo, download }) {
+  const logo = useAdminLogo(cmsLogo);
   const columns = arr(data.columns);
   const social = arr(data.social);
   const qrTarget = download?.qrUrl || download?.playStoreUrl || download?.appStoreUrl;
@@ -891,7 +931,7 @@ function Footer({ data, brand, logo, download }) {
           <div className="space-y-4 lg:col-span-2">
             <div className="flex items-center gap-3">
               <img src={logo || '/kailo-taxi-logo.png'} alt="" className="h-10 w-10 rounded-xl object-cover" />
-              <span className="text-2xl font-black tracking-tight">{brand}</span>
+              <span className="text-2xl font-bold tracking-normal">{brand}</span>
             </div>
             <p className="max-w-sm text-sm leading-relaxed text-white/60">{data.about}</p>
             {qrSrc && (
@@ -920,7 +960,7 @@ function Footer({ data, brand, logo, download }) {
           </div>
           {columns.map((c, i) => (
             <div key={i}>
-              <h4 className="text-xs font-black uppercase tracking-[0.18em] text-white">{c.title}</h4>
+              <h4 className="text-xs font-bold uppercase tracking-[0.18em] text-white">{c.title}</h4>
               <ul className="mt-4 space-y-2.5 text-sm font-medium text-white/60">
                 {arr(c.links).map((l, j) => (
                   <li key={j}>

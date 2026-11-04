@@ -200,76 +200,71 @@ const DriverReferral = () => {
       </header>
 
       <div className="rounded-[28px] border border-gray-200 bg-white shadow-sm overflow-hidden max-w-md mx-auto">
-        <div className="bg-[#1830b8] px-5 py-5 text-white flex items-center justify-between">
-          <div>
-            <p className="text-[26px] font-semibold leading-tight">{bannerText}</p>
-            <p className="text-[11px] text-indigo-100 mt-1">Language: {translation.language_code?.toUpperCase() || 'EN'}</p>
+        <div className="flex items-center justify-between gap-3 bg-gradient-to-br from-[#E6F7EE] to-[#EEFBE0] px-5 py-5">
+          <div className="min-w-0">
+            <p className="text-[22px] font-semibold leading-tight text-[#14213D]">{bannerText}</p>
+            <p className="mt-1 text-[11px] font-medium text-[#0F766E]">Language: {translation.language_code?.toUpperCase() || 'EN'}</p>
           </div>
-          <div className="w-12 h-12 rounded-2xl bg-white/15 flex items-center justify-center">
-            <Gift size={20} />
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#C6F432] text-[#14213D]">
+            <Gift size={22} />
           </div>
         </div>
 
         <div className="px-4 py-4">
-          <div className="grid grid-cols-[1fr_auto_auto] gap-2">
-            <div className="rounded-xl border border-dashed border-gray-300 px-3 py-3 text-center">
-              <p className="text-[18px] font-semibold text-gray-900 tracking-wide">
-                {referralCode || 'Not available'}
-              </p>
-              <p className="text-[10px] text-gray-400 mt-1">Your referral code</p>
-            </div>
+          <div className="rounded-2xl border border-dashed border-[#0F766E]/40 bg-[#F4FBF8] px-4 py-3 text-center">
+            <p className="text-[11px] font-medium text-gray-500">Your referral code</p>
+            <p className="mt-0.5 break-all text-[20px] font-semibold tracking-wide text-[#14213D]">
+              {referralCode || 'Not available'}
+            </p>
+          </div>
+
+          <div className="mt-3 grid grid-cols-2 gap-2">
             <button
               type="button"
               onClick={handleCopy}
               disabled={!referralCode}
-              className="rounded-xl bg-[#1830b8] text-white px-4 text-sm font-medium flex items-center gap-2 disabled:opacity-50"
+              className="flex h-11 items-center justify-center gap-2 rounded-xl bg-[#C6F432] text-sm font-semibold text-[#14213D] disabled:opacity-50"
             >
-              {copied ? <CheckCircle2 size={15} /> : <Copy size={15} />}
-              Copy
+              {copied ? <CheckCircle2 size={16} /> : <Copy size={16} />}
+              {copied ? 'Copied' : 'Copy'}
             </button>
             <button
               type="button"
               onClick={handleShare}
               disabled={!referralCode}
-              className="rounded-xl bg-[#ef4444] text-white px-4 text-sm font-medium flex items-center gap-2 disabled:opacity-50"
+              className="flex h-11 items-center justify-center gap-2 rounded-xl border border-[#0F766E]/30 bg-[#E6F7EE] text-sm font-semibold text-[#0F766E] disabled:opacity-50"
             >
-              Share <Share2 size={15} />
+              <Share2 size={16} /> Share
             </button>
           </div>
 
           <div className="mt-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-3">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-gray-400">Share link</p>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Share link</p>
             <p className="mt-1 break-all text-[12px] text-gray-700">
               {referralShareLink || 'Share link will appear once your referral code is ready.'}
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-2 mt-3">
-            <button
-              type="button"
-              onClick={() => setActiveTab('refer')}
-              className={`rounded-lg py-2 text-xs font-medium ${
-                activeTab === 'refer' ? 'bg-white border border-gray-200 text-gray-900' : 'bg-gray-100 text-gray-500'
-              }`}
-            >
-              Refer and earn
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('history')}
-              className={`rounded-lg py-2 text-xs font-medium ${
-                activeTab === 'history' ? 'bg-white border border-gray-200 text-gray-900' : 'bg-gray-100 text-gray-500'
-              }`}
-            >
-              Referral history
-            </button>
+          <div className="mt-3 grid grid-cols-2 gap-1 rounded-xl bg-gray-100 p-1">
+            {[['refer', 'Refer and earn'], ['history', 'Referral history']].map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setActiveTab(key)}
+                className={`rounded-lg py-2 text-xs font-semibold transition ${
+                  activeTab === key ? 'bg-white text-[#0F766E] shadow-sm' : 'text-gray-500'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
           </div>
         </div>
 
         <div className="px-4 pb-4 min-h-[340px]">
           {loading ? (
             <div className="flex items-center justify-center py-16">
-              <Loader2 className="animate-spin text-[#1830b8]" size={26} />
+              <Loader2 className="animate-spin text-[#0F766E]" size={26} />
             </div>
           ) : activeTab === 'refer' ? (
             <div className="space-y-4">

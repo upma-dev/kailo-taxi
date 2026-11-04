@@ -1,11 +1,11 @@
 /* Kailo Taxi landing site. Theme: teal gradient, lime accent, navy ink. */
 .landing-root {
-  font-family: 'Outfit', 'Inter', system-ui, sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   scroll-behavior: smooth;
 }
 
 .landing-hero {
-  background: linear-gradient(160deg, #14b8a6 0%, #0f766e 45%, #0a4a46 100%);
+  background: linear-gradient(180deg, #0f766e 0%, #0b5d57 100%);
 }
 
 /* Lane markings rushing toward the viewer: transform-only so it runs on the GPU. */

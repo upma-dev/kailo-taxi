@@ -2234,7 +2234,7 @@ Press Cancel to go back and choose a nearer drop, or OK to book anyway.`,
                     isSelected
                       ? 'border-slate-900 bg-slate-100/80 shadow-[0_6px_20px_rgba(15,23,42,0.12)] ring-1 ring-slate-900/10'
                       : 'border-slate-200/60 bg-white hover:border-slate-300'
-                  } ${!canSelectVehicle ? 'blur-[1.5px] grayscale opacity-70 pointer-events-none' : ''}`}
+                  } ${!canSelectVehicle ? 'opacity-60 pointer-events-none' : ''}`}
                 >
                   <div
                     role={canSelectVehicle ? 'button' : undefined}
@@ -2302,6 +2302,12 @@ Press Cancel to go back and choose a nearer drop, or OK to book anyway.`,
                             )}
                           </div>
 
+                          {isUnavailable && rideMode !== 'schedule' ? (
+                            <p className="mt-1 flex items-center gap-1 text-[11px] font-extrabold text-red-500">
+                              <AlertTriangle size={11} strokeWidth={2.5} />
+                              Vehicle not available near you right now
+                            </p>
+                          ) : (
                           <div className="mt-1 flex items-center gap-2 text-[11px] font-bold flex-wrap">
                             <span className="text-emerald-600 font-extrabold flex items-center gap-1">
                               <Clock size={11} strokeWidth={2.5} />
@@ -2320,7 +2326,8 @@ Press Cancel to go back and choose a nearer drop, or OK to book anyway.`,
                                 </span>
                               </>
                             )}
-                          </div>
+                            </div>
+                          )}
 
                           <p className="mt-0.5 truncate text-[11px] font-medium text-slate-400">
                             {v.sublabel}
