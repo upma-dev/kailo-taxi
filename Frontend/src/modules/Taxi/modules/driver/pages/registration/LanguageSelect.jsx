@@ -33,7 +33,7 @@ const LanguageSelect = () => {
     return (
         <div 
             className="min-h-screen bg-[linear-gradient(180deg,#f6efe4_0%,#fcfaf6_28%,#ffffff_100%)] select-none overflow-x-hidden flex flex-col p-5 pt-8 pb-32"
-            style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}
+            style={{ fontFamily: "'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" }}
         >
             {/* Branding */}
             <div className="mb-6 flex flex-col items-center text-center space-y-4">
@@ -45,7 +45,7 @@ const LanguageSelect = () => {
                     </div>
                 )}
                 <div className="space-y-1">
-                    <h1 className="font-['Outfit'] text-[32px] font-black leading-[1.1] tracking-[-0.04em] text-slate-900">
+                    <h1 className=" text-[32px] font-black leading-[1.1] tracking-[-0.04em] text-slate-900">
                         Select <span className="text-slate-400">Language</span>
                     </h1>
                     <p className="text-[14px] font-bold text-slate-500 opacity-80 max-w-[32ch] mx-auto leading-relaxed">Choose your preferred communication language to get started.</p>

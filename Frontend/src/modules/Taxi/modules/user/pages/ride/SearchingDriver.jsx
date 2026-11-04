@@ -1045,7 +1045,7 @@ const SearchingDriver = () => {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 max-w-lg mx-auto relative font-['Plus_Jakarta_Sans'] overflow-hidden">
+    <div className="min-h-screen bg-slate-50 max-w-lg mx-auto relative overflow-hidden">
       {/* Real Google Map Background */}
       <div className="absolute inset-0 z-0">
         {HAS_VALID_GOOGLE_MAPS_KEY && isLoaded ? (

@@ -217,82 +217,61 @@ const Profile = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 max-w-lg mx-auto pb-28 relative overflow-x-hidden font-['Inter']">
-      {/* Premium Header Background */}
-      <div className="absolute top-0 inset-x-0 h-80 bg-slate-900 overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-indigo-600/30 via-slate-900 to-slate-900" />
-        <div className="absolute top-[-20%] right-[-10%] h-64 w-64 bg-indigo-500/10 rounded-full blur-3xl" />
-        <div className="absolute bottom-0 left-[-5%] h-40 w-40 bg-emerald-500/5 rounded-full blur-2xl" />
-      </div>
-
+    <div className="min-h-screen bg-slate-50 max-w-lg mx-auto pb-24 relative overflow-x-hidden">
       <div className="relative z-10">
         {/* Header Section */}
-        <div className="px-6 pt-12 pb-8">
-          <div className="flex items-center justify-between mb-8">
-            <h1 className="font-['Outfit'] text-2xl font-extrabold text-white tracking-tight">Profile</h1>
+        <div className="px-4 pt-8 pb-3">
+          <div className="flex items-center justify-between mb-4">
+            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Profile</h1>
             <MotionButton
-              whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={() => navigate('/taxi/user/profile/settings')}
-              className="h-10 w-10 rounded-xl bg-white/10 backdrop-blur-md border border-white/10 flex items-center justify-center text-white"
+              className="h-10 w-10 rounded-xl bg-white border border-slate-100 flex items-center justify-center text-slate-700"
             >
               <Settings size={20} />
             </MotionButton>
           </div>
 
-          {/* Profile Hero Card */}
-          <MotionDiv
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="rounded-[32px] bg-white p-6 shadow-2xl shadow-slate-900/20"
-          >
-            <div className="flex items-center gap-5">
-              <div className="relative">
-                <div className="w-20 h-20 rounded-[28px] bg-slate-900 flex items-center justify-center shadow-lg overflow-hidden border-2 border-white">
-                  {profile.profileImage ? (
-                    <img 
-                      src={profile.profileImage} 
-                      alt="User" 
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <span className="text-2xl font-black text-white opacity-40">{initials || 'U'}</span>
-                  )}
-                </div>
-                <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-emerald-500 rounded-lg border-2 border-white flex items-center justify-center shadow-sm">
-                  <Check size={14} className="text-white" strokeWidth={4} />
-                </div>
+          {/* Profile info: plain, same look as the rest of the page */}
+          <div className="flex items-center gap-4">
+            <div className="relative">
+              <div className="w-16 h-16 rounded-2xl bg-slate-900 flex items-center justify-center overflow-hidden">
+                {profile.profileImage ? (
+                  <img src={profile.profileImage} alt="User" className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-xl font-bold text-white opacity-60">{initials || 'U'}</span>
+                )}
               </div>
-              <div className="flex-1 min-w-0">
-                <h2 className="font-['Outfit'] text-[22px] font-extrabold text-slate-900 truncate capitalize leading-tight">
-                  {profile.name}
-                </h2>
-                <p className="text-[14px] font-bold text-slate-400 mt-1 flex items-center gap-1.5">
-                   <Phone size={14} className="text-slate-300" />
-                   {profile.phone ? `+91 ${profile.phone}` : 'Account Active'}
-                </p>
+              <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-emerald-500 rounded-md border-2 border-slate-50 flex items-center justify-center">
+                <Check size={12} className="text-white" strokeWidth={4} />
               </div>
             </div>
+            <div className="flex-1 min-w-0">
+              <h2 className="text-[20px] font-bold text-slate-900 truncate capitalize leading-tight">{profile.name}</h2>
+              <p className="text-[13px] font-medium text-slate-500 mt-1 flex items-center gap-1.5">
+                <Phone size={13} className="text-slate-400" />
+                {profile.phone ? `+91 ${profile.phone}` : 'Account Active'}
+              </p>
+            </div>
+          </div>
 
-            {/* Quick Stats Row */}
-            <div className="grid grid-cols-3 gap-3 mt-8 pt-6 border-t border-slate-50">
-              <div className="text-center">
-                <p className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-300">Total Trips</p>
-                <p className="font-['Outfit'] text-[18px] font-extrabold text-slate-900 mt-1">{profile.stats.trips}</p>
-              </div>
-              <div className="text-center border-x border-slate-50">
-                <p className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-300">Rating</p>
-                <div className="flex items-center justify-center gap-1 mt-1">
-                  <Star size={14} className="text-amber-400 fill-amber-400" />
-                  <p className="font-['Outfit'] text-[18px] font-extrabold text-slate-900">{profile.stats.rating}</p>
-                </div>
-              </div>
-              <div className="text-center">
-                <p className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-300">Credits</p>
-                <p className="font-['Outfit'] text-[18px] font-extrabold text-indigo-600 mt-1">₹{profile.stats.wallet}</p>
+          <div className="grid grid-cols-3 gap-3 mt-3 pt-3 border-t border-slate-200/70">
+            <div className="text-center">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Total Trips</p>
+              <p className="text-[17px] font-bold text-slate-900 mt-1">{profile.stats.trips}</p>
+            </div>
+            <div className="text-center border-x border-slate-200/70">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Rating</p>
+              <div className="flex items-center justify-center gap-1 mt-1">
+                <Star size={14} className="text-amber-400 fill-amber-400" />
+                <p className="text-[17px] font-bold text-slate-900">{profile.stats.rating}</p>
               </div>
             </div>
-          </MotionDiv>
+            <div className="text-center">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Credits</p>
+              <p className="text-[17px] font-bold text-slate-900 mt-1">₹{profile.stats.wallet}</p>
+            </div>
+          </div>
         </div>
 
         {/* Menu Sections */}
@@ -300,30 +279,30 @@ const Profile = () => {
           variants={containerVariants}
           initial="hidden"
           animate="visible"
-          className="px-6 space-y-8"
+          className="px-4 space-y-4"
         >
           {menuSections.map((section, sIdx) => (
-            <motion.div key={sIdx} variants={itemVariants} className="space-y-4">
-              <h3 className="font-['Outfit'] text-[12px] font-black text-slate-400 uppercase tracking-[0.25em] ml-1">
+            <motion.div key={sIdx} variants={itemVariants} className="space-y-2">
+              <h3 className=" text-[12px] font-semibold text-slate-400 uppercase tracking-wider ml-1">
                 {section.title}
               </h3>
               
-              <div className="bg-white rounded-[32px] border border-slate-100 shadow-premium overflow-hidden divide-y divide-slate-50">
+              <div className="bg-white rounded-[24px] border border-slate-100 shadow-premium overflow-hidden divide-y divide-slate-50">
                 {section.items.map((item, iIdx) => (
                   <MotionButton
                     key={iIdx}
                     whileTap={{ backgroundColor: '#F8FAFC' }}
                     onClick={() => navigate(item.path)}
-                    className="w-full flex items-center gap-5 px-6 py-5 text-left transition-colors"
+                    className="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors"
                   >
-                    <div className={`w-11 h-11 rounded-[16px] flex items-center justify-center shrink-0 ${item.bg}`}>
+                    <div className={`w-10 h-10 rounded-[14px] flex items-center justify-center shrink-0 ${item.bg}`}>
                       <item.icon size={20} className={item.color} strokeWidth={2.5} />
                     </div>
                     <div className="flex-1">
                       <p className="text-[15px] font-bold text-slate-900 leading-tight tracking-tight">{item.title}</p>
-                      <p className="text-[12px] font-semibold text-slate-400 mt-1 opacity-80">{item.sub}</p>
+                      <p className="text-[12px] font-semibold text-slate-400 mt-0.5 opacity-80">{item.sub}</p>
                     </div>
-                    <div className="h-8 w-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-200">
+                    <div className="h-7 w-7 rounded-full bg-slate-50 flex items-center justify-center text-slate-200">
                       <ChevronRight size={18} strokeWidth={3} />
                     </div>
                   </MotionButton>
@@ -333,7 +312,7 @@ const Profile = () => {
           ))}
 
           {/* Dangerous Zone */}
-          <motion.div variants={itemVariants} className="pt-4 pb-12 space-y-4">
+          <motion.div variants={itemVariants} className="pt-1 pb-6 space-y-3">
              <LanguageRow className="rounded-[24px] border border-slate-100" />
 
             <MotionButton
@@ -358,7 +337,7 @@ const Profile = () => {
               Sign Out Securely
             </MotionButton>
 
-            <div className="text-center pt-6">
+            <div className="text-center pt-2">
               <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.3em]">
                 Version 2.4.1 • Built with Love
               </p>

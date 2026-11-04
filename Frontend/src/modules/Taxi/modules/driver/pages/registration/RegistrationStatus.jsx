@@ -274,7 +274,7 @@ const getStatusColor = (status) => {
   return (
     <div 
         className="min-h-screen bg-[linear-gradient(180deg,#f6efe4_0%,#fcfaf6_28%,#ffffff_100%)] px-5 pb-10 pt-12 select-none overflow-x-hidden flex flex-col items-center"
-        style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}
+        style={{ fontFamily: "'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" }}
     >
       <header className="mb-10 w-full flex flex-col items-center">
         {appLogo ? (
@@ -305,7 +305,7 @@ const getStatusColor = (status) => {
                 <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 opacity-60">
                     {pendingReverificationDocs.length > 0 ? "Submission received" : isVehicleReapproval ? "Update in review" : "Live Audit Status"}
                 </p>
-                <h1 className="font-['Outfit'] text-[42px] font-black leading-[1] tracking-[-0.04em] text-slate-900">
+                <h1 className=" text-[42px] font-black leading-[1] tracking-[-0.04em] text-slate-900">
                     {rejectedDocs.length > 0 ? (
                         <>Action <span className="text-slate-400">Required</span></>
                     ) : pendingReverificationDocs.length > 0 ? (

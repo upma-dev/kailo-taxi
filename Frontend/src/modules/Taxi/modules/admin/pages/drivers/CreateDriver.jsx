@@ -674,7 +674,7 @@ const CreateDriver = () => {
   return (
     <div
       className="min-h-screen overflow-x-hidden bg-[linear-gradient(180deg,#f6efe4_0%,#fcfaf6_28%,#ffffff_100%)] px-5 pb-24 pt-8 text-slate-900"
-      style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}
+      style={{ fontFamily: "'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" }}
     >
       <div className="mx-auto max-w-5xl space-y-6">
         <div className="flex items-center justify-between gap-4">
@@ -684,7 +684,7 @@ const CreateDriver = () => {
               <ChevronRight size={12} />
               <span className="text-slate-700">Admin Onboarding</span>
             </div>
-            <h1 className="font-['Outfit'] text-4xl font-black tracking-[-0.04em] text-slate-900">
+            <h1 className=" text-4xl font-black tracking-[-0.04em] text-slate-900">
               Create Driver <span className="text-slate-400">With Full Onboarding</span>
             </h1>
             <p className="mt-2 max-w-2xl text-sm font-semibold text-slate-500">

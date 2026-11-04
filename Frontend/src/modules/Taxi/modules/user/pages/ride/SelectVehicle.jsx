@@ -2076,7 +2076,7 @@ Press Cancel to go back and choose a nearer drop, or OK to book anyway.`,
   };
 
   return (
-    <div className="h-[100dvh] bg-slate-50 max-w-lg mx-auto relative font-['Plus_Jakarta_Sans'] overflow-hidden">
+    <div className="h-[100dvh] bg-slate-50 max-w-lg mx-auto relative overflow-hidden">
       <div className="absolute inset-0 w-full bg-gray-200">
         <VehicleMapPreview
           center={pickupPosition}
@@ -2871,7 +2871,7 @@ Press Cancel to go back and choose a nearer drop, or OK to book anyway.`,
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={{ type: 'spring', damping: 26, stiffness: 320 }}
-              className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white rounded-t-[32px] px-6 pt-4 pb-8 z-[101] font-['Plus_Jakarta_Sans']"
+              className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white rounded-t-[32px] px-6 pt-4 pb-8 z-[101]"
             >
               {/* Drag indicator */}
               <div className="w-12 h-1 bg-slate-200 rounded-full mx-auto mb-6" />

@@ -7,7 +7,7 @@ import { ArrowLeft } from 'lucide-react';
 export const Screen = ({ children, footer = null }) => (
   <div
     className="min-h-screen bg-[linear-gradient(180deg,#f6efe4_0%,#fcfaf6_28%,#ffffff_100%)] pb-36"
-    style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}
+    style={{ fontFamily: "'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" }}
   >
     <div className="mx-auto w-full max-w-md px-5 pt-6">{children}</div>
     {footer}
@@ -33,7 +33,7 @@ export const TopBar = ({ title, subtitle, onBack, action = null }) => (
         ) : null}
         <h1
           className="truncate text-[24px] font-black leading-tight tracking-tight text-slate-900"
-          style={{ fontFamily: "'Outfit', 'Plus Jakarta Sans', system-ui, sans-serif" }}
+          style={{ fontFamily: "'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" }}
         >
           {title}
         </h1>
