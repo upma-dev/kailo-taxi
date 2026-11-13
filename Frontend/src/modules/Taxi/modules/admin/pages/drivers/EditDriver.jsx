@@ -284,18 +284,18 @@ const EditDriver = () => {
     (vehicleTypeFallbackOption ? { name: vehicleTypeFallbackOption.label } : null);
   const selectedIsTwoWheeler = selectedVehicleType ? isTwoWheelerVehicle(selectedVehicleType) : false;
   const visibleServiceCategoryOptions = serviceCategoryOptions.filter(
-    (option) => filterServiceCategoriesForVehicle([option.value], selectedIsTwoWheeler ? selectedVehicleType : null).length > 0,
+    (option) => filterServiceCategoriesForVehicle([option.value], selectedVehicleType).length > 0,
   );
 
-  // Two-wheelers can't do Outstation/Pooling, so drop them when the vehicle type is (or becomes) a bike.
+  // Drop the services the vehicle type does not offer (bikes: no Outstation/Pooling; cars: what the admin ticked).
   useEffect(() => {
-    if (!selectedIsTwoWheeler) return;
+    if (!selectedVehicleType) return;
     setFormData((prev) => {
       const filtered = filterServiceCategoriesForVehicle(prev.serviceCategories, selectedVehicleType);
       if (filtered.length === prev.serviceCategories.length) return prev;
       return { ...prev, serviceCategories: filtered.length > 0 ? filtered : ['taxi'] };
     });
-  }, [selectedIsTwoWheeler, formData.vehicleType]);
+  }, [selectedVehicleType, formData.vehicleType]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;

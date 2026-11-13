@@ -1445,6 +1445,9 @@ export const deleteRole = asyncHandler(async (req, res) => {
 export const getAppModules = asyncHandler(async (req, res) =>
   ok(res, await adminService.listAppModules(req.query)),
 );
+export const getPublicAppModules = asyncHandler(async (req, res) =>
+  ok(res, await adminService.listPublicAppModules(req.query)),
+);
 export const createAppModule = asyncHandler(async (req, res) =>
   ok(res, await adminService.createAppModule(req.body)),
 );

@@ -693,7 +693,7 @@ const ParcelSearchingDriver = () => {
           vehicleTypeId: selectedVehicleTypeIds[0],
           vehicleTypeIds: selectedVehicleTypeIds,
           vehicleIconType: selectedVehicleType.icon_types || 'bike',
-          vehicleIconUrl: selectedVehicleType.map_icon || selectedVehicleType.icon || selectedVehicleType.image || '',
+          vehicleIconUrl: selectedVehicleType.map_icon || selectedVehicleType.icon || '',
           paymentMethod: routeState.paymentMethod || 'Cash',
           type: 'parcel',
           parcel: parcelPayload,

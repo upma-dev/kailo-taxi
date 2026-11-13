@@ -33,6 +33,10 @@ const getStaticUserOtpConfig = () => ({
   otp: String(env.sms?.staticOtpCode || TEST_LOGIN_OTP_CODE).trim(),
 });
 const resolveUserOtpForPhone = (phone) => {
+  // Fixed test OTPs are for development only. In production they work only if ALLOW_STATIC_OTP=true is set.
+  if (process.env.NODE_ENV === 'production' && !['1', 'true', 'yes', 'on'].includes(String(process.env.ALLOW_STATIC_OTP || '').trim().toLowerCase())) {
+    return { otp: generateOtp(), isStatic: false };
+  }
   const normalizedPhone = normalizeUserPhone(phone);
   const staticOtpConfig = getStaticUserOtpConfig();
   const defaultOtpEnabled = isTruthy(env.sms?.useDefaultOtp);

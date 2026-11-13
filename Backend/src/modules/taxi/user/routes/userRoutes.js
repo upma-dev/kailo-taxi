@@ -1,6 +1,7 @@
 import { Router } from 'express';
+import { getMyReferralList } from '../../admin/controllers/referralReportController.js';
 import { asyncHandler } from '../../../../utils/asyncHandler.js';
-import { authenticateOrResolveUser } from '../../middlewares/authMiddleware.js';
+import { authenticate, authenticateOrResolveUser } from '../../middlewares/authMiddleware.js';
 import {
   cancelMyBusBooking,
   createBusBookingOrder,
@@ -60,24 +61,25 @@ import {
   payPoolingWithWallet,
   getMyPoolingBookings,
 } from '../controllers/poolingTripController.js';
-import { getAppModules, getGoodsTypes, getPublicRentalVehicleCatalog, getPublicVehicleTypeCatalog } from '../../admin/controllers/adminController.js';
+import { getPublicAppModules, getGoodsTypes, getPublicRentalVehicleCatalog, getPublicVehicleTypeCatalog } from '../../admin/controllers/adminController.js';
 import { triggerUserSosAlert } from '../../safety/controllers/safetyController.js';
+import { requireRentalEnabled } from '../../services/rentalSettingsService.js';
 
 export const userRouter = Router();
 
-userRouter.get('/app-modules', asyncHandler(getAppModules));
+userRouter.get('/app-modules', asyncHandler(getPublicAppModules));
 userRouter.get('/intercity-packages', asyncHandler(getIntercityPackageCatalog));
 userRouter.get('/goods-types', asyncHandler(getGoodsTypes));
 userRouter.get('/vehicle-types', asyncHandler(getPublicVehicleTypeCatalog));
-userRouter.get('/rental-vehicles', asyncHandler(getPublicRentalVehicleCatalog));
+userRouter.get('/rental-vehicles', requireRentalEnabled, asyncHandler(getPublicRentalVehicleCatalog));
 userRouter.get('/service-locations', asyncHandler(listPublicServiceLocations));
 userRouter.get('/service-stores', asyncHandler(listPublicServiceStores));
-userRouter.post('/rental-quote-requests', asyncHandler(createRentalQuoteRequest));
-userRouter.post('/rental-bookings', authenticateOrResolveUser(['user']), asyncHandler(createRentalBookingRequest));
-userRouter.get('/rental-bookings', authenticateOrResolveUser(['user']), asyncHandler(listMyRentalBookings));
-userRouter.get('/rental-bookings/active', authenticateOrResolveUser(['user']), asyncHandler(getMyActiveRentalBooking));
-userRouter.post('/rental-bookings/:id/end', authenticateOrResolveUser(['user']), asyncHandler(endMyActiveRentalRide));
-userRouter.post('/rental-bookings/:id/location', authenticateOrResolveUser(['user']), asyncHandler(updateMyActiveRentalLocation));
+userRouter.post('/rental-quote-requests', requireRentalEnabled, asyncHandler(createRentalQuoteRequest));
+userRouter.post('/rental-bookings', requireRentalEnabled, authenticateOrResolveUser(['user']), asyncHandler(createRentalBookingRequest));
+userRouter.get('/rental-bookings', requireRentalEnabled, authenticateOrResolveUser(['user']), asyncHandler(listMyRentalBookings));
+userRouter.get('/rental-bookings/active', requireRentalEnabled, authenticateOrResolveUser(['user']), asyncHandler(getMyActiveRentalBooking));
+userRouter.post('/rental-bookings/:id/end', requireRentalEnabled, authenticateOrResolveUser(['user']), asyncHandler(endMyActiveRentalRide));
+userRouter.post('/rental-bookings/:id/location', requireRentalEnabled, authenticateOrResolveUser(['user']), asyncHandler(updateMyActiveRentalLocation));
 userRouter.post('/register', asyncHandler(registerUser));
 userRouter.post('/signup', asyncHandler(signupUser));
 userRouter.post('/login', asyncHandler(loginUser));
@@ -86,6 +88,8 @@ userRouter.post('/auth/send-otp', asyncHandler(startUserOtpRequest));
 userRouter.post('/auth/verify-otp', asyncHandler(verifyUserOtpRequest));
 userRouter.post('/otp-login', asyncHandler(verifyUserPhoneForOtpLogin));
 userRouter.get('/me', authenticateOrResolveUser(['user']), asyncHandler(getCurrentUser));
+// Strict login: the referral list must never fall back to a guessed user.
+userRouter.get('/referrals/me', authenticate(['user']), asyncHandler(getMyReferralList('user')));
 userRouter.patch('/me', authenticateOrResolveUser(['user']), asyncHandler(updateCurrentUser));
 userRouter.get('/subscriptions/plans', authenticateOrResolveUser(['user']), asyncHandler(getAvailableSubscriptionPlans));
 userRouter.get('/subscriptions/me', authenticateOrResolveUser(['user']), asyncHandler(getMySubscriptions));
@@ -103,9 +107,9 @@ userRouter.post('/wallet/razorpay/order', authenticateOrResolveUser(['user']), a
 userRouter.post('/wallet/razorpay/verify', authenticateOrResolveUser(['user']), asyncHandler(verifyRazorpayWalletTopup));
 userRouter.post('/wallet/phonepe/order', authenticateOrResolveUser(['user']), asyncHandler(createPhonePeWalletTopupOrder));
 userRouter.get('/wallet/phonepe/status/:merchantTransactionId', authenticateOrResolveUser(['user']), asyncHandler(verifyPhonePeWalletTopup));
-userRouter.post('/rental-advance/razorpay/order', authenticateOrResolveUser(['user']), asyncHandler(createRentalAdvancePaymentOrder));
-userRouter.post('/rental-advance/razorpay/verify', authenticateOrResolveUser(['user']), asyncHandler(verifyRentalAdvancePayment));
-userRouter.post('/rental-advance/wallet', authenticateOrResolveUser(['user']), asyncHandler(payRentalAdvanceWithWallet));
+userRouter.post('/rental-advance/razorpay/order', requireRentalEnabled, authenticateOrResolveUser(['user']), asyncHandler(createRentalAdvancePaymentOrder));
+userRouter.post('/rental-advance/razorpay/verify', requireRentalEnabled, authenticateOrResolveUser(['user']), asyncHandler(verifyRentalAdvancePayment));
+userRouter.post('/rental-advance/wallet', requireRentalEnabled, authenticateOrResolveUser(['user']), asyncHandler(payRentalAdvanceWithWallet));
 userRouter.get('/buses/routes', authenticateOrResolveUser(['user']), asyncHandler(getBusRouteSuggestions));
 userRouter.get('/buses/search', authenticateOrResolveUser(['user']), asyncHandler(searchBuses));
 userRouter.get('/buses/:id/seats', authenticateOrResolveUser(['user']), asyncHandler(getBusSeatLayout));

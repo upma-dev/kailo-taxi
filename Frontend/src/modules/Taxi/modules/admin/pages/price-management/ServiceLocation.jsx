@@ -58,6 +58,8 @@ const ServiceLocation = ({ mode }) => {
   const [saving, setSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeLangTab, setActiveLangTab] = useState('English');
+  // Once the admin types their own name, it is no longer filled in from the country.
+  const [nameEdited, setNameEdited] = useState(false);
   const [formData, setFormData] = useState(defaultFormData);
 
   const fetchData = async () => {
@@ -149,10 +151,17 @@ const ServiceLocation = ({ mode }) => {
       if (isEdit && id) {
         const item = nextLocations.find(l => String(l._id || l.id) === String(id));
         if (item) {
-          const matchedCountry = nextCountries.find(c => (c._id || c.id) === item.country || String(c.name).toLowerCase() === String(typeof item.country === 'object' ? item.country?.name : item.country).toLowerCase());
+          // The saved country can be a name ("India"), an object, or an old numeric id (102 = India).
+          const savedCountry = typeof item.country === 'object' && item.country !== null
+            ? (item.country._id || item.country.id || item.country.name || '')
+            : item.country;
+          const savedCountryName = legacyIdMap[String(savedCountry)]?.name
+            || (typeof item.country === 'object' && item.country !== null ? item.country.name : savedCountry);
+          const matchedCountry = nextCountries.find(c => String(c._id || c.id) === String(savedCountry))
+            || nextCountries.find(c => String(c.name).toLowerCase() === String(savedCountryName || '').toLowerCase());
           setFormData({
             name: item.name || item.service_location_name || '',
-            country: matchedCountry?._id || matchedCountry?.id || item.country || '',
+            country: matchedCountry?._id || matchedCountry?.id || '',
             currency_code: item.currency_code || matchedCountry?.currency_code || '',
             currency_symbol: item.currency_symbol || matchedCountry?.currency_symbol || '',
             timezone: item.timezone || matchedCountry?.timezone || ''
@@ -190,13 +199,15 @@ const ServiceLocation = ({ mode }) => {
       if (matched) {
         setFormData(prev => ({
           ...prev,
+          // A service location is a country, so a new one starts with the country's name (until the admin types one).
+          name: isCreate && !nameEdited && matched.name ? matched.name : prev.name,
           currency_code: matched.currency_code || prev.currency_code,
           currency_symbol: matched.currency_symbol || prev.currency_symbol,
           timezone: prev.timezone || matched.timezone || ''
         }));
       }
     }
-  }, [formData.country, countries]);
+  }, [formData.country, countries, isCreate, nameEdited]);
 
   useEffect(() => { fetchData(); }, [mode, id]);
 
@@ -402,7 +413,7 @@ const ServiceLocation = ({ mode }) => {
                     <label className={labelClass}>Name <span className="text-rose-400">*</span></label>
                     <input 
                        value={formData.name}
-                       onChange={(e) => setFormData(p => ({ ...p, name: e.target.value }))}
+                       onChange={(e) => { setNameEdited(true); setFormData(p => ({ ...p, name: e.target.value })); }}
                        placeholder={`Enter Name in ${activeLangTab}`} 
                        className={inputClass} 
                        required

@@ -8,6 +8,7 @@ import {
   ArrowUpRight
 } from 'lucide-react';
 import api from '../../../../shared/api/axiosInstance';
+import { isRentalSwitchedOn, setRentalEnabled } from '../../../../shared/featureFlags';
 import toast from 'react-hot-toast';
 
 const SectionHeader = ({ title }) => (
@@ -96,6 +97,8 @@ const CustomizationSettings = () => {
           },
         }),
       ]);
+      // The Rental switch takes effect straight away in this panel too.
+      setRentalEnabled(isRentalSwitchedOn(settings));
       toast.success('Customization settings updated successfully!', {
          style: { background: '#1e293b', color: '#fff' }
       });
@@ -173,6 +176,7 @@ const CustomizationSettings = () => {
               <ToggleField label="Enable Driver Loyalty Feature" name="enable_driver_loyalty" value={settings.enable_driver_loyalty} onChange={handleChange} />
               <ToggleField label="Enable Country Restrict on Map" name="enable_country_restrict_on_map" value={settings.enable_country_restrict_on_map} onChange={handleChange} />
               <ToggleField label="Show Owner Module Feature on Mobile App" name="enable_owner_module" value={settings.enable_owner_module} onChange={handleChange} />
+              <ToggleField label="Enable Rental Service (rental vehicles, quote requests and bookings: user app, driver service-center panel and the admin Rental menu)" name="enable_rental" value={settings.enable_rental ?? '1'} onChange={handleChange} />
               <ToggleField label="Show Ride OTP Feature" name="show_ride_otp" value={settings.show_ride_otp} onChange={handleChange} />
               <ToggleField label="Show Delivery Ride Otp On Loading Feature" name="enable_delivery_otp_load" value={settings.enable_delivery_otp_load} onChange={handleChange} />
               <ToggleField label="Show Delivery Ride Otp On Unloading Feature" name="enable_delivery_otp_unload" value={settings.enable_delivery_otp_unload} onChange={handleChange} />

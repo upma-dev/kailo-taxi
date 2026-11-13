@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState, startTransition, Suspense } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { POOLING_ENABLED, RENTAL_ENABLED } from '../../../shared/featureFlags';
+import useRentalEnabled from '../../../shared/hooks/useRentalEnabled';
 import { socketService } from '../../../shared/api/socket';
 import { useSettings } from '../../../shared/context/SettingsContext';
 import { getSupportConversations, markSupportMessagesRead } from '../../shared/chat/chatApi';
@@ -600,6 +601,7 @@ const AdminContentSkeleton = () => (
 );
 
 const AdminLayout = () => {
+  useRentalEnabled(); // the Rental menu follows the Customization setting
   const navigate = useNavigate();
   const location = useLocation();
   const { settings } = useSettings();
@@ -889,7 +891,6 @@ const AdminLayout = () => {
               { label: 'Referral Dashboard', path: '/admin/referrals/dashboard', permission: 'referrals.view' },
               { label: 'User Referral Settings', path: '/admin/referrals/user-settings', permission: 'referrals.view' },
               { label: 'Driver Referral Settings', path: '/admin/referrals/driver-settings', permission: 'referrals.view' },
-              { label: 'Referral Translation', path: '/admin/referrals/translation', permission: 'referrals.view' },
             ],
           },
           { icon: Briefcase, label: 'Owner Management', path: '/admin/owners/dashboard', permission: 'owners.view' },
@@ -956,6 +957,7 @@ const AdminLayout = () => {
                     { label: 'Branding & Colors', path: '/admin/global/branding' },
                     { label: 'Customization', path: '/admin/global/customization' },
                     { label: 'Login Screens', path: '/admin/global/login-screens' },
+                    { label: 'Home Offers', path: '/admin/global/home-offers' },
                     { label: 'Wallet Settings', path: '/admin/global/app/wallet' },
                     { label: 'Tip Settings', path: '/admin/global/app/tip' },
                     { label: 'Go Home Settings', path: '/admin/global/app/go-home' },

@@ -43,24 +43,12 @@ const attachResolvedAuth = (req, payload) => {
   };
 };
 
+// A request without a login token is a guest. It used to be treated as the oldest user in the database (or
+// as any user id sent in an "x-user-id" header / userId field), which let anyone read and change other people's
+// accounts. A guest now has no identity: handlers see `req.auth.sub === null` and return nothing personal.
 const resolveOpenUserIdentity = async (req) => {
-  const explicitUserId =
-    req.headers['x-user-id'] ||
-    req.body?.userId ||
-    req.query?.userId ||
-    req.params?.userId ||
-    null;
-
-  let user = null;
-  try {
-    const query = explicitUserId ? { _id: explicitUserId } : {};
-    user = await User.findOne(query).sort({ createdAt: 1 });
-  } catch (err) {
-    user = null;
-  }
-
   attachResolvedAuth(req, {
-    sub: user ? String(user._id) : null,
+    sub: null,
     role: 'user',
   });
 };

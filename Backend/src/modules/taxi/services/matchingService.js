@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { ApiError } from '../../../utils/ApiError.js';
 import { normalizePoint } from '../../../utils/geo.js';
 import { DISPATCH_TOP_DRIVERS } from '../constants/index.js';
@@ -6,6 +7,8 @@ import { Driver } from '../driver/models/Driver.js';
 import { Zone } from '../driver/models/Zone.js';
 import { getDriverIdsBlockedByUpcomingScheduledRides } from './rideService.js';
 import { applyGoHomeFilter, getGoHomeConfig } from './goHomeService.js';
+import { applyReturnTripFilter } from './returnTripService.js';
+import { filterDriversWithActiveSubscription, getDriverSubscriptionMode } from './driverSubscriptionService.js';
 
 const EARTH_RADIUS_METERS = 6371000;
 
@@ -30,7 +33,7 @@ const normalizeVehicleTypeIds = (vehicleTypeIds = [], vehicleTypeId = null) => {
     values.push(vehicleTypeId);
   }
 
-  return [...new Set(values.map((value) => String(value || '').trim()).filter(Boolean))];
+  return [...new Set(values.map((value) => String(value || '').trim()).filter((id) => mongoose.Types.ObjectId.isValid(id)))];
 };
 
 const TWO_WHEELER_KEYS = ['bike', 'scooter', '2wheeler', '2-wheeler', '2_wheeler', 'two_wheeler', 'twowheeler'];
@@ -321,17 +324,9 @@ const buildGeoNearFilter = (field, coordinates, maxDistance) => ({
   },
 });
 
-const getDispatchAnchorCoordinates = (driver = {}) => {
-  const routeCoordinates = Array.isArray(driver?.routeBooking?.anchorLocation?.coordinates)
-    ? driver.routeBooking.anchorLocation.coordinates
-    : [];
-
-  if (driver?.routeBooking?.enabled && routeCoordinates.length === 2) {
-    return routeCoordinates;
-  }
-
-  return Array.isArray(driver?.location?.coordinates) ? driver.location.coordinates : [];
-};
+// Drivers are always matched from their live location. (The old "My Route Booking" fixed point is gone.)
+const getDispatchAnchorCoordinates = (driver = {}) =>
+  (Array.isArray(driver?.location?.coordinates) ? driver.location.coordinates : []);
 
 const sortDriversByDispatchAnchorDistance = (drivers = [], pickupCoords) =>
   [...drivers]
@@ -370,33 +365,16 @@ const findDriversForZone = async ({
     incompatibleVehicleTypeIds,
   });
   const selectedFields =
-    'name phone socketId vehicleTypeId vehicleType vehicleIconType vehicleNumber vehicleColor vehicleMake vehicleModel rating ratingCount location zoneId isOnline isOnRide routeBooking goHome serviceCategories registerFor';
+    'name phone socketId vehicleTypeId vehicleType vehicleIconType vehicleNumber vehicleColor vehicleMake vehicleModel rating ratingCount location zoneId isOnline isOnRide goHome returnTrip serviceCategories registerFor';
 
-  const [liveLocationDrivers, routeBookingDrivers] = await Promise.all([
-    Driver.find({
-      ...commonFilters,
-      'routeBooking.enabled': { $ne: true },
-      ...buildGeoNearFilter('location', coordinates, effectiveMaxDistance),
-    })
-      .limit(limit)
-      .select(selectedFields),
-    Driver.find({
-      ...commonFilters,
-      'routeBooking.enabled': true,
-      'routeBooking.anchorLocation': { $ne: null },
-      'routeBooking.anchorLocation.coordinates.1': { $exists: true },
-      ...buildGeoNearFilter('routeBooking.anchorLocation', coordinates, effectiveMaxDistance),
-    })
-      .limit(limit)
-      .select(selectedFields),
-  ]);
+  const liveLocationDrivers = await Driver.find({
+    ...commonFilters,
+    ...buildGeoNearFilter('location', coordinates, effectiveMaxDistance),
+  })
+    .limit(limit)
+    .select(selectedFields);
 
-  return sortDriversByDispatchAnchorDistance(
-    [...liveLocationDrivers, ...routeBookingDrivers].filter(
-      (driver, index, items) => items.findIndex((item) => String(item._id) === String(driver._id)) === index,
-    ),
-    coordinates,
-  ).slice(0, limit);
+  return sortDriversByDispatchAnchorDistance(liveLocationDrivers, coordinates).slice(0, limit);
 };
 
 export const matchDrivers = async (pickupCoords, options = {}) => {
@@ -438,6 +416,12 @@ export const matchDrivers = async (pickupCoords, options = {}) => {
   );
   drivers = drivers.filter((driver) => !blockedDriverIds.has(String(driver?._id || '')));
 
+  // Subscription-only mode: a driver whose plan ran out while online does not get rides.
+  if (drivers.length && (await getDriverSubscriptionMode()) === 'subscriptionOnly') {
+    const subscribed = await filterDriversWithActiveSubscription(drivers.map((driver) => driver._id));
+    drivers = drivers.filter((driver) => subscribed.has(String(driver._id)));
+  }
+
   if (drivers.length === 0 && zone?._id) {
     drivers = await findDriversForZone({
       zoneId: undefined,
@@ -461,6 +445,11 @@ export const matchDrivers = async (pickupCoords, options = {}) => {
   // Drivers in Go Home mode only get rides on their way home.
   if (drivers.some((driver) => driver?.goHome?.active)) {
     drivers = applyGoHomeFilter(drivers, { pickupCoords: coordinates, dropCoords }, await getGoHomeConfig());
+  }
+
+  // Drivers on an outstation Return Trip only get outstation rides heading back home.
+  if (drivers.some((driver) => driver?.returnTrip?.active)) {
+    drivers = applyReturnTripFilter(drivers, { serviceType, pickupCoords: coordinates, dropCoords });
   }
 
   if (drivers.length === 0) {

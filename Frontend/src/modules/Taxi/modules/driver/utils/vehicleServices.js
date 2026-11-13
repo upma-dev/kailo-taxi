@@ -13,7 +13,18 @@ export const isTwoWheelerVehicle = (vehicle = {}) => {
 
 export const FOUR_WHEELER_ONLY_CATEGORIES = ['outstation', 'pooling'];
 
+// Which of the given service categories a driver of this vehicle may choose.
+//  - two-wheelers: Ride and Parcel only;
+//  - four-wheelers: Outstation and Pooling are what the admin ticked on the vehicle type
+//    (Admin -> Vehicle Type -> "Also available for"). A vehicle type the admin has not configured yet
+//    (no `extra_services`) keeps every service available.
 export const filterServiceCategoriesForVehicle = (categories = [], vehicle = null) => {
-  if (!vehicle || !isTwoWheelerVehicle(vehicle)) return categories;
-  return categories.filter((item) => !FOUR_WHEELER_ONLY_CATEGORIES.includes(item));
+  if (!vehicle) return categories;
+  if (isTwoWheelerVehicle(vehicle)) {
+    return categories.filter((item) => !FOUR_WHEELER_ONLY_CATEGORIES.includes(item));
+  }
+  if (Array.isArray(vehicle.extra_services)) {
+    return categories.filter((item) => !FOUR_WHEELER_ONLY_CATEGORIES.includes(item) || vehicle.extra_services.includes(item));
+  }
+  return categories;
 };

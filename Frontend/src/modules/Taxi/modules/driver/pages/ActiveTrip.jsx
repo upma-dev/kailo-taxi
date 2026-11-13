@@ -855,10 +855,8 @@ const ActiveTrip = () => {
         effectiveState.vehicleIconUrl ||
         liveRaw.map_icon ||
         liveRaw.icon ||
-        liveRaw.image ||
         effectiveState.map_icon ||
         effectiveState.icon ||
-        effectiveState.image ||
         ''
     ).trim();
     // With no custom icon, show the right kind of vehicle (a bike must never appear as a car).
@@ -1691,6 +1689,8 @@ const ActiveTrip = () => {
         explicitDriverEarnings: liveRaw?.driverEarnings ?? effectiveState?.driverEarnings,
     });
     const collectibleFareLabel = formatCurrencyAmount(totalFareAmount);
+    // The rider's subscription already paid for this ride: the driver must not collect money.
+    const isSubscriptionCoveredRide = Boolean(liveRaw?.subscriptionUsage?.covered || effectiveState?.subscriptionUsage?.covered);
     const parcelPayer = String(
         (livePayerOverride && String(livePayerOverride.rideId) === String(rideId) ? livePayerOverride.payer : '')
         || liveRaw?.parcel?.payer
@@ -1974,6 +1974,19 @@ const ActiveTrip = () => {
             }
         } catch {
             // Keep going with the socket publish so the trip can still complete in transient API failure cases.
+        }
+
+        // The driver's star rating of the rider (saved on the ride, averaged on the rider's profile).
+        if (rideId && selectedRating >= 1) {
+            try {
+                await api.post(
+                    `/rides/${rideId}/rider-rating`,
+                    { rating: selectedRating },
+                    withDriverAuthorization(getLocalDriverToken()),
+                );
+            } catch {
+                // Already rated or offline: never block the driver from finishing the trip.
+            }
         }
 
         publishRideStatus('completed', paymentMode);
@@ -3194,7 +3207,28 @@ const ActiveTrip = () => {
                                     </div>
                                 </div>
                             </div>
-                            {driverPaymentStatus === 'pending' && (
+                            {isSubscriptionCoveredRide && (
+                                <div className="mb-6 rounded-3xl border border-emerald-100 bg-emerald-50/80 p-5 text-center shadow-lg">
+                                    <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl text-white shadow-lg" style={{ backgroundColor: routeStrokeColor }}>
+                                        <Check size={26} strokeWidth={3} />
+                                    </div>
+                                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">Paid by rider's subscription</p>
+                                    <p className="mt-2 text-[15px] font-black text-slate-900">Do not collect any money from the {paymentCollectionLabel}</p>
+                                    <p className="mt-1 text-[11px] font-bold text-slate-500">Your earning for this trip is added to your wallet automatically.</p>
+                                    <button
+                                        type="button"
+                                        onClick={async () => {
+                                            await completeRideForUserSync('online');
+                                            setPhase('review');
+                                        }}
+                                        className="mt-4 w-full rounded-xl py-3 text-[11px] font-black uppercase tracking-[0.16em] text-white shadow-lg"
+                                        style={{ backgroundColor: routeStrokeColor, boxShadow: `0 16px 28px ${routeAccentMuted}` }}
+                                    >
+                                        Complete trip
+                                    </button>
+                                </div>
+                            )}
+                            {!isSubscriptionCoveredRide && driverPaymentStatus === 'pending' && (
                                 <div className="grid grid-cols-2 gap-3 mb-6">
                                     {[
                                         { id: 'cash', label: 'Cash', icon: Banknote },
@@ -3269,6 +3303,7 @@ const ActiveTrip = () => {
                                 <button onClick={() => setDriverPaymentStatus('success')} className="w-full py-3 bg-white/10 text-white rounded-xl text-[10px] font-semibold uppercase tracking-wide border border-white/5">Confirm Received</button>
                             </motion.div>
                             )}
+                            {!isSubscriptionCoveredRide && (
                             <motion.button
                                 whileTap={{ scale: 0.96 }}
                                 disabled={driverPaymentStatus !== 'success' || selectedPaymentMode === 'cash'}
@@ -3286,6 +3321,7 @@ const ActiveTrip = () => {
                                         ? 'Finalize Earnings'
                                         : 'Waiting...'} <ChevronRight size={18} strokeWidth={3} />
                             </motion.button>
+                            )}
                         </motion.div>
                     )}
 
@@ -3298,7 +3334,8 @@ const ActiveTrip = () => {
                         >
                             <div className="mb-8 space-y-4">
                                 <div className="w-12 h-12 rounded-xl flex items-center justify-center mx-auto shadow-lg" style={{ backgroundColor: routeStrokeColor }}><User size={24} className="text-white" /></div>
-                                <h3 className="text-xl font-semibold text-slate-900 uppercase tracking-tight">Rate Experience</h3>
+                                <h3 className="text-xl font-semibold text-slate-900 uppercase tracking-tight">Rate the rider</h3>
+                                <p className="text-[12px] font-medium text-slate-400">How was this rider? Tap the stars (optional).</p>
                                 <div className="flex justify-center gap-2">
                                     {[1, 2, 3, 4, 5].map((score) => (
                                         <Star

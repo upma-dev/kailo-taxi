@@ -7,6 +7,7 @@ import { userModuleRouter } from '../user/routes/index.js';
 import { commonRouter } from '../common/routes/commonRoutes.js';
 import { cmsRouter } from '../cms/routes/cmsRoutes.js';
 import { loginBannersRouter } from '../loginBanners/loginBannerRoutes.js';
+import { homeOffersRouter } from '../homeOffers/homeOfferRoutes.js';
 import { webhookRouter } from './webhookRoutes.js';
 
 export const taxiRouter = Router();
@@ -14,6 +15,7 @@ export const taxiRouter = Router();
 taxiRouter.use(webhookRouter);
 taxiRouter.use(cmsRouter);
 taxiRouter.use(loginBannersRouter);
+taxiRouter.use(homeOffersRouter);
 taxiRouter.use(chatModuleRouter);
 taxiRouter.use(adminModuleRouter);
 taxiRouter.use(userModuleRouter);

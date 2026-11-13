@@ -25,13 +25,16 @@ import {
     Check,
     MapPin,
     TrendingUp,
-    Home
+    Home,
+    Undo2,
+    X
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import DriverBottomNav from '../../shared/components/DriverBottomNav';
 import { clearDriverAuthState, getCurrentDriver, getLocalDriverToken, setDriverOffline, updateDriverProfile } from '../services/registrationService';
 import api from '../../../shared/api/axiosInstance';
 import LanguageRow from '@/shared/language/LanguageRow'
+import { useReturnTrip } from '../components/ReturnTripCard';
 
 const unwrapDriver = (response) => response?.data?.data || response?.data || response || null;
 const ROUTE_BOOKING_STORAGE_KEY = 'driver_route_booking_preferences';
@@ -84,6 +87,8 @@ const DriverProfile = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState('');
     const [routeBookingBusy, setRouteBookingBusy] = useState(false);
+    const [infoItem, setInfoItem] = useState(null);
+    const returnTrip = useReturnTrip();
     const [preferenceBusy, setPreferenceBusy] = useState(false);
     const role = localStorage.getItem('role') || 'driver';
     const isOwner = role === 'owner';
@@ -287,6 +292,13 @@ const DriverProfile = () => {
         );
     };
 
+    const returnTripState = returnTrip.state;
+    const returnTripSubtitle = returnTripState?.active
+        ? `On · going back to ${String(returnTripState.homeLabel || 'home').split(',')[0]}`
+        : returnTripState?.offer
+            ? `Available: ${String(returnTripState.offer.fromLabel || '').split(',')[0]} → ${String(returnTripState.offer.homeLabel || '').split(',')[0]}`
+            : 'Off · available after a one-way outstation ride';
+
     const sections = [
         ...(isOwner ? [{
             title: 'Fleet Management',
@@ -300,9 +312,11 @@ const DriverProfile = () => {
                     items: [
                 { id: 'personal', label: 'Personal Information', sub: driverPhone, icon: <User size={20} />, path: `${routePrefix}/edit-profile` },
                 ...(!isOwner ? [
-                    { id: 'address', label: 'Saved Address', sub: driver?.savedAddress || 'Add your home / base address', icon: <MapPin size={20} />, path: `${routePrefix}/edit-profile` },
+                    { id: 'address', label: 'Saved Address', sub: driver?.savedAddress || 'Add your home / base address', icon: <MapPin size={20} />, path: `${routePrefix}/edit-profile`,
+                      info: 'Your home or base address. It is kept on your profile for reference. To get rides on your way home, set your home inside Go Home.' },
                 ] : []),
-                { id: 'wallet', label: 'Wallet', icon: <Wallet size={20} />, path: `${routePrefix}/wallet` },
+                { id: 'wallet', label: 'Wallet', icon: <Wallet size={20} />, path: `${routePrefix}/wallet`,
+                  info: 'Your earnings and the commission you owe. On cash rides the commission is taken from this wallet. If the balance goes below the minimum, or your cash in hand goes over the cash limit, you can not go online until you top up.' },
                 ...(!isOwner ? [
                     { id: 'vehicle', label: 'My Vehicle', icon: <Car size={20} />, path: `${routePrefix}/vehicle-fleet` },
                 ] : []),
@@ -314,17 +328,24 @@ const DriverProfile = () => {
         {
             title: 'Benefits',
             items: [
-                { id: 'refer', label: 'Refer & Earn', icon: <Gift size={20} />, path: `${routePrefix}/referral` },
-                { id: 'incentives', label: 'Incentives', icon: <BadgePercent size={20} />, path: `${routePrefix}/incentives` },
-                ...(!isOwner ? [{ id: 'goHome', label: 'Go Home', sub: 'Get rides on your way home', icon: <Home size={20} />, path: `${routePrefix}/go-home` }] : []),
-                { id: 'sos', label: 'Emergency SOS', icon: <Shield size={20} />, path: `${routePrefix}/security` },
+                { id: 'refer', label: 'Refer & Earn', icon: <Gift size={20} />, path: `${routePrefix}/referral`,
+                  info: 'Share your referral code with other drivers or riders. When they join with your code and complete the required rides, the referral reward is added to your wallet.' },
+                ...(!isOwner ? [{ id: 'subscription', label: 'Subscription', sub: 'Plans that waive ride commission', icon: <CreditCard size={20} />, path: `${routePrefix}/subscription`,
+                  info: 'Plans set by the admin. Depending on the admin setting, you either need an active plan to go online, or a plan is optional. While a plan runs, no commission is taken from your rides. You pay for a plan from your wallet; a plan bought while another runs starts when that one ends.' }] : []),
+                { id: 'incentives', label: 'Incentives', icon: <BadgePercent size={20} />, path: `${routePrefix}/incentives`,
+                  info: 'Bonus targets set by the admin, for example "complete 10 rides today" or "stay online for 6 hours". Reach a target and claim the reward; it is added to your wallet.' },
+                ...(!isOwner ? [{ id: 'goHome', label: 'Go Home', sub: 'Get rides on your way home', icon: <Home size={20} />, path: `${routePrefix}/go-home`,
+                  info: 'For the end of your day in the city. Set your home once and switch Go Home on: you only get rides whose drop takes you closer to home, along your route. It turns off by itself when you reach home or the time runs out, and can be used a limited number of times a day.' }] : []),
+                ...(!isOwner ? [{ id: 'returnTrip', label: 'Return Trip (Outstation)', sub: returnTripSubtitle, icon: <Undo2 size={20} />, type: 'returnTrip',
+                  info: 'For outstation drivers. After a one-way outstation ride (for example Indore → Bhopal), switch Return Trip on to get only outstation rides that start near you and go back towards where your trip began (Bhopal → Indore). City rides are not sent to you while it is on. It turns off by itself when you are back home or after a few hours.' }] : []),
+                { id: 'sos', label: 'Emergency SOS', icon: <Shield size={20} />, path: `${routePrefix}/security`,
+                  info: 'Add trusted emergency contacts. During a ride, the SOS button shares your live location and ride details with them and with the support team.' },
             ]
         },
         {
             title: 'Preferences',
             items: [
                 { id: 'languages', label: 'App Language', icon: <Languages size={20} />, path: `${routePrefix}/lang-select`, state: { allowAuthenticated: true } },
-                { id: 'routeBooking', label: 'My Route Booking', sub: routeBookingSubtitle, icon: <Route size={20} />, type: 'toggle' },
             ]
         },
         {
@@ -497,8 +518,14 @@ const DriverProfile = () => {
                             {section.items.map((item) => (
                                 <motion.div 
                                     key={item.id}
-                                    whileTap={item.type !== 'toggle' ? { backgroundColor: '#F8F9FA' } : {}}
-                                    onClick={() => item.path && navigate(item.path, item.state ? { state: item.state } : undefined)}
+                                    whileTap={{ backgroundColor: '#F8F9FA' }}
+                                    onClick={() => {
+                                        if (item.info) {
+                                            setInfoItem(item);
+                                            return;
+                                        }
+                                        if (item.path) navigate(item.path, item.state ? { state: item.state } : undefined);
+                                    }}
                                     className="flex items-center justify-between px-6 py-4 group cursor-pointer border-b border-slate-50/50"
                                 >
                                     <div className="flex items-center gap-5">
@@ -547,6 +574,59 @@ const DriverProfile = () => {
             <DriverBottomNav />
 
             <AnimatePresence>
+                {infoItem && (
+                    <div className="fixed inset-0 z-[200] flex items-end justify-center bg-black/45 backdrop-blur-sm" onClick={() => setInfoItem(null)}>
+                        <motion.div
+                            initial={{ y: 40, opacity: 0 }}
+                            animate={{ y: 0, opacity: 1 }}
+                            exit={{ y: 40, opacity: 0 }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="w-full max-w-md rounded-t-[28px] bg-white px-6 pb-8 pt-5 shadow-2xl"
+                        >
+                            <div className="flex items-start justify-between gap-3">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">{infoItem.icon}</div>
+                                    <h3 className="text-[17px] font-bold text-slate-900">{infoItem.label}</h3>
+                                </div>
+                                <button type="button" onClick={() => setInfoItem(null)} className="text-slate-300" aria-label="Close">
+                                    <X size={20} />
+                                </button>
+                            </div>
+                            <p className="mt-4 text-[13px] font-medium leading-relaxed text-slate-600">{infoItem.info}</p>
+
+                            {infoItem.type === 'returnTrip' ? (
+                                <div className="mt-5 space-y-3">
+                                    <div className="rounded-2xl bg-slate-50 px-4 py-3 text-[12px] font-semibold text-slate-600">
+                                        {returnTripSubtitle}
+                                    </div>
+                                    {returnTrip.state?.active ? (
+                                        <button type="button" onClick={returnTrip.stop} disabled={returnTrip.busy}
+                                            className="h-12 w-full rounded-2xl bg-slate-900 text-[13px] font-bold text-white disabled:opacity-60">
+                                            Stop Return Trip
+                                        </button>
+                                    ) : (
+                                        <button type="button" onClick={returnTrip.start} disabled={returnTrip.busy || !returnTrip.state?.offer}
+                                            className="h-12 w-full rounded-2xl bg-amber-500 text-[13px] font-bold text-white disabled:opacity-50">
+                                            Turn on Return Trip
+                                        </button>
+                                    )}
+                                </div>
+                            ) : (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const target = infoItem;
+                                        setInfoItem(null);
+                                        navigate(target.path, target.state ? { state: target.state } : undefined);
+                                    }}
+                                    className="mt-6 h-12 w-full rounded-2xl bg-slate-900 text-[13px] font-bold text-white"
+                                >
+                                    Open {infoItem.label}
+                                </button>
+                            )}
+                        </motion.div>
+                    </div>
+                )}
                 {isLogoutOpen && (
                     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/45 px-5 backdrop-blur-sm">
                         <motion.div

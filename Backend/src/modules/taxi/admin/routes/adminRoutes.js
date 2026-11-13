@@ -231,6 +231,9 @@ import {
   updateOwnerPayoutSettingsController,
 } from '../controllers/ownerPayoutController.js';
 import { promotionsRouter } from '../promotions/routes/index.js';
+import { adminGetReferralDetails, adminListReferrals } from '../controllers/referralReportController.js';
+import { adminDeleteSubscriptionPlan, adminGetDriverSubscriptions, adminUpdateSubscriptionPlan } from '../controllers/subscriptionManageController.js';
+import { asyncHandler as referralAsync } from '../../../../utils/asyncHandler.js';
 import { listSafetyAlerts, resolveSafetyAlert } from '../../safety/controllers/safetyController.js';
 
 export const adminRouter = Router();
@@ -319,6 +322,10 @@ adminRouter.get('/admin/driver-subscriptions/settings', getSubscriptionSettings)
 adminRouter.post('/admin/driver-subscriptions/settings', updateSubscriptionSettings);
 adminRouter.get('/admin/user-subscriptions/plans/list', getCustomerSubscriptionPlans);
 adminRouter.post('/admin/user-subscriptions/plans/create', createCustomerSubscriptionPlan);
+// Edit / switch off / delete a user or driver plan, and a driver's plan history.
+adminRouter.patch('/admin/subscription-plans/:id', referralAsync(adminUpdateSubscriptionPlan));
+adminRouter.delete('/admin/subscription-plans/:id', referralAsync(adminDeleteSubscriptionPlan));
+adminRouter.get('/admin/drivers/:id/subscriptions', referralAsync(adminGetDriverSubscriptions));
 
 adminRouter.get('/countries', getCountries);
 adminRouter.post('/admin/service-locations', createServiceLocation);
@@ -417,6 +424,8 @@ adminRouter.patch('/admin/referrals/translation/:languageCode', updateReferralTr
 adminRouter.get('/admin/referrals/settings/:type', getReferralSettings);
 adminRouter.patch('/admin/referrals/settings/:type', updateReferralSettings);
 adminRouter.get('/admin/referral/dashboard', getReferralDashboard);
+adminRouter.get('/admin/referrals/list', referralAsync(adminListReferrals));
+adminRouter.get('/admin/referrals/people/:kind/:id', referralAsync(adminGetReferralDetails));
 
 adminRouter.get('/admin/dashboard/data', getDashboardData);
 

@@ -39,7 +39,7 @@ const LOCATION_COORDS = {
 
 const getCoords = (title, fallback = [75.8577, 22.7196]) => LOCATION_COORDS[title] || fallback;
 const DEFAULT_COORDS = [75.8577, 22.7196];
-const sanitizeLocationInput = (value) => String(value || '').replace(/^\s+/g, '').replace(/\s{2,}/g, ' ');
+const sanitizeLocationInput = (value) => String(value || '').replace(/^\s+/g, '');
 
 const calculateHaversineDistance = (coords1, coords2, useRoadFactor = true) => {
   if (!coords1 || !coords2) return null;
@@ -412,19 +412,26 @@ const SelectLocation = () => {
 
   const query = getQuery();
   const localSearchResults = useMemo(() => {
-    if (query.trim().length >= 3) {
-      return [];
+    const q = query.trim().toLowerCase();
+    if (!q) {
+      return popularLocations;
     }
 
-    if (query.trim().length >= 1) {
-      return popularLocations.filter(
-        (result) =>
-          result.title.toLowerCase().includes(query.toLowerCase())
-          || result.address.toLowerCase().includes(query.toLowerCase()),
-      );
-    }
+    const fromPopular = popularLocations.filter(
+      (result) =>
+        result.title.toLowerCase().includes(q)
+        || result.address.toLowerCase().includes(q),
+    );
 
-    return popularLocations;
+    const fromKnown = Object.entries(LOCATION_COORDS)
+      .filter(([title]) => title.toLowerCase().includes(q))
+      .map(([title, coords]) => ({
+        title,
+        address: `${title}, Indore`,
+        coords,
+      }));
+
+    return [...fromPopular, ...fromKnown];
   }, [query, popularLocations]);
 
   useEffect(() => {
@@ -484,8 +491,17 @@ const SelectLocation = () => {
   }, [isLoaded, popularAnchorCoords]);
 
   useEffect(() => {
-    if (!query.trim() || query.trim().length < 3 || !HAS_VALID_GOOGLE_MAPS_KEY || !autocompleteServiceRef.current) {
+    if (!query.trim() || query.trim().length < 3 || !HAS_VALID_GOOGLE_MAPS_KEY) {
       setRemoteResults([]);
+      setIsSearchingLocations(false);
+      return;
+    }
+
+    if (!autocompleteServiceRef.current && window.google?.maps?.places?.AutocompleteService) {
+      autocompleteServiceRef.current = new window.google.maps.places.AutocompleteService();
+    }
+
+    if (!autocompleteServiceRef.current) {
       setIsSearchingLocations(false);
       return;
     }
@@ -511,18 +527,17 @@ const SelectLocation = () => {
         sessionToken: getAutocompleteSessionToken(),
       };
 
-      if (window.google?.maps?.LatLng && Array.isArray(pickupCoords) && pickupCoords.length === 2) {
-        request.location = new window.google.maps.LatLng(pickupCoords[1], pickupCoords[0]);
+      if (window.google?.maps?.LatLng && Array.isArray(pickupCoords) && pickupCoords.length === 2 && Number.isFinite(pickupLat) && Number.isFinite(pickupLng)) {
+        const center = new window.google.maps.LatLng(pickupLat, pickupLng);
+        request.location = center;
         request.radius = 50000;
-        request.origin = new window.google.maps.LatLng(pickupCoords[1], pickupCoords[0]);
-        // A radius is only a hint, so a same-named place in another city used to win (e.g. a school 580 km
-        // away). Restrict city bookings to the area around the pickup (about 100 km each way).
-        request.locationRestriction = {
-          north: pickupLat + 0.9,
-          south: pickupLat - 0.9,
-          east: pickupLng + 0.9,
-          west: pickupLng - 0.9,
-        };
+        request.origin = center;
+        if (window.google?.maps?.Circle) {
+          request.locationBias = new window.google.maps.Circle({
+            center,
+            radius: 50000,
+          });
+        }
       }
 
       autocompleteServiceRef.current.getPlacePredictions(request, (predictions = [], status) => {
@@ -541,45 +556,27 @@ const SelectLocation = () => {
           setRemoteResults(nextResults);
           setIsSearchingLocations(false);
         } else {
-          // OpenStreetMap Nominatim Fallback search so query never says "no nearby location"
-          const nominatimBox = Number.isFinite(pickupLat) && Number.isFinite(pickupLng) && (pickupLat || pickupLng)
-            ? `&viewbox=${pickupLng - 0.9},${pickupLat + 0.9},${pickupLng + 0.9},${pickupLat - 0.9}&bounded=1`
-            : '';
-          fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query.trim())}&countrycodes=in&limit=6${nominatimBox}`)
-            .then((res) => res.json())
-            .then((data) => {
-              if (latestSearchRef.current !== requestId) return;
-              const fallbackResults = (Array.isArray(data) ? data : []).map((item) => ({
-                title: item.display_name?.split(',')[0] || item.name || 'Location',
-                address: item.display_name,
-                coords: [parseFloat(item.lon), parseFloat(item.lat)],
-              }));
-              searchCacheRef.current.set(cacheKey, fallbackResults);
-              setRemoteResults(fallbackResults);
-            })
-            .catch(() => {
-              if (latestSearchRef.current === requestId) setRemoteResults([]);
-            })
-            .finally(() => {
-              if (latestSearchRef.current === requestId) setIsSearchingLocations(false);
-            });
+          if (latestSearchRef.current === requestId) {
+            setRemoteResults([]);
+            setIsSearchingLocations(false);
+          }
         }
       });
-    }, 350);
+    }, 300);
 
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [query, pickupCoords]);
+  }, [query, pickupCoords, isLoaded]);
 
   // Batch resolve real Google Maps driving road distances for visible results
   useEffect(() => {
     if (!isLoaded || !window.google?.maps?.DistanceMatrixService || !pickupCoords || !Array.isArray(pickupCoords) || pickupCoords.length !== 2) {
-      return;
+      return undefined;
     }
 
     const [pickupLng, pickupLat] = pickupCoords;
-    if (!Number.isFinite(pickupLat) || !Number.isFinite(pickupLng)) return;
+    if (!Number.isFinite(pickupLat) || !Number.isFinite(pickupLng)) return undefined;
 
     const allResults = [...remoteResults, ...localSearchResults];
     const seen = new Set();
@@ -590,7 +587,7 @@ const SelectLocation = () => {
       return true;
     }).slice(0, 10);
 
-    if (candidateResults.length === 0) return;
+    if (candidateResults.length === 0) return undefined;
 
     const uncalculated = [];
     candidateResults.forEach((res) => {
@@ -601,56 +598,76 @@ const SelectLocation = () => {
       }
     });
 
-    if (uncalculated.length === 0) return;
+    if (uncalculated.length === 0) return undefined;
 
-    const origin = new window.google.maps.LatLng(pickupLat, pickupLng);
-    const destinations = uncalculated.map((res) => {
-      if (res.coords && Array.isArray(res.coords) && res.coords.length === 2 && Number.isFinite(res.coords[0]) && Number.isFinite(res.coords[1])) {
-        return new window.google.maps.LatLng(res.coords[1], res.coords[0]);
-      }
-      if (res.placeId) {
-        return { placeId: res.placeId };
-      }
-      return res.address || res.title;
-    });
+    const debounceTimer = window.setTimeout(() => {
+      const origin = new window.google.maps.LatLng(pickupLat, pickupLng);
+      const destinations = uncalculated.map((res) => {
+        if (res.coords && Array.isArray(res.coords) && res.coords.length === 2 && Number.isFinite(res.coords[0]) && Number.isFinite(res.coords[1])) {
+          return new window.google.maps.LatLng(res.coords[1], res.coords[0]);
+        }
+        if (res.placeId) {
+          return { placeId: res.placeId };
+        }
+        return res.address || res.title;
+      });
 
-    try {
-      const matrixService = new window.google.maps.DistanceMatrixService();
-      matrixService.getDistanceMatrix(
-        {
-          origins: [origin],
-          destinations,
-          travelMode: window.google.maps.TravelMode.DRIVING,
-        },
-        (response, status) => {
-          if (status === 'OK' && response?.rows?.[0]?.elements) {
-            const elements = response.rows[0].elements;
-            const newEntries = {};
-            elements.forEach((elem, idx) => {
-              if (elem?.status === 'OK' && elem?.distance?.value != null) {
+      try {
+        const matrixService = new window.google.maps.DistanceMatrixService();
+        matrixService.getDistanceMatrix(
+          {
+            origins: [origin],
+            destinations,
+            travelMode: window.google.maps.TravelMode.DRIVING,
+          },
+          (response, status) => {
+            if (status === 'OK' && response?.rows?.[0]?.elements) {
+              const elements = response.rows[0].elements;
+              const newEntries = {};
+              elements.forEach((elem, idx) => {
                 const item = uncalculated[idx];
                 if (!item) return;
                 const itemKey = item.placeId || `${item.title}|${item.address}`;
                 const cacheKey = `${pickupLat.toFixed(4)},${pickupLng.toFixed(4)}->${itemKey}`;
-                const distKm = Math.round((elem.distance.value / 1000) * 10) / 10;
-                const entry = {
-                  distanceKm: distKm,
-                  distanceMeters: elem.distance.value,
-                  distanceText: elem.distance.text,
-                };
-                distanceMatrixCacheRef.current.set(cacheKey, entry);
-                newEntries[itemKey] = distKm;
+
+                if (elem?.status === 'OK' && elem?.distance?.value != null) {
+                  const distKm = Math.round((elem.distance.value / 1000) * 10) / 10;
+                  const entry = {
+                    distanceKm: distKm,
+                    distanceMeters: elem.distance.value,
+                    distanceText: elem.distance.text,
+                  };
+                  distanceMatrixCacheRef.current.set(cacheKey, entry);
+                  newEntries[itemKey] = distKm;
+                } else {
+                  distanceMatrixCacheRef.current.set(cacheKey, { distanceKm: null });
+                }
+              });
+              if (Object.keys(newEntries).length > 0) {
+                setRoadDistances((prev) => ({ ...prev, ...newEntries }));
               }
-            });
-            if (Object.keys(newEntries).length > 0) {
-              setRoadDistances((prev) => ({ ...prev, ...newEntries }));
+            } else {
+              uncalculated.forEach((item) => {
+                const itemKey = item.placeId || `${item.title}|${item.address}`;
+                const cacheKey = `${pickupLat.toFixed(4)},${pickupLng.toFixed(4)}->${itemKey}`;
+                distanceMatrixCacheRef.current.set(cacheKey, { distanceKm: null });
+              });
             }
           }
-        }
-      );
-    } catch (err) {
-      console.warn('[SelectLocation] DistanceMatrixService error:', err);
-    }
+        );
+      } catch (err) {
+        console.warn('[SelectLocation] DistanceMatrixService error:', err);
+        uncalculated.forEach((item) => {
+          const itemKey = item.placeId || `${item.title}|${item.address}`;
+          const cacheKey = `${pickupLat.toFixed(4)},${pickupLng.toFixed(4)}->${itemKey}`;
+          distanceMatrixCacheRef.current.set(cacheKey, { distanceKm: null });
+        });
+      }
+    }, 400);
+
+    return () => {
+      window.clearTimeout(debounceTimer);
+    };
   }, [isLoaded, pickupCoords, remoteResults, localSearchResults]);
 
   const searchResults = useMemo(() => {
@@ -1072,10 +1089,19 @@ const SelectLocation = () => {
     }
   };
 
+  const lastScrollTopRef = useRef(0);
   const dismissKeyboard = () => {
     const active = document.activeElement;
     if (active instanceof HTMLElement && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) {
       active.blur();
+    }
+  };
+
+  const handleResultContainerScroll = (e) => {
+    const currentTop = e.currentTarget.scrollTop;
+    if (Math.abs(currentTop - lastScrollTopRef.current) > 50) {
+      dismissKeyboard();
+      lastScrollTopRef.current = currentTop;
     }
   };
 
@@ -1492,8 +1518,7 @@ const SelectLocation = () => {
       {/* Scrollable search results / popular locations — dismisses keypad on scroll */}
       <div
         className="relative z-10 flex-1 min-h-0 overflow-y-auto overscroll-contain px-5 pb-6"
-        onScroll={dismissKeyboard}
-        onTouchMove={dismissKeyboard}
+        onScroll={handleResultContainerScroll}
       >
         {query.trim().length === 0 && savedPlaces.length > 0 && (
           <div className="mb-5">

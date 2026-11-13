@@ -145,6 +145,16 @@ const userSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    // Average of the 1-5 star ratings drivers gave this rider after completed trips (null = not rated yet).
+    riderRating: {
+      type: Number,
+      default: null,
+    },
+    riderRatingCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     isVerified: {
       type: Boolean,
       default: false,

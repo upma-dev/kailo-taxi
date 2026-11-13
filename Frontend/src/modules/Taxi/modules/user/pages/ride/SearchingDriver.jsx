@@ -1112,29 +1112,25 @@ const SearchingDriver = () => {
                       animate={{ opacity: 1 }} 
                       className="relative flex items-center justify-center pointer-events-none"
                     >
+                      {/* Plain CSS animations: the app turns framer-motion transforms off on phones (low-power UI),
+                          which froze the radar. */}
+                      <style>{`
+                        @keyframes kailoRadarSpin { to { transform: rotate(360deg); } }
+                        @keyframes kailoRadarPulse { from { transform: scale(0.5); opacity: 0.5; } to { transform: scale(4.5); opacity: 0; } }
+                      `}</style>
                       {[1, 2, 3, 4].map((i) => (
-                        <motion.div
+                        <div
                           key={i}
-                          animate={{ 
-                            scale: [0.5, 4.5], 
-                            opacity: [0.5, 0] 
-                          }}
-                          transition={{
-                            repeat: Infinity,
-                            duration: 3,
-                            delay: i * 0.75,
-                            ease: "easeOut"
-                          }}
+                          style={{ animation: `kailoRadarPulse 3s ease-out ${i * 0.75}s infinite`, opacity: 0 }}
                           className="absolute w-20 h-20 rounded-full border-2 border-orange-400/40 bg-orange-400/5 shadow-[0_0_20px_rgba(249,115,22,0.2)]"
                         />
                       ))}
 
-                      <motion.div
-                        animate={{ rotate: 360 }}
-                        transition={{ repeat: Infinity, duration: 4, ease: "linear" }}
+                      <div
                         className="absolute w-[320px] h-[320px] rounded-full overflow-hidden"
-                        style={{ 
-                          background: 'conic-gradient(from 0deg, rgba(249, 115, 22, 0.5) 0deg, transparent 60deg, transparent 360deg)' 
+                        style={{
+                          animation: 'kailoRadarSpin 4s linear infinite',
+                          background: 'conic-gradient(from 0deg, rgba(249, 115, 22, 0.5) 0deg, transparent 60deg, transparent 360deg)'
                         }}
                       />
                     </motion.div>

@@ -2,7 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowLeft, CheckCircle2, Copy, Gift, Loader2, Share2 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { getCurrentDriver } from '../../services/registrationService';
+import { getCurrentDriver, getMyDriverReferrals } from '../../services/registrationService';
+import MyReferralsList, { describeReferralProgram, unwrapMyReferrals } from '../../../shared/components/MyReferralsList';
+
+const AUDIENCE = 'driver friend';
 import {
   getReferralSettingsContent,
   getReferralTranslationContent,
@@ -38,6 +41,7 @@ const DriverReferral = () => {
   const [activeTab, setActiveTab] = useState('refer');
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [myReferrals, setMyReferrals] = useState(null);
   const [driverProfile, setDriverProfile] = useState(() => {
     const stored = readStoredDriverInfo();
     return {
@@ -71,6 +75,11 @@ const DriverReferral = () => {
         dual_conditional_referrer_user_and_new_user_earnings: '',
         banner_text: '',
       };
+
+      // The live list and count (drivers who really joined with my code).
+      getMyDriverReferrals()
+        .then((response) => setMyReferrals(unwrapMyReferrals(response)))
+        .catch(() => setMyReferrals(null));
 
       try {
         const [driverResponse, translationResponse, settingsResponse] = await Promise.all([
@@ -203,7 +212,7 @@ const DriverReferral = () => {
         <div className="flex items-center justify-between gap-3 bg-gradient-to-br from-[#E6F7EE] to-[#EEFBE0] px-5 py-5">
           <div className="min-w-0">
             <p className="text-[22px] font-semibold leading-tight text-[#14213D]">{bannerText}</p>
-            <p className="mt-1 text-[11px] font-medium text-[#0F766E]">Language: {translation.language_code?.toUpperCase() || 'EN'}</p>
+            <p className="mt-1 text-[11px] font-medium text-[#0F766E]">{myReferrals ? `${myReferrals.count} joined with your code` : ' '}</p>
           </div>
           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#C6F432] text-[#14213D]">
             <Gift size={22} />
@@ -267,25 +276,19 @@ const DriverReferral = () => {
               <Loader2 className="animate-spin text-[#0F766E]" size={26} />
             </div>
           ) : activeTab === 'refer' ? (
-            <div className="space-y-4">
+<div className="space-y-4">
               <h2 className="text-[18px] font-semibold text-gray-900">How it works?</h2>
-              {infoBlocks.length === 0 ? (
-                <p className="text-sm text-gray-400">Referral content will appear here after admin updates this language.</p>
-              ) : (
-                infoBlocks.map((block) => (
-                  <div
-                    key={block.key}
-                    className="text-[14px] leading-6 text-gray-800 prose prose-sm max-w-none"
-                    dangerouslySetInnerHTML={{ __html: block.html }}
-                  />
-                ))
-              )}
+              <ol className="space-y-2">
+                {describeReferralProgram(myReferrals?.program, { audience: AUDIENCE }).map((line, index) => (
+                  <li key={line} className="flex gap-3 text-[14px] leading-6 text-gray-800">
+                    <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-gray-100 text-[11px] font-semibold text-gray-600">{index + 1}</span>
+                    <span>{line}</span>
+                  </li>
+                ))}
+              </ol>
             </div>
           ) : (
-            <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-5 py-8 text-center">
-              <p className="text-sm font-medium text-gray-900">Referral history</p>
-              <p className="text-xs text-gray-400 mt-2">Detailed driver referral history is not available on this screen yet.</p>
-            </div>
+            <MyReferralsList data={myReferrals} accent="#0F766E" />
           )}
         </div>
       </div>

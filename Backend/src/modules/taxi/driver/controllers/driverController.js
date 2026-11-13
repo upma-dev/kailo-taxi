@@ -216,7 +216,10 @@ const normalizeFleetVehicleDocuments = (documents = {}, rcFile = "") => {
   return normalizedDocuments;
 };
 
-const serializeDriverRouteBooking = (routeBooking = {}) => {
+// "My Route Booking" was removed: it is always reported as off and can not be switched on any more.
+const serializeDriverRouteBooking = (routeBooking = {}) => ({ ...serializeDriverRouteBookingRaw(routeBooking), enabled: false });
+
+const serializeDriverRouteBookingRaw = (routeBooking = {}) => {
   const coordinates = Array.isArray(routeBooking?.anchorLocation?.coordinates)
     ? routeBooking.anchorLocation.coordinates
     : [];
@@ -969,6 +972,48 @@ const getCurrentActiveStreak = (dailyActivity = [], minimumMinutes = 1) => {
   return streak;
 };
 
+// A day counts as an "active day" (streak) only after this much time online. The admin can change it in
+// Driver Referral Settings; one stray minute online is never a working day.
+const ACTIVE_DAY_MINUTES = 60;
+const resolveActiveDayMinutes = (settings = {}) => {
+  const value = Number(settings?.active_day_minutes);
+  return Number.isFinite(value) && value > 0 ? Math.min(720, Math.max(1, Math.round(value))) : ACTIVE_DAY_MINUTES;
+};
+// Rating / low-cancellation bonuses need real work behind them: at least this many trips in the month.
+const GUARD_MIN_MONTH_TRIPS = 10;
+
+// Driver levels from lifetime completed trips. Only a badge (no money attached).
+const DRIVER_LEVELS = [
+  { name: "Bronze", minTrips: 0 },
+  { name: "Silver", minTrips: 50 },
+  { name: "Gold", minTrips: 200 },
+  { name: "Platinum", minTrips: 500 },
+];
+
+const buildDriverLevel = (totalTrips = 0) => {
+  let index = 0;
+  DRIVER_LEVELS.forEach((level, levelIndex) => {
+    if (totalTrips >= level.minTrips) index = levelIndex;
+  });
+  const current = DRIVER_LEVELS[index];
+  const next = DRIVER_LEVELS[index + 1] || null;
+  return {
+    name: current.name,
+    level: index + 1,
+    totalTrips,
+    currentMinTrips: current.minTrips,
+    nextName: next?.name || null,
+    nextMinTrips: next?.minTrips ?? null,
+    tripsToNext: next ? Math.max(0, next.minTrips - totalTrips) : 0,
+  };
+};
+
+const isCompletedRide = (ride) => {
+  const status = String(ride?.status || "").toLowerCase();
+  const liveStatus = String(ride?.liveStatus || "").toLowerCase();
+  return ["completed", "delivered"].includes(status) || ["completed", "delivered"].includes(liveStatus);
+};
+
 const hasClaimedReward = (claimedRewards = [], rewardType, rewardKey, periodKey) =>
   (Array.isArray(claimedRewards) ? claimedRewards : []).some((item) =>
     item?.rewardType === rewardType &&
@@ -984,15 +1029,15 @@ const buildDriverIncentiveSnapshot = ({ driver, settings, rides }) => {
   const rewardFeatures = Array.isArray(settings?.reward_features) ? settings.reward_features : [];
   const dailyActivityMap = new Map(dailyActivity.map((item) => [item.date, Number(item.activeMinutes || 0)]));
 
-  const milestones = milestonePrograms.map((item, index) => {
+  const milestoneProgramOn = Boolean(settings?.milestone_program_enabled);
+  const milestones = (milestoneProgramOn ? milestonePrograms : []).filter((item) => item?.enabled).map((item, index) => {
     const requiredWeeks = Math.max(1, Number(item.required_weeks || 1));
     const requiredHours = Math.max(0, Number(item.active_hours_per_day || 0));
     const minTripsPerWeek = Math.max(0, Number(item.min_trips_per_week || 0));
     const weekWindows = collectWeekWindows(requiredWeeks, new Date());
-    const qualifyingWeeks = weekWindows.filter((week) => {
-      const tripCount = countCompletedRidesInRange(rides, week.start, week.end);
-      return tripCount >= minTripsPerWeek;
-    }).length;
+    const weeklyTrips = weekWindows.map((week) => countCompletedRidesInRange(rides, week.start, week.end));
+    const qualifyingWeeks = weeklyTrips.filter((tripCount) => tripCount >= minTripsPerWeek).length;
+    const windowStart = weekWindows[0]?.start || new Date();
 
     const targetDays = requiredWeeks * 7;
     let qualifyingDays = 0;
@@ -1004,8 +1049,15 @@ const buildDriverIncentiveSnapshot = ({ driver, settings, rides }) => {
       }
     }
 
-    const periodKey = `milestone:${item.id || index}`;
-    const eligible = Boolean(item.enabled) && qualifyingWeeks >= requiredWeeks && qualifyingDays >= targetDays;
+    const rewardKey = String(item.id || index);
+    const periodKey = `milestone:${rewardKey}:${toIstDayKey(windowStart)}`;
+    // Claimed inside the current window = already paid for these weeks. After a full new window it can be earned again.
+    const isClaimed = claimedRewards.some((claim) =>
+      claim?.rewardType === "milestone" &&
+      claim?.rewardKey === rewardKey &&
+      new Date(claim?.claimedAt || 0) >= windowStart,
+    );
+    const eligible = qualifyingWeeks >= requiredWeeks && qualifyingDays >= targetDays;
 
     return {
       ...item,
@@ -1015,16 +1067,21 @@ const buildDriverIncentiveSnapshot = ({ driver, settings, rides }) => {
         targetWeeks: requiredWeeks,
         qualifyingDays,
         targetDays,
+        currentWeekTrips: weeklyTrips[weeklyTrips.length - 1] || 0,
+        minTripsPerWeek,
+        activeHoursPerDay: requiredHours,
       },
-      isEligible: eligible,
-      isClaimed: hasClaimedReward(claimedRewards, "milestone", item.id || String(index), periodKey),
+      isEligible: eligible && !isClaimed,
+      isClaimed,
     };
   });
 
   const currentWeekWindow = collectWeekWindows(1, new Date())[0];
   const currentWeekTrips = currentWeekWindow ? countCompletedRidesInRange(rides, currentWeekWindow.start, currentWeekWindow.end) : 0;
   const currentPeakTrips = currentWeekWindow ? countPeakHourTripsInRange(rides, currentWeekWindow.start, currentWeekWindow.end) : 0;
-  const currentStreak = getCurrentActiveStreak(dailyActivity, 1);
+  const activeDayMinutes = resolveActiveDayMinutes(settings);
+  const currentStreak = getCurrentActiveStreak(dailyActivity, activeDayMinutes);
+  const totalTrips = rides.filter(isCompletedRide).length;
   const weekendCount = collectWeekWindows(4, new Date()).reduce((total, week) => {
     const saturday = new Date(week.start.getTime() + 5 * DAY_MS);
     const sunday = new Date(week.start.getTime() + 6 * DAY_MS);
@@ -1050,10 +1107,13 @@ const buildDriverIncentiveSnapshot = ({ driver, settings, rides }) => {
     ? Number(((monthCancelled / (monthCompleted + monthCancelled)) * 100).toFixed(2))
     : 0;
 
-  const features = rewardFeatures.map((item, index) => {
+  const features = rewardFeatures.filter((item) => item?.enabled).map((item, index) => {
     const key = item.key || item.id || `feature_${index + 1}`;
     let currentValue = 0;
     let periodKey = key;
+    let period = "week";
+    let requirement = "";
+    let blocked = false;
 
     switch (key) {
       case "daily_active_streak":
@@ -1071,34 +1131,47 @@ const buildDriverIncentiveSnapshot = ({ driver, settings, rides }) => {
       case "weekend_warrior":
         currentValue = weekendCount;
         periodKey = `${key}:${currentMonthKey}`;
+        period = "month";
         break;
       case "rating_guard":
         currentValue = Number(driver?.rating || 0);
         periodKey = `${key}:${currentMonthKey}`;
+        period = "month";
+        requirement = `Needs at least ${GUARD_MIN_MONTH_TRIPS} completed trips this month (${monthCompleted} done).`;
+        blocked = monthCompleted < GUARD_MIN_MONTH_TRIPS;
         break;
       case "cancellation_guard":
         currentValue = cancellationRate;
         periodKey = `${key}:${currentMonthKey}`;
+        period = "month";
+        requirement = `Needs at least ${GUARD_MIN_MONTH_TRIPS} completed trips this month (${monthCompleted} done).`;
+        blocked = monthCompleted < GUARD_MIN_MONTH_TRIPS;
         break;
       default:
-        currentValue = Number(item.target_value || 0);
+        // Unknown booster: nothing is measured for it, so it can never be claimed.
+        currentValue = 0;
         periodKey = `${key}:${currentMonthKey}`;
+        blocked = true;
         break;
     }
 
     const target = Number(item.target_value || 0);
-    const isEligible = key === "cancellation_guard"
+    const reached = key === "cancellation_guard"
       ? currentValue <= target
-      : currentValue >= target;
+      : target > 0 && currentValue >= target;
+    const isClaimed = hasClaimedReward(claimedRewards, "feature", key, periodKey);
 
     return {
       ...item,
       key,
       periodKey,
+      period,
+      requirement,
       currentValue,
       targetValue: target,
-      isEligible: Boolean(item.enabled) && isEligible,
-      isClaimed: hasClaimedReward(claimedRewards, "feature", key, periodKey),
+      lowerIsBetter: key === "cancellation_guard",
+      isEligible: !blocked && reached && !isClaimed,
+      isClaimed,
     };
   });
 
@@ -1110,11 +1183,23 @@ const buildDriverIncentiveSnapshot = ({ driver, settings, rides }) => {
     },
     summary: {
       streakDays: currentStreak,
+      activeDayMinutes,
+      totalTrips,
+      monthTrips: monthCompleted,
+      rating: Number(driver?.rating || 0),
       currentWeekTrips,
       currentPeakTrips,
       weekendCount,
       monthCancellationRate: cancellationRate,
       totalClaimedRewards: claimedRewards.length,
+    },
+    level: buildDriverLevel(totalTrips),
+    // What the referral program really pays (paid out by the onboarding / ride services).
+    referral: {
+      enabled: Boolean(settings?.enabled) && Number(settings?.amount || 0) > 0,
+      type: String(settings?.type || "instant_referrer"),
+      amount: Number(settings?.amount || 0),
+      rideCount: Number(settings?.ride_count || 0),
     },
     milestones,
     features,
@@ -1392,8 +1477,9 @@ const resolveVehicleMapIcon = async (vehicleTypeId) => {
     return "";
   }
 
-  const vehicle = await Vehicle.findById(vehicleTypeId).select("icon map_icon image").lean();
-  return vehicle?.map_icon || vehicle?.icon || vehicle?.image || "";
+  // Only the Map Icon: the Preview Image is a display picture and shows as a white box on the map.
+  const vehicle = await Vehicle.findById(vehicleTypeId).select("icon map_icon").lean();
+  return vehicle?.map_icon || vehicle?.icon || "";
 };
 
 const normalizePhone = (value) =>
@@ -2230,9 +2316,12 @@ export const loginDriver = async (req, res) => {
 
   await clearDriverActiveRideIfStale(driver);
 
-  // A fresh login always starts offline; going online again needs the daily selfie check.
-  if (driver.isOnline && !driver.isOnRide) {
-    await Driver.updateOne({ _id: driver._id }, { $set: { isOnline: false, socketId: null } });
+  // A fresh login always starts offline, and going online again needs a new selfie.
+  if (!driver.isOnRide) {
+    await Driver.updateOne(
+      { _id: driver._id },
+      { $set: { isOnline: false, socketId: null, "onlineSelfie.expiresAt": null } },
+    );
     driver.isOnline = false;
   }
 
@@ -2471,6 +2560,13 @@ export const updateDriverLocation = async (req, res) => {
   });
 };
 
+export const ONLINE_SELFIE_VALID_MS = 60 * 60 * 1000;
+
+const isOnlineSelfieValid = (onlineSelfie = {}) => {
+  const expiresAt = onlineSelfie?.expiresAt ? new Date(onlineSelfie.expiresAt).getTime() : 0;
+  return Boolean(String(onlineSelfie?.imageUrl || "").trim()) && expiresAt > Date.now();
+};
+
 export const goOnline = async (req, res) => {
   const { location, selfieImageUrl } = req.body;
 
@@ -2483,15 +2579,20 @@ export const goOnline = async (req, res) => {
   }
 
   const todayKey = new Date().toISOString().slice(0, 10);
-  const hasTodaySelfie =
-    String(existingDriver.onlineSelfie?.forDate || "") === todayKey &&
-    String(existingDriver.onlineSelfie?.imageUrl || "").trim();
+  // A selfie counts for one hour after it was taken, and never across a new login.
+  const hasTodaySelfie = isOnlineSelfieValid(existingDriver.onlineSelfie);
 
   if (!hasTodaySelfie && !String(selfieImageUrl || "").trim()) {
-    throw new ApiError(400, "A selfie is required before going online today");
+    throw new ApiError(400, "A selfie is required before going online");
   }
 
   await ensureDriverWalletCanAcceptRide(existingDriver);
+  {
+    const { getDriverSubscriptionMode, findActiveDriverSubscription } = await import('../../services/driverSubscriptionService.js');
+    if ((await getDriverSubscriptionMode()) === 'subscriptionOnly' && !(await findActiveDriverSubscription(existingDriver._id))) {
+      throw new ApiError(400, 'An active subscription is required to go online. Buy a plan in Profile → Subscription.');
+    }
+  }
   await clearDriverActiveRideIfStale(existingDriver);
   const trackingBeforeOnline = mergeOnlineSessionIntoTracking(
     existingDriver.incentiveTracking || {},
@@ -2508,6 +2609,7 @@ export const goOnline = async (req, res) => {
         capturedAt: new Date(),
         uploadedAt: new Date(),
         forDate: todayKey,
+        expiresAt: new Date(Date.now() + ONLINE_SELFIE_VALID_MS),
       };
 
   const driver = await Driver.findByIdAndUpdate(
@@ -2654,6 +2756,11 @@ export const getCurrentDriver = async (req, res) => {
 
   await clearDriverActiveRideIfStale(driver);
   const vehicleIconUrl = await resolveVehicleMapIcon(driver.vehicleTypeId);
+  // The vehicle type's picture set by the admin. The driver home shows it in a round map marker when the
+  // vehicle type has no Map Icon.
+  const vehicleTypeImage = driver.vehicleTypeId
+    ? String((await Vehicle.findById(driver.vehicleTypeId).select("image").lean())?.image || "")
+    : "";
   const todaySummary = await syncDriverTodaySummaryDocument(driver);
 
   res.json({
@@ -2671,6 +2778,7 @@ export const getCurrentDriver = async (req, res) => {
       vehicleTypeId: driver.vehicleTypeId,
       vehicleIconType: driver.vehicleIconType,
       vehicleIconUrl,
+      vehicleTypeImage,
       vehicleMake: driver.vehicleMake,
       vehicleModel: driver.vehicleModel,
       registerFor: driver.registerFor,
@@ -3211,7 +3319,8 @@ export const updateCurrentDriver = async (req, res) => {
 
   if (Object.prototype.hasOwnProperty.call(req.body || {}, "routeBooking")) {
     const routeBookingPayload = req.body?.routeBooking || {};
-    const enabled = Boolean(routeBookingPayload?.enabled);
+    // "My Route Booking" was removed, so any save only switches it off.
+    const enabled = false && Boolean(routeBookingPayload?.enabled);
 
     if (!enabled) {
       driver.routeBooking = {
@@ -7532,12 +7641,12 @@ export const claimDriverIncentiveReward = async (req, res) => {
     throw new ApiError(404, "Reward not found");
   }
 
-  if (!targetReward.isEligible) {
-    throw new ApiError(400, "Reward is not eligible yet");
-  }
-
   if (targetReward.isClaimed) {
     throw new ApiError(400, "Reward already claimed");
+  }
+
+  if (!targetReward.isEligible) {
+    throw new ApiError(400, "Reward is not eligible yet");
   }
 
   const claimedRewards = pruneClaimedRewards([

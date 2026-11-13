@@ -23,7 +23,7 @@ import {
     BarChart2
 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { GoogleMap, Marker } from '@react-google-maps/api';
+import { GoogleMap, Marker, OverlayViewF, OverlayView } from '@react-google-maps/api';
 import toast from 'react-hot-toast';
 import LowBalanceModal from './LowBalanceModal';
 
@@ -53,6 +53,7 @@ import { socketService } from '../../../shared/api/socket';
 import { pushDriverLocationRealtime } from '../../../shared/services/rideRealtime';
 import { HAS_VALID_GOOGLE_MAPS_KEY, useAppGoogleMapsLoader } from '../../admin/utils/googleMaps';
 import GoHomeChip from '../components/GoHomeChip';
+import ReturnTripCard from '../components/ReturnTripCard';
 import { cancelDriverScheduledRide, getCurrentDriver, getDriverDocumentTemplates, getDriverNotifications, getDriverPendingDispatch, getDriverScheduledRides, getLocalDriverToken } from '../services/registrationService';
 import { addLocalDriverNotification, getUnreadDriverNotificationCount, getVisibleDriverNotifications } from '../utils/notificationState';
 import { getScheduledRideCountdown } from '../utils/scheduledRideTime';
@@ -601,9 +602,11 @@ const normalizeRouteBookingPreferences = (routeBooking = null) => {
 const isDriverVehicleApprovalPending = (driver = {}) =>
     driver?.approve === false || String(driver?.status || '').toLowerCase() === 'pending';
 
-const hasSelfieForToday = (onlineSelfie = null) =>
-    String(onlineSelfie?.forDate || '').trim() === getTodaySelfieKey() &&
-    Boolean(String(onlineSelfie?.imageUrl || '').trim());
+// A selfie counts for one hour after it was taken (the server clears it on every new login).
+const hasSelfieForToday = (onlineSelfie = null) => {
+    const expiresAt = onlineSelfie?.expiresAt ? new Date(onlineSelfie.expiresAt).getTime() : 0;
+    return Boolean(String(onlineSelfie?.imageUrl || '').trim()) && expiresAt > Date.now();
+};
 
 const mapStyles = [
   { "elementType": "geometry", "stylers": [{ "color": "#f5f5f5" }] },
@@ -679,9 +682,9 @@ const DriverHome = () => {
     const [vehicleIconType, setVehicleIconType] = useState(
         () => storedDriverInfo?.vehicleIconType || storedDriverInfo?.vehicleType || 'car',
     );
-    const [vehicleIconUrl, setVehicleIconUrl] = useState(
-        () => storedDriverInfo?.vehicleIconUrl || '',
-    );
+    const [vehicleIconUrl, setVehicleIconUrl] = useState('');
+    // The vehicle type's picture from the admin, shown in a round marker when there is no Map Icon.
+    const [vehicleTypeImage, setVehicleTypeImage] = useState('');
     const [walletSummary, setWalletSummary] = useState({
         balance: 0,
         cashLimit: 500,
@@ -702,9 +705,12 @@ const DriverHome = () => {
     const lastDutyToggleAtRef = useRef(0);
     const driverPosition = useMemo(() => toLatLng(driverCoords || DEFAULT_MAP_COORDS), [driverCoords]);
     const mapVehicleIcon = useMemo(
-        () => getMapIconForVehicle(vehicleIconUrl || storedDriverInfo?.vehicleIconUrl || storedDriverInfo?.map_icon || storedDriverInfo?.image || vehicleIconType),
-        [vehicleIconType, vehicleIconUrl, storedDriverInfo],
+        () => getMapIconForVehicle(vehicleIconUrl || vehicleIconType),
+        [vehicleIconType, vehicleIconUrl],
     );
+    // Map Icon set by the admin -> that icon. Otherwise the vehicle's picture in a round marker (like Rapido).
+    // Otherwise the built-in top-down vehicle icon.
+    const roundVehiclePhoto = !vehicleIconUrl && vehicleTypeImage ? getMapIconForVehicle(vehicleTypeImage) : '';
 
     const walletAlertState = useMemo(
         () => getWalletAlertState(walletSummary, { ignoreRestrictions: isOwnerManagedDriver }),
@@ -1112,6 +1118,7 @@ const DriverHome = () => {
 
         setVehicleIconType(driver?.vehicleIconType || driver?.vehicleType || 'car');
         setVehicleIconUrl(driver?.vehicleIconUrl || '');
+        setVehicleTypeImage(driver?.vehicleTypeImage || '');
         setIsOnline(Boolean(driver?.isOnline));
         setIsOwnerManagedDriver(isOwnerManagedDriverProfile(driver));
         setTodaySummary(normalizeTodaySummary(driver?.todaySummary));
@@ -1173,15 +1180,45 @@ const DriverHome = () => {
                 refreshTodaySummary().catch(() => {});
             }
         };
+        // The hourly selfie ran out: the server has taken the driver offline.
+        const onSelfieRequired = (data) => {
+            setIsOnline(false);
+            setOnlineSelfie((current) => (current ? { ...current, expiresAt: null } : current));
+            setShowRequest(false);
+            setCurrentRequest(null);
+            setSelfieError('');
+            setShowSelfieCameraCapture(false);
+            setShowOnlineSelfiePrompt(true);
+            setStatusMessage(data?.message || 'Your hourly selfie check is due. Take a selfie to go online again.');
+        };
         if (socket) {
             socketService.on('ride:tip:received', onTipReceived);
+            socketService.on('selfieRequired', onSelfieRequired);
         }
         return () => {
             if (socket) {
                 socketService.off('ride:tip:received', onTipReceived);
+                socketService.off('selfieRequired', onSelfieRequired);
             }
         };
     }, [refreshTodaySummary]);
+
+    // Backup for the hourly check in case the socket message was missed: re-read the state from the server.
+    useEffect(() => {
+        if (!isOnline) return undefined;
+        const timer = setInterval(() => {
+            if (hasSelfieForToday(onlineSelfie)) return;
+            hydrateDriverState()
+                .then((driver) => {
+                    if (driver && !driver.isOnline && !driver.isOnRide) {
+                        setShowOnlineSelfiePrompt(true);
+                        setStatusMessage('Your hourly selfie check is due. Take a selfie to go online again.');
+                    }
+                })
+                .catch(() => {});
+        }, 60 * 1000);
+        return () => clearInterval(timer);
+    }, [hydrateDriverState, isOnline, onlineSelfie]);
 
     const expiredDocumentNames = useMemo(() => {
         const flattenedTemplates = Array.isArray(documentTemplates)
@@ -1569,6 +1606,7 @@ const DriverHome = () => {
                 imageUrl: selfieUrl,
                 capturedAt: new Date().toISOString(),
                 forDate: new Date().toISOString().slice(0, 10),
+                expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
             });
             setShowSelfieCameraCapture(false);
             setShowOnlineSelfiePrompt(false);
@@ -2652,14 +2690,35 @@ const DriverHome = () => {
                         onUnmount={onUnmount} 
                         options={mapOptions}
                     >
-                        <Marker 
-                            position={driverPosition} 
-                            icon={{ 
-                                url: mapVehicleIcon, 
-                                scaledSize: new window.google.maps.Size(40, 40), 
-                                anchor: new window.google.maps.Point(20, 20)
-                            }} 
-                        />
+                        {roundVehiclePhoto ? (
+                            <OverlayViewF
+                                position={driverPosition}
+                                mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
+                                getPixelPositionOffset={(width, height) => ({ x: -(width / 2), y: -(height / 2) })}
+                            >
+                                <div className="pointer-events-none relative flex h-[58px] w-[58px] items-center justify-center">
+                                    <span className={`absolute inset-0 rounded-full ${isOnline ? 'animate-ping bg-emerald-400/30' : ''}`} />
+                                    <div className={`relative h-12 w-12 overflow-hidden rounded-full border-[3px] bg-white shadow-[0_6px_16px_rgba(15,23,42,0.35)] ${isOnline ? 'border-emerald-500' : 'border-white'}`}>
+                                        <img
+                                            src={roundVehiclePhoto}
+                                            alt="Your vehicle"
+                                            className="h-full w-full scale-[1.15] object-cover"
+                                            draggable={false}
+                                            onError={() => setVehicleTypeImage('')}
+                                        />
+                                    </div>
+                                </div>
+                            </OverlayViewF>
+                        ) : (
+                            <Marker
+                                position={driverPosition}
+                                icon={{
+                                    url: mapVehicleIcon,
+                                    scaledSize: new window.google.maps.Size(40, 40),
+                                    anchor: new window.google.maps.Point(20, 20)
+                                }}
+                            />
+                        )}
                     </GoogleMap>
                 ) : (
                     <div className="w-full h-full bg-slate-200 flex items-center justify-center">
@@ -2683,6 +2742,7 @@ const DriverHome = () => {
             </div>
 
             <GoHomeChip />
+            <ReturnTripCard />
 
             {/* --- BOTTOM FLOATING UI --- */}
             <div className="fixed bottom-20 left-0 right-0 p-6 pb-4 z-[60] flex flex-col max-w-md mx-auto">

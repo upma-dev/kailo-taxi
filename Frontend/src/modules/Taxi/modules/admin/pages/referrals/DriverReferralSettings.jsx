@@ -124,6 +124,7 @@ const normalizeDriverReferralSettings = (data = {}) => {
     amount: Number(data.amount || 0),
     ride_count: Number(data.ride_count || 0),
     milestone_program_enabled: data.milestone_program_enabled ?? false,
+    active_day_minutes: Number(data.active_day_minutes || 60),
     milestone_programs: Array.isArray(data.milestone_programs) && data.milestone_programs.length > 0
       ? data.milestone_programs.map(normalizeMilestone)
       : [defaultMilestone()],
@@ -174,6 +175,7 @@ const DriverReferralSettings = () => {
         ...settings,
         amount: Number(settings.amount || 0),
         ride_count: Number(settings.ride_count || 0),
+        active_day_minutes: Number(settings.active_day_minutes || 60),
         milestone_programs: settings.milestone_programs.map((item, index) => ({
           ...item,
           id: item.id || `milestone_${index + 1}`,
@@ -522,6 +524,28 @@ const DriverReferralSettings = () => {
                 <div>
                   <h3 className="text-sm font-bold text-gray-900 uppercase">Extra Driver Reward Features</h3>
                   <p className="text-xs text-gray-500">Popular incentive mechanics inspired by Ola, Uber, and large fleet growth programs.</p>
+                </div>
+              </div>
+
+              <div className="mx-6 mt-6 rounded-2xl border border-amber-100 bg-amber-50/60 p-5 grid grid-cols-1 md:grid-cols-[1fr_220px] gap-4 items-center">
+                <div>
+                  <h4 className="text-sm font-bold text-slate-900">Streak: what counts as an active day</h4>
+                  <p className="mt-1 text-xs text-slate-500 leading-relaxed">
+                    A driver's streak is the number of days in a row they stayed online at least this many minutes.
+                    It is shown on the driver's Incentives page and is what the "Daily active streak bonus" checks.
+                    Default 60 minutes.
+                  </p>
+                </div>
+                <div>
+                  <label className={labelClass}>Minutes online per day</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={720}
+                    value={settings.active_day_minutes}
+                    onChange={(e) => setSettings((current) => ({ ...current, active_day_minutes: e.target.value }))}
+                    className={inputClass}
+                  />
                 </div>
               </div>
 

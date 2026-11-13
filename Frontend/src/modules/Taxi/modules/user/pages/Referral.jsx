@@ -15,6 +15,9 @@ import {
   USER_REFERRAL_TRANSLATION_FIELDS,
 } from '../../shared/utils/referralTranslationFields';
 import { useSettings } from '../../../shared/context/SettingsContext';
+import MyReferralsList, { describeReferralProgram, unwrapMyReferrals } from '../../shared/components/MyReferralsList';
+
+const AUDIENCE = 'friend';
 
 const readStoredUserInfo = () => {
   try {
@@ -37,6 +40,7 @@ const Referral = () => {
   const [activeTab, setActiveTab] = useState('refer');
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [myReferrals, setMyReferrals] = useState(null);
   const [profile, setProfile] = useState(() => {
     const stored = readStoredUserInfo();
     return {
@@ -60,6 +64,22 @@ const Referral = () => {
   useEffect(() => {
     const loadReferralPage = async () => {
       setLoading(true);
+
+      // The live list and count (people who really joined with my code).
+      userAuthService.getMyReferrals()
+        .then((response) => {
+          const data = unwrapMyReferrals(response);
+          setMyReferrals(data);
+          if (data) {
+            setProfile((current) => ({ ...current, referralCount: data.count, referralCode: current.referralCode || data.referralCode }));
+            try {
+              localStorage.setItem('userInfo', JSON.stringify({ ...readStoredUserInfo(), referralCount: data.count }));
+            } catch {
+              // storage blocked
+            }
+          }
+        })
+        .catch(() => setMyReferrals(null));
 
       const languageCode = getStoredReferralLanguageCode('user');
       const stored = readStoredUserInfo();
@@ -88,10 +108,10 @@ const Referral = () => {
           settingsData,
         );
 
-        setProfile({
+        setProfile((current) => ({
           referralCode: user.referralCode || stored.referralCode || '',
-          referralCount: Number(user.referralCount || 0),
-        });
+          referralCount: current.referralCount,
+        }));
         setTranslation({
           language_code: translationData.language_code || languageCode,
           user_referral: hydratedUserReferral,
@@ -102,7 +122,6 @@ const Referral = () => {
           JSON.stringify({
             ...stored,
             referralCode: user.referralCode || '',
-            referralCount: Number(user.referralCount || 0),
           }),
         );
       } catch {
@@ -208,7 +227,7 @@ const Referral = () => {
           <div className="bg-[#1830b8] px-5 py-5 text-white flex items-center justify-between">
             <div>
               <p className="text-[26px] font-semibold leading-tight">{bannerText}</p>
-              <p className="text-[11px] text-indigo-100 mt-1">Language: {translation.language_code?.toUpperCase() || 'EN'}</p>
+              <p className="text-[11px] text-indigo-100 mt-1">{profile.referralCount} joined with your code</p>
             </div>
             <div className="w-12 h-12 rounded-2xl bg-white/15 flex items-center justify-center">
               <Gift size={20} />
@@ -262,26 +281,19 @@ const Referral = () => {
                 <Loader2 className="animate-spin text-[#1830b8]" size={26} />
               </div>
             ) : activeTab === 'refer' ? (
-              <div className="space-y-4">
-                <h2 className="text-[18px] font-semibold text-gray-900">How it works?</h2>
-                {infoBlocks.length === 0 ? (
-                  <p className="text-sm text-gray-400">Referral content will appear here after admin updates this language.</p>
-                ) : (
-                  infoBlocks.map((block) => (
-                    <div
-                      key={block.key}
-                      className="text-[14px] leading-6 text-gray-800 prose prose-sm max-w-none"
-                      dangerouslySetInnerHTML={{ __html: block.html }}
-                    />
-                  ))
-                )}
-              </div>
+<div className="space-y-4">
+              <h2 className="text-[18px] font-semibold text-gray-900">How it works?</h2>
+              <ol className="space-y-2">
+                {describeReferralProgram(myReferrals?.program, { audience: AUDIENCE }).map((line, index) => (
+                  <li key={line} className="flex gap-3 text-[14px] leading-6 text-gray-800">
+                    <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-gray-100 text-[11px] font-semibold text-gray-600">{index + 1}</span>
+                    <span>{line}</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
             ) : (
-              <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-5 py-8 text-center">
-                <p className="text-sm font-medium text-gray-900">Successful referrals</p>
-                <p className="text-3xl font-semibold text-[#1830b8] mt-2">{profile.referralCount}</p>
-                <p className="text-xs text-gray-400 mt-2">Detailed referral history is not available on this screen yet.</p>
-              </div>
+              <MyReferralsList data={myReferrals} accent="#1830b8" />
             )}
           </div>
         </div>

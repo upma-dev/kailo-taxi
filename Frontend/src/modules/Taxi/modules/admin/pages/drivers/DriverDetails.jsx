@@ -13,6 +13,8 @@ import {
   Phone,
 } from 'lucide-react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import ReferralPanel from '../../components/ReferralPanel';
+import DriverSubscriptionPanel from '../../components/DriverSubscriptionPanel';
 import { adminService } from '../../services/adminService';
 import { getUnifiedAdminProfile } from '../../services/adminSession';
 import { hasAdminPermission } from '../../constants/adminAccess';
@@ -247,6 +249,7 @@ const DriverDetails = () => {
     'Review History',
     'Documents',
     'Subscription',
+    'Referrals',
   ];
 
   const fetchProfile = async () => {
@@ -1080,9 +1083,15 @@ const DriverDetails = () => {
             </div>
           )}
 
+          {activeTab === 'Referrals' && (
+            <div className="bg-white rounded-xl border border-gray-200 p-6">
+              <ReferralPanel kind="driver" id={id} />
+            </div>
+          )}
+
           {activeTab === 'Subscription' && (
-            <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-sm text-gray-500">
-              No subscription data available.
+            <div className="bg-white rounded-xl border border-gray-200 p-6">
+              <DriverSubscriptionPanel driverId={id} />
             </div>
           )}
         </>

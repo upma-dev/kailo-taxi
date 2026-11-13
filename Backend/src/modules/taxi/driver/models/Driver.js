@@ -116,6 +116,11 @@ const driverSchema = new mongoose.Schema(
         default: '',
         trim: true,
       },
+      // The selfie is good until this time (one hour after it was taken). A new login clears it.
+      expiresAt: {
+        type: Date,
+        default: null,
+      },
     },
     isOnRide: {
       type: Boolean,
@@ -346,6 +351,16 @@ const driverSchema = new mongoose.Schema(
       expiresAt: { type: Date, default: null },
       usesDate: { type: String, default: '' },
       usesToday: { type: Number, default: 0 },
+    },
+    // "Return Trip" after a one-way outstation ride: only outstation rides heading back home are offered.
+    returnTrip: {
+      homeLocation: { type: geoPointSchema, default: null },
+      homeLabel: { type: String, default: '', trim: true },
+      fromLabel: { type: String, default: '', trim: true },
+      fromRideId: { type: String, default: '' },
+      active: { type: Boolean, default: false },
+      activatedAt: { type: Date, default: null },
+      expiresAt: { type: Date, default: null },
     },
     documents: {
       type: mongoose.Schema.Types.Mixed,

@@ -15,15 +15,18 @@ export const BANNER_THEMES = {
  * One banner. Can be a gradient card, an image, or a short looping video (admin controlled).
  * `size`: 'compact' (admin lists / preview), 'normal', or 'hero' (login screens).
  */
-export function BannerCard({ banner, size = 'normal', compact = false }) {
+export function BannerCard({ banner, size = 'normal', compact = false, onSelect }) {
   const variant = compact ? 'compact' : size;
   const theme = BANNER_THEMES[banner.theme] || BANNER_THEMES.brand;
   const hasMedia = Boolean(banner.video || banner.image);
   const background = banner.image && !banner.video
     ? `linear-gradient(90deg, rgba(0,0,0,0.6), rgba(0,0,0,0.1)), url(${banner.image}) center/cover`
     : theme.gradient;
-  const Wrapper = banner.link ? 'a' : 'div';
-  const wrapperProps = banner.link ? { href: banner.link, target: '_blank', rel: 'noreferrer' } : {};
+  const clickable = Boolean(onSelect && banner.link);
+  const Wrapper = clickable ? 'button' : banner.link && !onSelect ? 'a' : 'div';
+  const wrapperProps = clickable
+    ? { type: 'button', onClick: () => onSelect(banner) }
+    : banner.link && !onSelect ? { href: banner.link, target: '_blank', rel: 'noreferrer' } : {};
   const pad = variant === 'compact' ? 'p-3' : variant === 'hero' ? 'p-4' : 'p-4';
   const minHeight = variant === 'hero' ? 'min-h-[132px]' : variant === 'compact' ? '' : 'min-h-[96px]';
 
@@ -72,7 +75,7 @@ export function BannerCard({ banner, size = 'normal', compact = false }) {
 }
 
 /** Sliding banner strip: auto-advances, swipeable, with dots. Renders nothing when empty. */
-export function BannerStrip({ banners, size = 'normal', compact = false, lightDots = false }) {
+export function BannerStrip({ banners, size = 'normal', compact = false, lightDots = false, onSelect }) {
   const [index, setIndex] = useState(0);
   const touchStartX = useRef(null);
   const count = banners.length;
@@ -104,7 +107,7 @@ export function BannerStrip({ banners, size = 'normal', compact = false, lightDo
         >
           {banners.map((banner, i) => (
             <div key={banner._id || i} className="w-full shrink-0">
-              <BannerCard banner={banner} size={size} compact={compact} />
+              <BannerCard banner={banner} size={size} compact={compact} onSelect={onSelect} />
             </div>
           ))}
         </div>

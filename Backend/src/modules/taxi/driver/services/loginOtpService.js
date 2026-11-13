@@ -14,7 +14,12 @@ import { buildDriverTodaySummaryFromDocument, mergeOnlineSessionIntoTracking } f
 // Every login starts offline, so going online again always goes through the daily selfie check.
 // (A driver who is mid-ride is left alone.)
 const resetDriverOnlineOnLogin = async (driver) => {
-  if (!driver?.isOnline || driver.isOnRide) return;
+  if (!driver || driver.isOnRide) return;
+  if (!driver.isOnline) {
+    // Already offline: only the old selfie stops counting.
+    await Driver.updateOne({ _id: driver._id }, { $set: { 'onlineSelfie.expiresAt': null } });
+    return;
+  }
   const tracking = mergeOnlineSessionIntoTracking(
     driver.incentiveTracking || {},
     driver.incentiveTracking?.currentOnlineStartedAt,
@@ -26,6 +31,7 @@ const resetDriverOnlineOnLogin = async (driver) => {
       $set: {
         isOnline: false,
         socketId: null,
+        'onlineSelfie.expiresAt': null,
         incentiveTracking: { ...tracking, currentOnlineStartedAt: null },
         todaySummary: buildDriverTodaySummaryFromDocument(driver),
       },
@@ -114,6 +120,10 @@ const getStaticDriverOtpConfig = (phone) => {
   };
 };
 const resolveDriverLoginOtpForPhone = (phone) => {
+  // Fixed test OTPs are for development only. In production they work only if ALLOW_STATIC_OTP=true is set.
+  if (process.env.NODE_ENV === 'production' && !['1', 'true', 'yes', 'on'].includes(String(process.env.ALLOW_STATIC_OTP || '').trim().toLowerCase())) {
+    return { otp: generateOtp(), isStatic: false };
+  }
   const normalizedPhone = normalizePhone(phone);
   const staticOtpConfig = getStaticDriverOtpConfig(normalizedPhone);
   const defaultOtpEnabled = isTruthy(env.sms?.useDefaultOtp);

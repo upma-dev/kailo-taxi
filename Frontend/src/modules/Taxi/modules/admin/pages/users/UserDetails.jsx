@@ -22,6 +22,7 @@ import {
   History as HistoryIcon
 } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
+import ReferralPanel from '../../components/ReferralPanel';
 
 const UserDetails = () => {
   const { id } = useParams();
@@ -279,7 +280,7 @@ const UserDetails = () => {
 
         {/* TABS HEADER */}
         <div className="mt-12 flex gap-1 bg-gray-50/50 p-1 rounded-2xl border border-gray-100 w-fit">
-          {['Request List', 'User Payment History', 'Review History', 'Subscriptions'].map(tab => (
+          {['Request List', 'User Payment History', 'Review History', 'Subscriptions', 'Referrals'].map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -512,6 +513,8 @@ const UserDetails = () => {
              </div>
           </div>
         )}
+
+        {activeTab === 'Referrals' && <ReferralPanel kind="user" id={id} />}
 
         {activeTab === 'Subscriptions' && (
           <div className="space-y-6 animate-in fade-in duration-500">

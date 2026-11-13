@@ -122,6 +122,9 @@ const sanitizeObjectIdList = (items = []) =>
     .filter((item, index, array) => OBJECT_ID_PATTERN.test(item) && array.indexOf(item) === index);
 
 const defaultFormData = {
+  extra_services: ['outstation', 'pooling'],
+  app_module_id: '',
+  order_by: 0,
   name: '',
   short_description: '',
   description: '',
@@ -280,6 +283,7 @@ const VehicleType = ({ mode: propMode }) => {
   const [pagination, setPagination] = useState({ total: 0, current_page: 1 });
   const [errorMessage, setErrorMessage] = useState('');
   const [formData, setFormData] = useState({ ...defaultFormData, transport_type: '' });
+  const [appModules, setAppModules] = useState([]);
   const { transportTypes: dbTransportTypes } = useTaxiTransportTypes();
   const transportTypeOptions = useMemo(() => {
     if (Array.isArray(dbTransportTypes) && dbTransportTypes.length > 0) {
@@ -306,9 +310,15 @@ const VehicleType = ({ mode: propMode }) => {
       setErrorMessage('');
 
       try {
-        const [vehicleResponse] = await Promise.all([
+        const [vehicleResponse, moduleResponse] = await Promise.all([
           api.get('/admin/types/vehicle-types'),
+          api.get('/admin/common/app-modules', { params: { limit: 100 } }).catch(() => null),
         ]);
+
+        const modulePayload = unwrap(moduleResponse);
+        if (mounted) {
+          setAppModules(Array.isArray(modulePayload?.results) ? modulePayload.results : []);
+        }
 
         if (!mounted) {
           return;
@@ -328,6 +338,10 @@ const VehicleType = ({ mode: propMode }) => {
           const selectedVehicle = normalizedVehicles.find((item) => String(item.id) === String(id));
           if (selectedVehicle) {
             setFormData({
+              // A vehicle type saved before this option existed offers everything, as it did before.
+              extra_services: Array.isArray(selectedVehicle.extra_services) ? selectedVehicle.extra_services : ['outstation', 'pooling'],
+              app_module_id: String(selectedVehicle.app_module_id || ''),
+              order_by: Number(selectedVehicle.order_by || 0),
               name: selectedVehicle.name || '',
               short_description: selectedVehicle.short_description || '',
               description: selectedVehicle.description || '',
@@ -400,10 +414,64 @@ const VehicleType = ({ mode: propMode }) => {
     formData.delivery_category === '2wheeler' ||
     TWO_WHEELER_NAME_PATTERN.test(String(formData.name || ''));
 
+  // The service list. The vehicle's saved service is always part of it and always selected (it was
+  // empty before when the saved value did not match an option name exactly, e.g. "all" vs "both").
+  const serviceOptions = useMemo(() => {
+    const saved = String(formData.transport_type || '').trim().toLowerCase();
+    const visible = transportTypeOptions
+      // Outstation is a driver-chosen service, not a vehicle transport type (the API would save it as "taxi").
+      .filter((t) => t.name !== 'outstation')
+      .filter((t) => !isTwoWheelerIcon || TWO_WHEELER_SERVICES.includes(t.name) || t.name === saved);
+    const hasSaved = visible.some((t) => t.name === saved || normalizeTransportType(t.name) === normalizeTransportType(saved));
+    if (saved && !hasSaved) {
+      visible.push({ id: saved, name: saved, display_name: SERVICE_LABELS[saved] || saved });
+    }
+    return visible;
+  }, [formData.transport_type, isTwoWheelerIcon, transportTypeOptions]);
+
+  const serviceSelectValue = useMemo(() => {
+    const saved = String(formData.transport_type || '').trim().toLowerCase();
+    if (!saved) return '';
+    const match =
+      serviceOptions.find((t) => t.name === saved) ||
+      serviceOptions.find((t) => normalizeTransportType(t.name) === normalizeTransportType(saved));
+    return match ? match.name : saved;
+  }, [formData.transport_type, serviceOptions]);
+
+  // Four-wheelers that carry passengers can also do Outstation and Car Pooling, chosen by their drivers.
+  const showsExtraServices =
+    !isTwoWheelerIcon && ['taxi', 'both', 'pooling'].includes(normalizeTransportType(formData.transport_type));
+
+  const toggleExtraService = (value) =>
+    setFormData((prev) => ({
+      ...prev,
+      extra_services: prev.extra_services.includes(value)
+        ? prev.extra_services.filter((item) => item !== value)
+        : [...prev.extra_services, value],
+    }));
+
   const showsDeliveryCategorySelector = useMemo(
     () => ['delivery', 'both'].includes(normalizeTransportType(formData.transport_type)),
     [formData.transport_type],
   );
+
+  // Choosing the App Module also sets the matching service, so the two never disagree.
+  const handleModuleChange = (moduleId) => {
+    setFormData((prev) => ({ ...prev, app_module_id: moduleId }));
+    const module = appModules.find((item) => String(item._id || item.id) === String(moduleId));
+    const target = String(module?.transport_type || '').toLowerCase();
+    const current = normalizeTransportType(formData.transport_type);
+    if (!['taxi', 'delivery', 'pooling'].includes(target) || target === current) return;
+    // "Ride + Parcel" vehicles stay as they are when moved between Ride and Parcel.
+    if (current === 'both' && ['taxi', 'delivery'].includes(target)) return;
+    setFormData((prev) => ({
+      ...prev,
+      app_module_id: moduleId,
+      transport_type: target,
+      is_taxi: target,
+      ...(target === 'delivery' ? {} : { delivery_category: '', delivery_distance_pricing: normalizeDeliveryDistancePricing() }),
+    }));
+  };
 
   const updateForm = (field, value) => {
     let sanitizedValue = value;
@@ -449,6 +517,9 @@ const VehicleType = ({ mode: propMode }) => {
       }
 
       const payload = {
+        app_module_id: formData.app_module_id || '',
+        extra_services: showsExtraServices ? formData.extra_services : [],
+        order_by: Number(formData.order_by || 0),
         name: formData.name.trim(),
         short_description: formData.short_description.trim(),
         description: formData.description.trim(),
@@ -456,8 +527,10 @@ const VehicleType = ({ mode: propMode }) => {
         dispatch_type: formData.dispatch_type,
         icon_types: normalizeIconType(formData.icon_types),
         image: formData.image || '',
-        icon: formData.map_icon || '',
-        map_icon: formData.map_icon || '',
+        // The vehicle image is what riders see in lists; the map icon is what shows on the map. When no
+        // separate map icon was chosen it stays empty, so the map follows the image and changes with it.
+        icon: formData.map_icon && formData.map_icon !== formData.image ? formData.map_icon : '',
+        map_icon: formData.map_icon && formData.map_icon !== formData.image ? formData.map_icon : '',
         capacity: Number(formData.capacity || 0),
         size: formData.size,
         is_taxi: normalizeTaxiMode(formData.transport_type),
@@ -615,6 +688,7 @@ const VehicleType = ({ mode: propMode }) => {
               <thead className="bg-slate-50">
                 <tr>
                   <th className="px-6 py-4 text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">Vehicle</th>
+                  <th className="px-6 py-4 text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">App Module</th>
                   <th className="px-6 py-4 text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">Transport</th>
                   <th className="px-6 py-4 text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">Dispatch</th>
                   <th className="px-6 py-4 text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">Active</th>
@@ -624,11 +698,11 @@ const VehicleType = ({ mode: propMode }) => {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan="5" className="px-6 py-20 text-center text-sm text-slate-400">Loading vehicle types...</td>
+                    <td colSpan="6" className="px-6 py-20 text-center text-sm text-slate-400">Loading vehicle types...</td>
                   </tr>
                 ) : !vehicles.length ? (
                   <tr>
-                    <td colSpan="5" className="px-6 py-20 text-center text-sm text-slate-400">No vehicle types found.</td>
+                    <td colSpan="6" className="px-6 py-20 text-center text-sm text-slate-400">No vehicle types found.</td>
                   </tr>
                 ) : vehicles.map((vehicle) => (
                   <tr key={vehicle.id} className="border-t border-slate-100">
@@ -642,6 +716,14 @@ const VehicleType = ({ mode: propMode }) => {
                           <p className="text-xs text-slate-500">{vehicle.short_description || vehicle.description || 'No description added'}</p>
                         </div>
                       </div>
+                    </td>
+                    <td className="px-6 py-5">
+                      {(() => {
+                        const module = appModules.find((item) => String(item._id || item.id) === String(vehicle.app_module_id || ''));
+                        return module
+                          ? <span className="inline-flex rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700">{module.name}</span>
+                          : <span className="text-xs text-slate-400">Not assigned</span>;
+                      })()}
                     </td>
                     <td className="px-6 py-5">
                       <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
@@ -719,9 +801,36 @@ const VehicleType = ({ mode: propMode }) => {
       <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
         <div className="grid grid-cols-1 gap-8 p-6 lg:grid-cols-2 lg:p-8">
           <div>
+            <label className={labelClass}>App Module *</label>
+            <select value={formData.app_module_id} onChange={(e) => handleModuleChange(e.target.value)} className={inputClass}>
+              <option value="">Choose automatically from the service</option>
+              {appModules.map((module) => (
+                <option key={module._id || module.id} value={module._id || module.id}>{module.name}</option>
+              ))}
+            </select>
+            <p className="mt-2 text-xs text-slate-500">
+              The service this vehicle type belongs to. On the user app home the Ride module shows its vehicle types (Bike, Auto, Sedan ...).
+            </p>
+          </div>
+
+          <div>
+            <label className={labelClass}>Order</label>
+            <input
+              type="number"
+              min="0"
+              value={formData.order_by}
+              onChange={(e) => updateForm('order_by', e.target.value)}
+              className={inputClass}
+            />
+            <p className="mt-2 text-xs text-slate-500">
+              Position inside its module, lowest first. Leave 0 to keep the newest vehicle type first.
+            </p>
+          </div>
+
+          <div>
             <label className={labelClass}>Service *</label>
             <select
-              value={formData.transport_type}
+              value={serviceSelectValue}
               onChange={(e) => {
                 const nextTransportType = e.target.value;
                 updateForm('transport_type', nextTransportType);
@@ -737,11 +846,7 @@ const VehicleType = ({ mode: propMode }) => {
               className={inputClass}
             >
                <option value="">Select Service</option>
-               {transportTypeOptions
-                 // Outstation is a driver-chosen service, not a vehicle transport type (the API would save it as "taxi").
-                 .filter((t) => t.name !== 'outstation')
-                 .filter((t) => !isTwoWheelerIcon || TWO_WHEELER_SERVICES.includes(t.name) || t.name === formData.transport_type)
-                 .map((t) => (
+               {serviceOptions.map((t) => (
                  <option key={t.id || t._id || t.name} value={t.name}>{SERVICE_LABELS[t.name] || t.display_name}</option>
                ))}
             </select>
@@ -766,6 +871,43 @@ const VehicleType = ({ mode: propMode }) => {
               ))}
             </select>
           </div>
+
+          {showsExtraServices ? (
+            <div className="lg:col-span-2 rounded-2xl border border-slate-200 bg-slate-50/70 p-5">
+              <label className={labelClass}>Also available for</label>
+              <p className="mb-3 text-xs text-slate-500">
+                Drivers of this vehicle type can choose these services too, besides {SERVICE_LABELS[normalizeTransportType(formData.transport_type)] || 'Ride'}.
+                Untick a service to stop offering it to drivers of this vehicle type.
+              </p>
+              <div className="flex flex-wrap gap-3">
+                {[
+                  { value: 'outstation', label: 'Outstation', hint: 'Intercity one-way and round trips' },
+                  { value: 'pooling', label: 'Car Pooling', hint: 'Shared rides on fixed routes' },
+                ].map((option) => {
+                  const checked = formData.extra_services.includes(option.value);
+                  return (
+                    <label
+                      key={option.value}
+                      className={`flex cursor-pointer items-start gap-3 rounded-2xl border px-4 py-3 transition ${
+                        checked ? 'border-[#0047AB] bg-[#EEF4FF]' : 'border-slate-200 bg-white hover:border-slate-300'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleExtraService(option.value)}
+                        className="mt-1 h-4 w-4 rounded border-slate-300"
+                      />
+                      <span>
+                        <span className="block text-sm font-semibold text-slate-800">{option.label}</span>
+                        <span className="block text-xs text-slate-500">{option.hint}</span>
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
 
           {showsDeliveryCategorySelector ? (
             <div className="lg:col-span-2">
@@ -814,6 +956,9 @@ const VehicleType = ({ mode: propMode }) => {
               <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                 <div>
                   <label className={labelClass}>Delivery Distance Based Charges</label>
+                  <p className="mb-1 text-xs font-semibold text-amber-600">
+                    Used only when no Parcel price is set for this vehicle. Set the full parcel price (with tax, commission and waiting) in Price Management &rarr; Set Price, with Transport Type &ldquo;Parcel&rdquo;.
+                  </p>
                   <p className="text-xs text-slate-500">
                     Enable quick parcel pricing defaults for this delivery-enabled vehicle type.
                   </p>

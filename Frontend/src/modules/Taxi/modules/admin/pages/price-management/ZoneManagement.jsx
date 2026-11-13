@@ -129,12 +129,22 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
     setLoading(true);
     setFetchError('');
     try {
-      const [zoneRes, slRes, driverRes, modulesRes] = await Promise.all([
+      // Each request is independent: one failing (for example the drivers list) must not hide the zones.
+      const settled = await Promise.allSettled([
         adminService.getZones(),
         adminService.getServiceLocations(),
         adminService.getDrivers(1, 200),
         adminService.getAppModules(),
       ]);
+      const [zoneRes, slRes, driverRes, modulesRes] = settled.map((item) => (item.status === 'fulfilled' ? item.value : null));
+      const labels = ['zones', 'service locations', 'drivers', 'app modules'];
+      const failed = settled
+        .map((item, index) => (item.status === 'rejected' ? `${labels[index]} (${item.reason?.response?.data?.message || item.reason?.message || 'request failed'})` : null))
+        .filter(Boolean);
+      if (failed.length) {
+        console.error('Zone page: some data could not be loaded', failed);
+        setFetchError(`Could not load: ${failed.join(', ')}.`);
+      }
 
       let fetchedZones = [];
       let fetchedLocations = [];
@@ -399,7 +409,8 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
       }
     } catch (err) {
       console.error("Save error:", err);
-      alert("Error connecting to server.");
+      // Show the server's reason (for example "choose the correct service location") instead of a generic message.
+      alert(err?.response?.data?.message || err?.message || "Could not save the zone.");
     } finally {
       setSaving(false);
     }
@@ -604,6 +615,11 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
 
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
               <div className="p-4 border-b border-gray-100 bg-gray-50/50">
+                {fetchError ? (
+                  <div className="mb-3 w-full rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
+                    {fetchError}
+                  </div>
+                ) : null}
                 <div className="relative w-full max-w-sm">
                   <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                   <input 

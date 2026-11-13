@@ -20,6 +20,7 @@ import { getAuthenticatedDriverRole, getLocalDriverToken } from './modules/drive
 import { installBrowserFcmRegistration } from './shared/push/browserFcmRegistration';
 import { installNativeFcmBridge } from './shared/push/nativeFcmBridge';
 import { POOLING_ENABLED, RENTAL_ENABLED } from './shared/featureFlags';
+import useRentalEnabled from './shared/hooks/useRentalEnabled';
 import { showChatNotification } from '@/shared/utils/chatNotificationSound';
 import { TaxiAppSkeleton } from '@/shared/components/skeletons/ModuleSkeletons';
 import './App.css';
@@ -152,6 +153,7 @@ const ServiceCenterDashboard = lazy(() => import('./modules/driver/pages/Service
 const ServiceCenterVehicleDetails = lazy(() => import('./modules/driver/pages/ServiceCenterVehicleDetails'));
 const RideRequests = lazy(() => import('./modules/driver/pages/RideRequests'));
 const DriverIncentives = lazy(() => import('./modules/driver/pages/DriverIncentives'));
+const AdminHomeOffers = lazy(() => import('./modules/admin/pages/settings/HomeOffers'));
 const AdminGoHomeSettings = lazy(() => import('./modules/admin/pages/settings/GoHomeSettings'));
 const DriverGoHome = lazy(() => import('./modules/driver/pages/GoHome'));
 const BusDriverHome = lazy(() => import('./modules/driver/pages/BusDriverHome'));
@@ -162,6 +164,7 @@ const DriverDocuments = lazy(() => import('./modules/driver/pages/settings/Drive
 const Notifications = lazy(() => import('./modules/driver/pages/settings/Notifications'));
 const PayoutMethods = lazy(() => import('./modules/driver/pages/settings/PayoutMethods'));
 const Referral = lazy(() => import('./modules/driver/pages/settings/Referral'));
+const DriverSubscription = lazy(() => import('./modules/driver/pages/settings/DriverSubscription'));
 const DriverDeleteAccount = lazy(() => import('./modules/driver/pages/settings/DeleteAccount'));
 const SecuritySOS = lazy(() => import('./modules/driver/pages/settings/SecuritySOS'));
 const DriverSupport = lazy(() => import('./modules/driver/pages/settings/Support'));
@@ -220,7 +223,6 @@ const AdminDriverEdit = lazy(() => import('./modules/admin/pages/drivers/EditDri
 const AdminReferralDashboard = lazy(() => import('./modules/admin/pages/referrals/ReferralDashboard'));
 const AdminUserReferralSettings = lazy(() => import('./modules/admin/pages/referrals/UserReferralSettings'));
 const AdminDriverReferralSettings = lazy(() => import('./modules/admin/pages/referrals/DriverReferralSettings'));
-const AdminReferralTranslation = lazy(() => import('./modules/admin/pages/referrals/ReferralTranslation'));
 
 const AdminPromoCodes = lazy(() => import('./modules/admin/pages/promotions/PromoCodes'));
 const AdminSendNotification = lazy(() => import('./modules/admin/pages/promotions/SendNotification'));
@@ -711,6 +713,8 @@ const UnknownTaxiRoute = () => {
 };
 
 function TaxiApp() {
+  // Re-renders the whole route tree when the admin switches Rental on or off.
+  useRentalEnabled();
   const realLocation = useLocation();
   const { pathname: taxiPathname } = realLocation;
   // Admin lives at /admin/..., but its routes are declared under /taxi/admin/...
@@ -1113,6 +1117,7 @@ function TaxiApp() {
                 <Route path="notifications" element={<Notifications />} />
                 <Route path="payout-methods" element={<PayoutMethods />} />
                 <Route path="referral" element={<Referral />} />
+                <Route path="subscription" element={<DriverSubscription />} />
                 <Route
                   path="delete-account"
                   element={<DriverDeleteAccount />}
@@ -1348,9 +1353,10 @@ function TaxiApp() {
                   path="referrals/driver-settings"
                   element={<AdminDriverReferralSettings />}
                 />
+                {/* Referral Translation was removed: old links go to the referral dashboard. */}
                 <Route
                   path="referrals/translation"
-                  element={<AdminReferralTranslation />}
+                  element={<Navigate to="/admin/referrals/dashboard" replace />}
                 />
                 {/* Promotions Management */}
                 <Route
@@ -1724,6 +1730,7 @@ function TaxiApp() {
                   <Route path="app/wallet" element={<AdminWalletSettings />} />
                   <Route path="app/tip" element={<AdminTipSettings />} />
                   <Route path="app/go-home" element={<AdminGoHomeSettings />} />
+                  <Route path="home-offers" element={<AdminHomeOffers />} />
                   <Route path="cms/header-footer" element={<Navigate to="/admin/global/cms/landing" replace />} />
                   <Route path="cms/home" element={<Navigate to="/admin/global/cms/landing" replace />} />
                   <Route path="cms/about" element={<Navigate to="/admin/global/cms/landing" replace />} />

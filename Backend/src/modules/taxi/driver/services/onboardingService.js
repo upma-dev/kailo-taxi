@@ -177,7 +177,7 @@ const processDriverSignupReferralRewards = async ({ driver, referrer }) => {
   const rewardBaseKey = `driver-referral:signup:${String(driver._id)}`;
 
   if (referralType === 'instant_referrer' || referralType === 'instant_referrer_new') {
-    await creditDriverWalletByReference({
+    const referrerResult = await creditDriverWalletByReference({
       driverId: referrer._id,
       amount: settings.amount,
       title: `Referral reward for inviting driver ${driver.phone || ''}`.trim(),
@@ -186,6 +186,9 @@ const processDriverSignupReferralRewards = async ({ driver, referrer }) => {
         invitedDriverId: String(driver._id),
       },
     });
+    if (['credited', 'existing'].includes(referrerResult)) {
+      await Driver.updateOne({ _id: driver._id }, { $set: { referralRewardGrantedAt: new Date() } });
+    }
   }
 
   if (referralType === 'instant_referrer_new') {
@@ -261,6 +264,10 @@ const getStaticDriverOtpConfig = (phone) => {
   };
 };
 const resolveDriverOnboardingOtpForPhone = (phone) => {
+  // Fixed test OTPs are for development only. In production they work only if ALLOW_STATIC_OTP=true is set.
+  if (process.env.NODE_ENV === 'production' && !['1', 'true', 'yes', 'on'].includes(String(process.env.ALLOW_STATIC_OTP || '').trim().toLowerCase())) {
+    return { otp: generateOtp(), isStatic: false };
+  }
   const normalizedPhone = normalizePhone(phone);
   const staticOtpConfig = getStaticDriverOtpConfig(normalizedPhone);
   const defaultOtpEnabled = isTruthy(env.sms?.useDefaultOtp);

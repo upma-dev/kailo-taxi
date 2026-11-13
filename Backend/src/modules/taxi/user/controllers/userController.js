@@ -735,7 +735,7 @@ export const getIntercityPackageCatalog = async (_req, res) => {
             vehicleTypeId: row.vehicle_type?._id ? String(row.vehicle_type._id) : '',
             vehicleName: row.vehicle_type?.name || 'Vehicle',
             capacity: Number(row.vehicle_type?.capacity || 0),
-            icon: row.vehicle_type?.map_icon || row.vehicle_type?.icon || row.vehicle_type?.image || '',
+            icon: row.vehicle_type?.map_icon || row.vehicle_type?.icon || '',
             iconType: row.vehicle_type?.icon_types || row.vehicle_type?.name || '',
             dispatchType: String(row.vehicle_type?.dispatch_type || 'normal').trim().toLowerCase(),
             basePrice: Number(row.base_price ?? 0),
@@ -1266,12 +1266,15 @@ const processSignupReferralRewards = async ({ user, referrer }) => {
   const rewardBaseKey = `user-referral:signup:${String(user._id)}`;
 
   if (referralType === 'instant_referrer' || referralType === 'instant_referrer_new') {
-    await creditUserWalletByReference({
+    const referrerResult = await creditUserWalletByReference({
       userId: referrer._id,
       amount: settings.amount,
       title: `Referral reward for inviting ${user.phone}`,
       referenceKey: `${rewardBaseKey}:referrer`,
     });
+    if (['credited', 'existing'].includes(referrerResult) && referralType === 'instant_referrer') {
+      await User.updateOne({ _id: user._id }, { $set: { referralRewardGrantedAt: new Date() } });
+    }
   }
 
   if (referralType === 'instant_referrer_new') {
@@ -1440,6 +1443,10 @@ export const signupUser = async (req, res) => {
     throw new ApiError(400, 'Invalid referral code');
   }
 
+  if (referrer && existingUser && String(referrer._id) === String(existingUser._id)) {
+    throw new ApiError(400, 'You can not use your own referral code');
+  }
+
   if (existingUser && !canRestoreUserForSignup(existingUser)) {
     throw new ApiError(409, 'Phone number is already registered');
   }
@@ -1551,13 +1558,21 @@ export const getCurrentUser = async (req, res) => {
     await user.save();
   }
 
-  const subscriptionSummary = await getUserSubscriptionSummary(user._id);
+  const [subscriptionSummary, completedTrips] = await Promise.all([
+    getUserSubscriptionSummary(user._id),
+    // Trips the rider actually took (cancelled / unmatched bookings are not trips).
+    Ride.countDocuments({ userId: user._id, status: 'completed' }),
+  ]);
 
   res.json({
     success: true,
     data: {
       user: {
         ...toUserPayload(user, { subscriptionSummary }),
+        completedTrips,
+        // Average of the ratings drivers gave this rider (null until the first rating).
+        riderRating: user.riderRating ?? null,
+        riderRatingCount: Number(user.riderRatingCount || 0),
         createdAt: user.createdAt || null,
       },
     },

@@ -1,4 +1,6 @@
 import express from 'express';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import cors from 'cors';
 import helmet from 'helmet';
 import './services/localStorage.service.js';
@@ -109,6 +111,10 @@ app.use((req, _res, next) => {
     next();
 });
 app.use(xssClean());
+
+// Built-in vehicle pictures (Bike, Auto, Car, SUV ...), used as the default Preview Image of vehicle types.
+// Under /api/v1 so it goes through the same proxy rule as the API (Vite dev proxy and nginx).
+app.use('/api/v1/static/vehicle-art', express.static(path.join(path.dirname(fileURLToPath(import.meta.url)), 'assets', 'vehicle-art'), { maxAge: '7d' }));
 
 // Global rate limiting for API routes
 app.use('/api', apiRateLimiter);

@@ -29,6 +29,7 @@ export const createDefaultBusinessSettings = () => ({
     enable_driver_loyalty: '1',
     enable_country_restrict_on_map: '1',
     enable_owner_module: '1',
+    enable_rental: '1',
     show_ride_otp: '1',
     enable_delivery_otp_load: '1',
     enable_delivery_otp_unload: '1',

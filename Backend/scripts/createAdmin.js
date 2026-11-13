@@ -7,7 +7,12 @@ import mongoose from 'mongoose';
 import { Admin } from '../src/modules/taxi/admin/models/Admin.js';
 
 const email = (process.env.ADMIN_EMAIL || 'admin@kailo.com').trim().toLowerCase();
-const password = process.env.ADMIN_PASSWORD || 'Admin@1234';
+// No default password: a known default would let anyone into a fresh admin panel.
+const password = String(process.env.ADMIN_PASSWORD || '');
+if (password.length < 8) {
+  console.error('Set ADMIN_PASSWORD (at least 8 characters). Example: ADMIN_PASSWORD=YourStrongPass node scripts/createAdmin.js');
+  process.exit(1);
+}
 
 await mongoose.connect(process.env.MONGODB_URI, {
   serverSelectionTimeoutMS: 20000,
@@ -34,5 +39,6 @@ if (admin) {
   });
   console.log('Admin created.');
 }
-console.log(`Email: ${email}\nPassword: ${password}`);
+// The password is never printed (terminal history / CI logs keep it).
+console.log(`Email: ${email} (password: the ADMIN_PASSWORD you set)`);
 await mongoose.disconnect();

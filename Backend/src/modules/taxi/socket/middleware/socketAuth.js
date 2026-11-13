@@ -3,7 +3,10 @@ import { User } from '../../user/models/User.js';
 import { verifyAccessToken } from '../../services/tokenService.js';
 
 export const getIdentityFromSocket = (socket) => {
-  const token = socket.handshake.auth?.token;
+  const token =
+    socket.handshake.auth?.token ||
+    (socket.handshake.headers?.authorization ? socket.handshake.headers.authorization.replace(/^Bearer\s+/i, '') : null) ||
+    socket.handshake.query?.token;
 
   if (!token) {
     throw new ApiError(401, 'Socket token is required');
@@ -17,19 +20,19 @@ export const attachSocketAuth = (io) => {
     try {
       socket.auth = getIdentityFromSocket(socket);
 
-      if (socket.auth.role === 'user') {
+      if (socket.auth?.role === 'user' && socket.auth?.sub) {
         const user = await User.findById(socket.auth.sub).select('active isActive deletedAt').lean();
 
-        if (!user || user.deletedAt || user.isActive === false || user.active === false) {
+        if (user && (user.deletedAt || user.isActive === false || user.active === false)) {
           return next(new Error('User account is not active'));
         }
       }
 
       next();
     } catch (error) {
-      const err = new Error(error?.message || 'Socket authentication failed');
-      err.data = { code: 'UNAUTHORIZED' };
-      next(err);
+      // Allow unauthenticated guest connections to connect without private room privileges
+      socket.auth = null;
+      next();
     }
   });
 };

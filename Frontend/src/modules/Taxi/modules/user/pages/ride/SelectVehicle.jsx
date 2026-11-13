@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Car, ArrowLeft, X, Banknote, CreditCard, ChevronDown, Clock3, LoaderCircle, Eye, TicketPercent, CheckCircle2, AlertTriangle, Calendar, User, Clock, Users, Package, Navigation } from 'lucide-react';
 import { GoogleMap, MarkerF, OverlayView, PolylineF } from '@react-google-maps/api';
+import { fallbackVehicleImage } from '../../components/useVehicleTiles';
 import api from '../../../../shared/api/axiosInstance';
 import { BACKEND_ORIGIN } from '../../../../shared/api/runtimeConfig';
 import { HAS_VALID_GOOGLE_MAPS_KEY, useAppGoogleMapsLoader } from '../../../admin/utils/googleMaps';
@@ -461,10 +462,7 @@ const getVehicleMapIcon = (type) => {
     type?.map_icon ||
     type?.mapIcon ||
     type?.icon ||
-    type?.image ||
     type?.vehicleIconUrl ||
-    type?.preview_image ||
-    type?.previewImage ||
     ''
   ).trim();
   if (customIcon) {
@@ -517,18 +515,10 @@ const getVehicleMapIcon = (type) => {
 };
 
 const getVehiclePreviewImage = (type) => {
-  const previewImage = String(
-    type?.image ||
-    type?.preview_image ||
-    type?.previewImage ||
-    type?.map_icon ||
-    type?.icon ||
-    type?.vehicleIconUrl ||
-    ''
-  ).trim();
-  // Only the image the admin uploaded for this vehicle type is shown in the ride list. No bundled
-  // stock pictures: when the admin has not set one, a plain icon is drawn instead (see VehicleThumb).
-  return previewImage ? resolveAssetUrl(previewImage) : '';
+  // The vehicle's Preview Image is what riders see in the list. The map icon is for the map only, so it is
+  // not used here; without a Preview Image the built-in picture for that kind of vehicle is shown.
+  const previewImage = String(type?.image || type?.preview_image || type?.previewImage || '').trim();
+  return previewImage ? resolveAssetUrl(previewImage) : fallbackVehicleImage(type);
 };
 
 // The admin's vehicle image, or a neutral icon when none was uploaded or it fails to load.
@@ -736,7 +726,10 @@ const findBestPricingRule = ({ rules, vehicleTypeId, serviceLocationId, transpor
   }));
 
   if (!candidates.length) {
-    const genericCandidates = sortPricingRules((Array.isArray(rules) ? rules : []).filter((rule) => isActiveRidePricingRule(rule)));
+    // Any other ride price will do as a last resort, but never a Parcel price.
+    const genericCandidates = sortPricingRules((Array.isArray(rules) ? rules : []).filter((rule) => (
+      isActiveRidePricingRule(rule) && String(rule?.transport_type || 'taxi').trim().toLowerCase() !== 'delivery'
+    )));
     return genericCandidates[0] || null;
   }
 
@@ -1987,7 +1980,7 @@ const SelectVehicle = () => {
         vehicle: selectedVehicle,
         vehicleTypeId: selectedVehicle.vehicleTypeId,
         vehicleIconType: selectedVehicle.iconType,
-        vehicleIconUrl: selectedVehicle.vehicleIconUrl || selectedVehicle.icon,
+        vehicleIconUrl: selectedVehicle.vehicleIconUrl,
         paymentMethod,
         fare: finalFare,
         baseFare,

@@ -1,241 +1,146 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  Zap, 
-  Search, 
-  ChevronRight, 
-  Plus, 
-  Filter, 
-  Download, 
-  Car,
-  MoreVertical,
-  List,
-  LayoutGrid
-} from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
-import { adminService } from '../../services/adminService';
+import React, { useCallback, useEffect, useState } from 'react';
+import { CheckCircle2, ChevronRight, Plus, Search } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import { adminService } from '../../services/adminService';
+import SubscriptionPlanTable from '../../components/SubscriptionPlanTable';
 
-const ToggleSwitch = ({ label, enabled, onToggle }) => (
-  <div className="flex items-center justify-between p-4 bg-white border border-gray-200 rounded-xl shadow-sm flex-1 min-w-[280px]">
-    <span className="text-sm font-semibold text-gray-700">{label}</span>
-    <button 
-      onClick={onToggle}
-      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${enabled ? 'bg-indigo-600' : 'bg-gray-200'}`}
-    >
-      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${enabled ? 'translate-x-6' : 'translate-x-1'}`} />
-    </button>
-  </div>
-);
+const body = (response) => {
+  const value = response?.data ?? response;
+  return value?.data !== undefined && value?.results === undefined && value?.mode === undefined ? value.data : value;
+};
+
+const MODES = [
+  {
+    id: 'commissionOnly',
+    title: 'Commission only',
+    text: 'No plans. Every ride pays the admin commission set in prices. Drivers do not see plans.',
+  },
+  {
+    id: 'subscriptionOnly',
+    title: 'Subscription only',
+    text: 'Drivers must have an active plan to go online and get rides. No commission is taken from their rides.',
+  },
+  {
+    id: 'both',
+    title: 'Subscription and commission',
+    text: 'Plans are optional. A driver with an active plan pays no commission; drivers without one pay the normal commission.',
+  },
+];
 
 const DriverSubscriptions = () => {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
-  const [config, setConfig] = useState({
-    mode: 'commissionOnly' // commissionOnly, subscriptionOnly, both
-  });
+  const [mode, setMode] = useState('commissionOnly');
+  const [savingMode, setSavingMode] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [plans, setPlans] = useState([]);
-  const [itemsPerPage, setItemsPerPage] = useState(10);
 
-  const handleToggle = async (mode) => {
+  const load = useCallback(async () => {
     try {
-      const res = await adminService.updateSubscriptionSettings({ mode });
-      if (res.success) {
-        setConfig({ mode });
-        toast.success(`Mode changed to ${mode.replace(/([A-Z])/g, ' $1').toLowerCase()}`);
-      } else {
-        toast.error(res.message || "Failed to update settings");
-      }
+      const [plansData, settingsData] = await Promise.all([
+        adminService.getSubscriptionPlans(),
+        adminService.getSubscriptionSettings(),
+      ]);
+      setPlans(body(plansData)?.results || []);
+      setMode(body(settingsData)?.mode || 'commissionOnly');
     } catch (err) {
-      console.error('Update settings error:', err);
-      toast.error(err.message || "Failed to update settings");
+      toast.error(err?.message || 'Failed to load subscriptions');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const chooseMode = async (next) => {
+    if (next === mode) return;
+    if (next === 'subscriptionOnly' && !window.confirm('Subscription only: drivers without an active plan will not be able to go online. Continue?')) {
+      return;
+    }
+    setSavingMode(next);
+    try {
+      await adminService.updateSubscriptionSettings({ mode: next });
+      setMode(next);
+      toast.success(`Mode changed to "${MODES.find((item) => item.id === next)?.title}". It applies right away.`);
+    } catch (err) {
+      toast.error(err?.response?.data?.message || err?.message || 'Failed to update settings');
+    } finally {
+      setSavingMode('');
     }
   };
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setIsLoading(true);
-        
-        const [plansData, settingsData] = await Promise.all([
-          adminService.getSubscriptionPlans(),
-          adminService.getSubscriptionSettings()
-        ]);
-
-        if (plansData.success) setPlans(plansData.data?.results || []);
-        
-        if (settingsData.success) {
-          setConfig({ mode: settingsData.data?.mode || 'commissionOnly' });
-        }
-
-      } catch (err) {
-        console.error('Fetch error:', err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchData();
-  }, []);
-
-  const filteredPlans = plans.filter(p => 
-    p.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredPlans = plans.filter((plan) => String(plan.name || '').toLowerCase().includes(searchTerm.toLowerCase()));
 
   return (
     <div className="min-h-screen bg-gray-50 p-6 lg:p-8">
-      {/* HEADER */}
       <div className="mb-6">
-        <div className="flex items-center gap-1.5 text-xs text-gray-400 mb-2">
+        <div className="mb-2 flex items-center gap-1.5 text-xs text-gray-400">
           <span>Drivers</span>
           <ChevronRight size={12} />
           <span className="text-gray-700">Subscription</span>
         </div>
-        <div className="flex items-center justify-between gap-4">
-          <h1 className="text-xl font-semibold text-gray-900">Subscription</h1>
-          <div className="flex items-center gap-3">
-            <button className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors">
-              <Download size={15} /> Export List
-            </button>
-          </div>
-        </div>
+        <h1 className="text-xl font-semibold text-gray-900">Driver Subscription</h1>
       </div>
 
-      {/* TOP CONFIG TOGGLES */}
-      <div className="flex flex-wrap gap-4 mb-8">
-        <ToggleSwitch 
-          label="Enable Commission Only" 
-          enabled={config.mode === 'commissionOnly'} 
-          onToggle={() => handleToggle('commissionOnly')} 
-        />
-        <ToggleSwitch 
-          label="Enable Subscription Only" 
-          enabled={config.mode === 'subscriptionOnly'} 
-          onToggle={() => handleToggle('subscriptionOnly')} 
-        />
-        <ToggleSwitch 
-          label="Enable Subscription and Commission" 
-          enabled={config.mode === 'both'} 
-          onToggle={() => handleToggle('both')} 
-        />
+      <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-3">
+        {MODES.map((item) => {
+          const selected = mode === item.id;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              disabled={Boolean(savingMode)}
+              onClick={() => chooseMode(item.id)}
+              className={`rounded-xl border-2 bg-white p-4 text-left shadow-sm transition-colors ${selected ? 'border-indigo-600' : 'border-gray-200 hover:border-gray-300'}`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-semibold text-gray-900">{item.title}</span>
+                {selected ? <CheckCircle2 size={18} className="text-indigo-600" /> : <span className="h-4 w-4 rounded-full border-2 border-gray-300" />}
+              </div>
+              <p className="mt-2 text-xs leading-relaxed text-gray-500">{item.text}</p>
+              {savingMode === item.id ? <p className="mt-2 text-xs text-indigo-600">Saving...</p> : null}
+            </button>
+          );
+        })}
       </div>
 
-      {/* LIST SECTION */}
-      {config.mode !== 'commissionOnly' && (
-      <div className="bg-white rounded-xl border border-gray-200 overflow-visible shadow-sm">
-        {/* TOOLBAR */}
-        <div className="p-4 border-b border-gray-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <button className="w-10 h-10 bg-teal-500 text-white rounded-lg flex items-center justify-center shadow-sm">
-              <List size={18} />
-            </button>
-            <button className="w-10 h-10 bg-gray-100 text-gray-400 rounded-lg flex items-center justify-center hover:bg-indigo-50 transition-all">
-              <LayoutGrid size={18} />
-            </button>
-            <div className="flex items-center gap-2 text-xs text-gray-500 ml-4 font-medium">
-              <span>Show</span>
-              <select
-                value={itemsPerPage}
-                onChange={(e) => setItemsPerPage(e.target.value)}
-                className="border border-gray-200 rounded px-2 py-1 text-xs bg-white outline-none"
-              >
-                <option value={10}>10</option>
-                <option value={25}>25</option>
-                <option value={50}>50</option>
-              </select>
-              <span>entries</span>
-            </div>
+      <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
+        <div className="flex flex-col justify-between gap-4 border-b border-gray-100 p-4 md:flex-row md:items-center">
+          <div>
+            <p className="text-sm font-semibold text-gray-900">Plans</p>
+            <p className="text-xs text-gray-500">
+              {mode === 'commissionOnly'
+                ? 'Plans are kept but not shown to drivers while "Commission only" is selected.'
+                : 'Drivers see the switched-on plans for their vehicle type in Profile → Subscription and pay from their wallet.'}
+            </p>
           </div>
-          
           <div className="flex items-center gap-3">
-            <button className="bg-orange-500 text-white px-4 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 shadow-sm uppercase tracking-wide">
-              <Filter size={14} /> Filters
-            </button>
             <div className="relative">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input 
-                type="text" 
+              <input
+                type="text"
                 placeholder="Search plans..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg w-56 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
+                className="w-56 rounded-lg border border-gray-200 py-2 pl-9 pr-4 text-sm outline-none focus:border-indigo-500"
               />
             </div>
-            <button 
+            <button
+              type="button"
               onClick={() => navigate('/admin/drivers/subscription/create')}
-              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
+              className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700"
             >
-               <Plus size={15} /> Add Subscription
+              <Plus size={15} /> Add Subscription
             </button>
           </div>
         </div>
-
-        {/* TABLE */}
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="bg-gray-50 border-b border-gray-100">
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vehicle Type</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {isLoading ? (
-                <tr>
-                  <td colSpan="4" className="py-16 text-center">
-                    <div className="flex flex-col items-center gap-3">
-                      <Loader2 className="w-7 h-7 text-indigo-600 animate-spin" />
-                      <p className="text-sm text-gray-400">Loading plans...</p>
-                    </div>
-                  </td>
-                </tr>
-              ) : filteredPlans.length === 0 ? (
-                <tr>
-                  <td colSpan="4" className="px-6 py-16 text-center text-sm text-gray-400">
-                    No plans found.
-                  </td>
-                </tr>
-              ) : (
-                filteredPlans.map((item) => (
-                  <tr key={item._id} className="hover:bg-gray-50/50 transition-colors">
-                    <td className="px-6 py-4 text-sm font-medium text-gray-900 uppercase">{item.name}</td>
-                    <td className="px-4 py-4 text-sm text-gray-500">
-                       <div className="flex items-center gap-2">
-                          <Car size={14} className="text-gray-400" /> {item.transport_type} ({item.vehicle_type_id?.name || 'N/A'})
-                       </div>
-                    </td>
-                    <td className="px-4 py-4">
-                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium ${item.active ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-50 text-gray-500'}`}>
-                          {item.active ? 'Active' : 'Inactive'}
-                       </span>
-                    </td>
-                    <td className="px-4 py-4 text-center">
-                       <button className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors">
-                          <MoreVertical size={16} />
-                       </button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+        <div className="p-2">
+          <SubscriptionPlanTable plans={filteredPlans} loading={isLoading} audience="driver" onChanged={load} emptyText="No driver plans yet." />
         </div>
-
-        {/* FOOTER */}
-        {!isLoading && filteredPlans.length > 0 && (
-          <div className="px-6 py-3 border-t border-gray-100 flex items-center justify-between text-xs text-gray-400">
-             <span>Showing 1 to {filteredPlans.length} of {filteredPlans.length} entries</span>
-             <div className="flex items-center gap-1">
-                <button className="px-3 py-1.5 border border-gray-200 rounded text-xs text-gray-400" disabled>Prev</button>
-                <button className="w-7 h-7 rounded bg-indigo-600 text-white text-xs font-medium flex items-center justify-center">1</button>
-                <button className="px-3 py-1.5 border border-gray-200 rounded text-xs text-gray-400" disabled>Next</button>
-             </div>
-          </div>
-        )}
       </div>
-      )}
-
     </div>
   );
 };

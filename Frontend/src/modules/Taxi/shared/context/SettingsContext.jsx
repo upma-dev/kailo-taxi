@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { isRentalSwitchedOn, setRentalEnabled } from '../featureFlags';
 import api from '../api/axiosInstance';
 
 let activeFaviconObjectUrl = '';
@@ -153,6 +154,9 @@ export const SettingsProvider = ({ children }) => {
       const general = { ...(bootstrapData.general || {}) };
       if (/eqosy/i.test(String(general.app_name || ''))) general.app_name = 'Kailo Taxi';
       if (/eqosy/i.test(String(general.logo || ''))) general.logo = '';
+
+      // The admin's "Enable Rental Service" setting drives the whole Rental surface of the apps.
+      setRentalEnabled(isRentalSwitchedOn(bootstrapData.customization || {}));
 
       setSettings({
         general,

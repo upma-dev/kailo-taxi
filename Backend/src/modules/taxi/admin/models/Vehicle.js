@@ -58,6 +58,25 @@ const vehicleSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+    // Extra services drivers of this (four-wheeler) vehicle type may choose besides Ride: 'outstation' and
+    // 'pooling'. Not set (absent) means nothing was configured yet and every service stays available.
+    extra_services: {
+      type: [String],
+      enum: ['outstation', 'pooling'],
+      default: undefined,
+    },
+    // The App Module (service) this vehicle type belongs to, for example Ride or Parcel.
+    app_module_id: {
+      type: ObjectId,
+      ref: 'TaxiAppModule',
+      default: null,
+      index: true,
+    },
+    // Position inside its module (lowest first). Vehicles with the same number keep newest-first.
+    order_by: {
+      type: Number,
+      default: 0,
+    },
     dispatch_type: {
       type: String,
       enum: ['normal', 'bidding', 'both'],

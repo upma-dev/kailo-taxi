@@ -73,7 +73,8 @@ const Profile = () => {
     profileImage: '',
     stats: {
       trips: 0,
-      rating: 4.9,
+      rating: null,
+      ratingCount: 0,
       wallet: 0
     }
   });
@@ -127,7 +128,9 @@ const Profile = () => {
           ridesPayload,
         );
         const ridePagination = pickObject(ridesData?.pagination, ridesData?.data?.pagination);
+        // Completed trips from the server (cancelled / unmatched bookings are not trips).
         const dynamicTripCount = pickNumber(
+          user.completedTrips,
           ridePagination.total,
           ridesData?.total,
           ridesData?.count,
@@ -145,13 +148,9 @@ const Profile = () => {
           user.wallet_amount,
           stored?.walletBalance,
         );
-        const dynamicRating = pickNumber(
-          user.rating,
-          user.avgRating,
-          user.average_rating,
-          stored?.rating,
-          4.9,
-        );
+        // The real average of the ratings drivers gave this rider (null until the first rating).
+        const riderRating = user.riderRating === null || user.riderRating === undefined ? null : Number(user.riderRating);
+        const riderRatingCount = Number(user.riderRatingCount || 0);
         
         setProfile({
           name: user.name || stored?.name || 'User',
@@ -159,7 +158,8 @@ const Profile = () => {
           profileImage: user.profileImage || user.profile_image || stored?.profileImage || '',
           stats: {
             trips: dynamicTripCount,
-            rating: dynamicRating,
+            rating: Number.isFinite(riderRating) && riderRatingCount > 0 ? riderRating : null,
+            ratingCount: riderRatingCount,
             wallet: dynamicWalletBalance,
           }
         });
@@ -168,7 +168,6 @@ const Profile = () => {
           ...user,
           walletBalance: dynamicWalletBalance,
           totalRides: dynamicTripCount,
-          rating: dynamicRating,
         }));
       } catch (err) {
         console.error('Failed to load profile', err);
@@ -263,9 +262,14 @@ const Profile = () => {
             <div className="text-center border-x border-slate-200/70">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Rating</p>
               <div className="flex items-center justify-center gap-1 mt-1">
-                <Star size={14} className="text-amber-400 fill-amber-400" />
-                <p className="text-[17px] font-bold text-slate-900">{profile.stats.rating}</p>
+                {profile.stats.rating !== null ? <Star size={14} className="text-amber-400 fill-amber-400" /> : null}
+                <p className="text-[17px] font-bold text-slate-900">
+                  {profile.stats.rating !== null ? profile.stats.rating.toFixed(1) : 'New'}
+                </p>
               </div>
+              {profile.stats.ratingCount > 0 ? (
+                <p className="text-[9px] font-medium text-slate-400">{profile.stats.ratingCount} rating{profile.stats.ratingCount === 1 ? '' : 's'}</p>
+              ) : null}
             </div>
             <div className="text-center">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Credits</p>
