@@ -43,7 +43,7 @@ const UserSubscriptions = () => {
         </div>
         <button
           type="button"
-          onClick={() => navigate('/taxi/admin/users/subscriptions/create')}
+          onClick={() => navigate('/admin/users/subscriptions/create')}
           className="inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-4 py-3 text-sm font-black text-white shadow-sm transition hover:bg-indigo-700"
         >
           <Plus size={16} />

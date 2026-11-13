@@ -144,7 +144,7 @@ const FleetDrivers = () => {
               </button>
               <button
                 type="button"
-                onClick={() => navigate('/taxi/admin/fleet/drivers/create')}
+                onClick={() => navigate('/admin/fleet/drivers/create')}
                 className="flex h-12 items-center gap-3 rounded bg-indigo-950 px-6 text-sm font-semibold text-white transition-colors hover:bg-indigo-900"
               >
                 <Plus size={16} /> Add Fleet Drivers
@@ -214,7 +214,7 @@ const FleetDrivers = () => {
                         <td className="px-3 py-5">
                           <button
                             type="button"
-                            onClick={() => navigate(`/taxi/admin/drivers/${driver._id}`)}
+                            onClick={() => navigate(`/admin/drivers/${driver._id}`)}
                             className="inline-flex h-9 w-10 items-center justify-center rounded bg-teal-50 text-teal-500 transition-colors hover:bg-teal-100"
                             title="View driver"
                           >

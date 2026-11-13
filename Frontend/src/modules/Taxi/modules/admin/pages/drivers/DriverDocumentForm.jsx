@@ -286,7 +286,7 @@ const DriverDocumentForm = () => {
         }
       }
 
-      navigate('/taxi/admin/drivers/documents');
+      navigate('/admin/drivers/documents');
     } catch (err) {
       setError(err?.message || 'Unable to save onboarding configuration');
     } finally {
@@ -316,7 +316,7 @@ const DriverDocumentForm = () => {
           </h1>
           <button
             type="button"
-            onClick={() => navigate('/taxi/admin/drivers/documents')}
+            onClick={() => navigate('/admin/drivers/documents')}
             className="flex items-center gap-2 px-4 py-2 text-sm text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
           >
             <ArrowLeft size={16} />

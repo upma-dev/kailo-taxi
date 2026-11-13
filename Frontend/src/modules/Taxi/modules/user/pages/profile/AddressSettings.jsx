@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ArrowLeft, Briefcase, Home, MapPin, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { ArrowLeft, Briefcase, Home, LocateFixed, Loader2, MapPin, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { getCurrentAddress } from '../../services/savedAddressStore';
 
 const STORAGE_KEY = 'kailo:savedAddresses';
 
@@ -10,7 +11,7 @@ const createId = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 const defaultState = {
   home: {
     label: 'Home',
-    address: 'Vijay Nagar, Indore',
+    address: '',
     landmark: '',
     notes: '',
   },
@@ -137,13 +138,31 @@ const AddressSettings = () => {
   }, [data, modal]);
 
   const [draft, setDraft] = useState(null);
+  const [locating, setLocating] = useState(false);
+  const [locationError, setLocationError] = useState('');
+
+  const useCurrentLocation = async () => {
+    setLocating(true);
+    setLocationError('');
+    try {
+      const { address, coords } = await getCurrentAddress();
+      setDraft((prev) => ({ ...prev, address, coords }));
+    } catch (error) {
+      setLocationError(error?.message || 'Unable to get your current location');
+    } finally {
+      setLocating(false);
+    }
+  };
 
   useEffect(() => {
     try {
       const saved = window.localStorage.getItem(STORAGE_KEY);
       if (!saved) return;
       const parsed = JSON.parse(saved);
-      if (parsed && typeof parsed === 'object') setData({ ...defaultState, ...parsed });
+      if (parsed && typeof parsed === 'object') {
+        if (parsed.home?.address === 'Vijay Nagar, Indore' && !parsed.home.coords) parsed.home = { ...parsed.home, address: '' };
+        setData({ ...defaultState, ...parsed });
+      }
     } catch {
       // ignore
     }
@@ -165,7 +184,7 @@ const AddressSettings = () => {
     setDraft(draftDefaults);
   }, [draftDefaults]);
 
-  const closeModal = () => setModal(null);
+  const closeModal = () => { setModal(null); setLocationError(''); };
 
   const openEdit = (mode, id) => setModal({ mode, id });
 
@@ -355,9 +374,19 @@ const AddressSettings = () => {
               )}
 
               <Field label="Address">
+                <button
+                  type="button"
+                  onClick={useCurrentLocation}
+                  disabled={locating}
+                  className="mb-2 inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-[12px] font-black text-emerald-700 active:scale-95 transition-all disabled:opacity-60"
+                >
+                  {locating ? <Loader2 size={14} className="animate-spin" /> : <LocateFixed size={14} strokeWidth={2.8} />}
+                  {locating ? 'Getting location...' : 'Use my current location'}
+                </button>
+                {locationError ? <p className="mb-2 text-[11px] font-bold text-rose-500">{locationError}</p> : null}
                 <textarea
                   value={draft.address}
-                  onChange={(e) => setDraft((prev) => ({ ...prev, address: e.target.value }))}
+                  onChange={(e) => setDraft((prev) => ({ ...prev, address: e.target.value, coords: null }))}
                   placeholder="Add full address"
                   rows={3}
                   className="w-full rounded-2xl bg-white/80 border border-white/80 shadow-sm px-4 py-3 text-[14px] font-bold text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-200 resize-none"

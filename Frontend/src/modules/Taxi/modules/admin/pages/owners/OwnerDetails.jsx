@@ -147,7 +147,7 @@ const OwnerDetails = () => {
         <p className="text-sm font-semibold text-rose-600">{error || 'Owner not found'}</p>
         <button
           type="button"
-          onClick={() => navigate('/taxi/admin/owners')}
+          onClick={() => navigate('/admin/owners')}
           className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-indigo-700"
         >
           Back to Owners
@@ -159,7 +159,7 @@ const OwnerDetails = () => {
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-gray-950">
       <div className="p-6 lg:p-8">
-        <AdminPageHeader module="Owner Management" page="Owner Details" title="Owner Details" backto="/taxi/admin/owners" />
+        <AdminPageHeader module="Owner Management" page="Owner Details" title="Owner Details" backto="/admin/owners" />
 
         <div className="mt-6">
           <div className="rounded border border-gray-200 bg-white shadow-sm">
@@ -253,7 +253,7 @@ const OwnerDetails = () => {
 
       <button
         type="button"
-        onClick={() => navigate('/taxi/admin/owners')}
+        onClick={() => navigate('/admin/owners')}
         className="mt-6 inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-600 transition-colors hover:bg-gray-50"
       >
         <ArrowLeft size={16} /> Back

@@ -313,6 +313,11 @@ const driverSchema = new mongoose.Schema(
         default: [0, 0],
       },
     },
+    savedAddress: {
+      type: String,
+      default: '',
+      trim: true,
+    },
     routeBooking: {
       enabled: {
         type: Boolean,
@@ -331,6 +336,16 @@ const driverSchema = new mongoose.Schema(
         type: Date,
         default: null,
       },
+    },
+    // "Go Home" mode: only rides on the way to the driver's home are offered while it is active.
+    goHome: {
+      homeLocation: { type: geoPointSchema, default: null },
+      label: { type: String, default: '', trim: true },
+      active: { type: Boolean, default: false },
+      activatedAt: { type: Date, default: null },
+      expiresAt: { type: Date, default: null },
+      usesDate: { type: String, default: '' },
+      usesToday: { type: Number, default: 0 },
     },
     documents: {
       type: mongoose.Schema.Types.Mixed,

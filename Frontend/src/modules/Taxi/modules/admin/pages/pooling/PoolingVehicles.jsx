@@ -97,7 +97,7 @@ const PoolingVehicles = () => {
             <p className="text-sm font-medium text-slate-500">Manage dedicated fleet for car pooling services</p>
           </div>
           <button
-            onClick={() => navigate('/taxi/admin/pooling/vehicles/create')}
+            onClick={() => navigate('/admin/pooling/vehicles/create')}
             className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-indigo-200 transition-all hover:bg-indigo-700 active:scale-95"
           >
             <Plus size={18} />
@@ -263,14 +263,14 @@ const PoolingVehicles = () => {
                       <td className="px-5 py-4">
                         <div className="flex items-center justify-end gap-2">
                           <button
-                            onClick={() => navigate(`/taxi/admin/pooling/vehicles/view/${vehicle._id}`)}
+                            onClick={() => navigate(`/admin/pooling/vehicles/view/${vehicle._id}`)}
                             className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 transition hover:bg-slate-100"
                           >
                             <Eye size={14} />
                             View
                           </button>
                           <button
-                            onClick={() => navigate(`/taxi/admin/pooling/vehicles/edit/${vehicle._id}`)}
+                            onClick={() => navigate(`/admin/pooling/vehicles/edit/${vehicle._id}`)}
                             className="inline-flex items-center gap-2 rounded-xl border border-indigo-200 px-3 py-2 text-xs font-bold text-indigo-600 transition hover:bg-indigo-50"
                           >
                             <PencilLine size={14} />

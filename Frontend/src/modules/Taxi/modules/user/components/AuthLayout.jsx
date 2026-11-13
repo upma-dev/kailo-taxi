@@ -6,10 +6,15 @@ import heroImg from '@/assets/landing/hero.png';
 import { useSettings } from '../../../shared/context/SettingsContext';
 import { useLandingContent } from '../../../shared/hooks/useLandingContent';
 
+import LoginBannerCarousel from '@/shared/components/auth/LoginBanners';
+import { ServiceTicker } from '@/shared/components/auth/LoginShowcase';
+import useLoginData from '@/shared/components/auth/useLoginData';
 import mobilityBanner from '@/assets/images/mobility-banner-cartoony.png';
 
 const AuthLayout = ({ children, title, subtitle }) => {
   const navigate = useNavigate();
+  const { config } = useLoginData('user');
+  const accent = config.accent_color;
   const { settings } = useSettings();
   const { content: landing } = useLandingContent();
   const screen = landing?.appScreens?.user || {};
@@ -82,7 +87,7 @@ const AuthLayout = ({ children, title, subtitle }) => {
           </div>
 
           <div className="flex items-center gap-6 text-xs font-semibold text-gray-500 uppercase tracking-wider mt-12">
-            <span>© {appName} 2026</span>
+            <span>{config.copyright_text}</span>
             <a href="/taxi/terms" className="hover:text-white transition-colors">Terms</a>
             <a href="/taxi/privacy" className="hover:text-white transition-colors">Privacy</a>
           </div>
@@ -90,63 +95,68 @@ const AuthLayout = ({ children, title, subtitle }) => {
       </div>
 
       {/* Right side (Main content) */}
-      <div className="flex-1 h-full flex flex-col items-center justify-start lg:justify-center relative w-full bg-[#F8F9FA] overflow-y-auto lg:overflow-hidden">
+      <div className="flex-1 h-full flex flex-col items-center justify-start lg:justify-center relative w-full bg-white lg:bg-[#F8F9FA] overflow-y-auto lg:overflow-hidden">
         
-        {/* Premium Mobile Background (Hidden on Desktop) */}
-        <div className="lg:hidden absolute top-0 left-0 w-full h-[300px] bg-gradient-to-b from-[#0F766E] to-[#0A4A46] rounded-b-[2.5rem] z-0 overflow-hidden shadow-lg">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-[#C6F432]/15 rounded-full blur-[60px] -mr-20 -mt-20" />
-          <div className="absolute bottom-0 left-0 w-40 h-40 bg-white/5 rounded-full blur-[40px] -ml-10 -mb-10" />
-        </div>
+        {/* Mobile hero: banners (if any) and the brand, kept compact */}
+        <div className="lg:hidden relative z-20 w-full shrink-0 overflow-hidden px-4 pb-14 pt-16" style={{ background: `linear-gradient(180deg, ${config.header_from} 0%, ${config.header_to} 100%)` }}>
+          <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-[#C6F432]/20 blur-[60px]" />
+          <div className="pointer-events-none absolute -bottom-10 -left-10 h-40 w-40 rounded-full bg-white/10 blur-[40px]" />
 
-        {/* Mobile Header Actions (Single Back Button) */}
-        <div className="lg:hidden w-full flex items-center justify-start px-6 pt-5 z-30">
           <button
             type="button"
             onClick={handleClose}
-            className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/20 flex items-center justify-center text-white transition-all active:scale-95"
+            className="absolute left-4 top-4 z-10 flex h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white backdrop-blur-md transition-all active:scale-95"
             aria-label="Back"
           >
-            <ArrowLeft className="w-5 h-5" />
+            <ArrowLeft className="h-5 w-5" />
           </button>
-        </div>
 
-        {/* Mobile Header (Visible only on small screens) */}
-        <div className="lg:hidden w-full flex flex-col items-center text-center mt-4 mb-6 z-20 px-6">
+          <LoginBannerCarousel app="user" size="hero" lightDots className="relative mb-3 -mt-2" />
+
+          <div className="relative flex flex-col items-center text-center">
             {appLogo ? (
               <img
                 src={appLogo}
                 alt={`${appName} logo`}
-                className="w-16 h-16 rounded-2xl object-contain bg-white p-2 mb-3 shadow-xl"
+                className="mb-3 h-16 w-16 rounded-2xl bg-white object-contain p-1.5 shadow-xl"
               />
             ) : (
-              <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center mb-3 shadow-xl">
-                <div className="w-8 h-8 bg-[#1A1A1A] rounded-lg"></div>
+              <div className="mb-2 flex h-14 w-14 items-center justify-center rounded-2xl bg-white shadow-xl">
+                <div className="h-7 w-7 rounded-lg bg-[#1A1A1A]"></div>
               </div>
             )}
-            <div className="flex items-center gap-2">
-              <h2 className="text-2xl font-black text-white tracking-tight">{appName}</h2>
-              <span className="px-2.5 py-0.5 rounded-full bg-[#C6F432] text-[#14213D] text-xs font-black uppercase tracking-widest flex items-center gap-1 shadow-md">
-                <Car size={12} />
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <h2 className="text-[22px] font-black leading-none tracking-tight text-white">{appName}</h2>
+              <span className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-widest text-[#14213D] shadow-md" style={{ background: accent }}>
+                <Car size={11} />
                 TAXI
               </span>
             </div>
+            <p className="mt-2 max-w-[28ch] text-[13px] font-semibold leading-snug text-white/80 [text-wrap:balance]">{config.tagline_user}</p>
+          </div>
         </div>
 
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="w-full max-w-[420px] bg-white lg:bg-transparent rounded-3xl p-6 lg:p-0 z-10 relative shadow-[0_20px_40px_-15px_rgba(0,0,0,0.05)] lg:shadow-none mx-4 lg:mx-0 mb-8 lg:mb-0"
+          className="w-full max-w-none lg:max-w-[420px] shrink-0 bg-white lg:bg-transparent rounded-t-[2rem] lg:rounded-3xl px-6 pb-2 pt-8 lg:p-0 z-30 relative shadow-[0_-18px_40px_-18px_rgba(0,0,0,0.35)] lg:shadow-none -mt-6 lg:mt-0"
         >
+          <LoginBannerCarousel app="user" size="hero" className="hidden lg:block mb-8" />
           {title && (
-            <div className="mb-10 text-left">
-              <h1 className="text-3xl font-black text-[#1A1A1A] tracking-tight mb-2">
+            <div className="mb-9 text-center">
+              <h1
+                className="text-[29px] font-extrabold uppercase leading-tight tracking-[0.01em] text-[#0B3B36]"
+                style={{ fontFamily: "'Cinzel', 'Playfair Display', Georgia, serif" }}
+              >
                 {title}
               </h1>
+              <span className="mx-auto mb-3 mt-1 block h-[5px] w-14 rounded-full" style={{ background: accent }} />
               {subtitle && (
-                <p className="text-gray-500 text-sm">
+                <p className="mx-auto max-w-[30ch] text-[13px] font-medium leading-relaxed text-gray-500" style={{ fontFamily: "'Poppins', system-ui, sans-serif" }}>
                   {subtitle}
                 </p>
               )}
+              <ServiceTicker app="user" className="mt-5" />
             </div>
           )}
           <div className="relative z-10 w-full">
@@ -154,12 +164,16 @@ const AuthLayout = ({ children, title, subtitle }) => {
           </div>
         </motion.div>
         
-        {/* Helper footer link */}
-        <div className="mt-auto lg:mt-12 text-center w-full max-w-[420px] z-20 pb-8 lg:pb-0">
-            <p className="text-xs text-gray-400 flex items-center justify-center gap-2">
-              <span className="w-4 h-4 rounded-full border border-gray-300 flex items-center justify-center font-bold text-[10px]">?</span>
-              Need assistance? <a href="/taxi/user/support" className="text-[#1A1A1A] font-semibold hover:text-[color:var(--app-primary,#0F766E)] transition-colors ml-1">Contact Support</a>
-            </p>
+        {/* Helper footer: support link + copyright, both managed by the admin */}
+        <div className="mt-auto lg:mt-12 text-center w-full max-w-[420px] z-20 px-6 pb-8 pt-6 lg:pb-0 lg:pt-0 space-y-2">
+            {config.show_support && config.support_label ? (
+              <p className="text-xs text-gray-400 flex items-center justify-center gap-2">
+                <span className="w-4 h-4 rounded-full border border-gray-300 flex items-center justify-center font-bold text-[10px]">?</span>
+                {config.support_text}{' '}
+                <a href={config.support_link || '/taxi/contact'} className="text-[#1A1A1A] font-semibold hover:text-[color:var(--app-primary,#0F766E)] transition-colors ml-1">{config.support_label}</a>
+              </p>
+            ) : null}
+            {config.copyright_text ? <p className="text-[11px] font-medium text-gray-400">{config.copyright_text}</p> : null}
         </div>
       </div>
     </div>

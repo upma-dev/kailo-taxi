@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation, useNavigate, UNSAFE_RouteContext as RouteContext } from 'react-router-dom'
 import { Suspense, useEffect } from 'react'
 import { toast } from 'sonner'
 import SmartRouteSkeleton from '../shared/components/skeletons/SmartRouteSkeleton'
@@ -10,6 +10,7 @@ import {
   resolveCurrentAppHomeRoute,
   syncActiveModule,
 } from '../shared/utils/activeModule.js'
+import { RealLocationContext, RestoreRealLocation } from './realLocation.jsx'
 import lazyWithRetry from '../shared/utils/lazyWithRetry.js'
 
 const TaxiApp = lazyWithRetry(() => import('../modules/Taxi/TaxiApp'))
@@ -22,12 +23,46 @@ const AdminSwitchFallback = () => <div className="min-h-screen bg-neutral-100" /
 
 const TaxiAppWrapper = () => {
   const { pathname } = useLocation()
-  const isAdmin = pathname.startsWith('/taxi/admin')
+  const isAdmin = pathname.startsWith('/admin')
   return (
     <Suspense fallback={isAdmin ? <AdminSwitchFallback /> : <PageLoader />}>
       <TaxiApp />
     </Suspense>
   )
+}
+
+// The admin panel lives at /admin/... in the address bar. TaxiApp's route tree is mounted
+// under /taxi, so we hand it a location with the /taxi prefix; the browser URL is untouched.
+const AdminAppWrapper = () => {
+  const location = useLocation()
+  const innerLocation = { ...location, pathname: `/taxi${location.pathname}` }
+  // Reset the parent route match so the inner <Routes> resolves from "/" (the mapped
+  // location starts with /taxi, not with the /admin route we are rendered under).
+  return (
+    <RouteContext.Provider value={{ outlet: null, matches: [], isDataRoute: false }}>
+    <Routes location={innerLocation}>
+      <Route
+        path="/taxi/*"
+        element={
+          <RealLocationContext.Provider value={location}>
+            <RestoreRealLocation>
+              <Suspense fallback={<AdminSwitchFallback />}>
+                <TaxiApp />
+              </Suspense>
+            </RestoreRealLocation>
+          </RealLocationContext.Provider>
+        }
+      />
+    </Routes>
+    </RouteContext.Provider>
+  )
+}
+
+// Old /taxi/admin/... links keep working by redirecting to /admin/...
+const RedirectTaxiAdmin = () => {
+  const location = useLocation()
+  const subpath = location.pathname.replace(/^\/taxi\/admin/, '')
+  return <Navigate to={`/admin${subpath}${location.search}`} replace />
 }
 
 // Short legacy paths (/driver/..., /owner/..., /admin/...) map onto their /taxi/... panels.
@@ -67,7 +102,7 @@ const SmartFallbackRedirect = () => {
   if (pathname.startsWith('/taxi/owner') || pathname.startsWith('/owner')) {
     return <Navigate to="/taxi/owner/dashboard" replace />
   }
-  if (pathname.startsWith('/taxi/admin') || pathname.startsWith('/admin')) {
+  if (pathname.startsWith('/admin') || pathname.startsWith('/admin')) {
     return <Navigate to={TAXI_ADMIN_HOME} replace />
   }
   if (pathname.startsWith('/login') || pathname.startsWith('/auth')) {
@@ -103,7 +138,7 @@ const AppRoutes = () => {
 
       const role = String(event.detail?.role || 'user').toLowerCase()
       if (role === 'admin') {
-        navigate('/taxi/admin/login', { replace: true })
+        navigate('/admin/login', { replace: true })
       } else if (['driver', 'owner', 'bus_driver', 'service_center', 'service_center_staff'].includes(role)) {
         navigate(role === 'owner' ? '/taxi/owner/login' : '/taxi/driver/login', { replace: true })
       } else {
@@ -187,8 +222,9 @@ const AppRoutes = () => {
       <Route path="/refund" element={<Navigate to="/taxi/refund" replace />} />
       <Route path="/cancellation" element={<Navigate to="/taxi/cancellation" replace />} />
       <Route path="/about" element={<Navigate to="/taxi/about" replace />} />
+      <Route path="/taxi/admin/*" element={<RedirectTaxiAdmin />} />
       <Route path="/taxi/*" element={<TaxiAppWrapper />} />
-      <Route path="/admin/*" element={<RedirectToTaxi prefix="admin" fallback="/taxi/admin" />} />
+      <Route path="/admin/*" element={<AdminAppWrapper />} />
       <Route path="/driver/*" element={<RedirectToTaxi prefix="driver" fallback="/taxi/driver" />} />
       <Route path="/owner/*" element={<RedirectToTaxi prefix="owner" fallback="/taxi/owner" />} />
       <Route path="/user/*" element={<RedirectToTaxi prefix="user" fallback="/taxi/user" />} />

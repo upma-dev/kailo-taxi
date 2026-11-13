@@ -1,11 +1,28 @@
 /* Kailo Taxi landing site. Theme: teal gradient, lime accent, navy ink. */
 .landing-root {
+  --lp-primary: #0F766E;
+  --lp-dark: #052E2B;
+  --lp-accent: #C6F432;
+  --lp-ink: #14213D;
+  --lp-deep: #031A19;
+  --lp-dark-2: #06302D;
+  --lp-mid: #0B4A45;
+  --lp-primary-2: #14B8A6;
+  --lp-mint: #E6F7EE;
+  --lp-mint-2: #DDF3EC;
+  --lp-mint-3: #D9F1EA;
+  --lp-mint-4: #CDEBE4;
+  --lp-mint-pale: #F3FBF6;
+  --lp-lime-1: #EEFBE0;
+  --lp-lime-2: #EAF8D8;
+  --lp-accent-light: #E4FF7A;
+  --lp-accent-deep: #8FD414;
   font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   scroll-behavior: smooth;
 }
 
 .landing-hero {
-  background: linear-gradient(180deg, #0f766e 0%, #0b5d57 100%);
+  background: linear-gradient(180deg, var(--lp-primary) 0%, var(--lp-mid) 100%);
 }
 
 /* Lane markings rushing toward the viewer: transform-only so it runs on the GPU. */
@@ -25,3 +42,11 @@
     contain-intrinsic-size: 700px;
   }
 }
+
+/* Anchor jumps land below the fixed header. */
+.landing-root [id] { scroll-margin-top: 76px; }
+
+/* Google Website Translator injects a banner and shifts the page; keep the layout clean. */
+body { top: 0 !important; }
+.goog-te-banner-frame, .skiptranslate > iframe, #goog-gt-tt, .goog-tooltip { display: none !important; }
+.goog-text-highlight { background: none !important; box-shadow: none !important; }

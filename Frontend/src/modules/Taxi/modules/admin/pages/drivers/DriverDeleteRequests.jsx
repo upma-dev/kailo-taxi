@@ -205,7 +205,7 @@ const DriverDeleteRequests = () => {
           <p>Pending Queue: {filteredDrivers.length} requests</p>
           <button
             type="button"
-            onClick={() => navigate('/taxi/admin/drivers')}
+            onClick={() => navigate('/admin/drivers')}
             className="px-4 py-2 border border-gray-100 rounded-xl hover:text-gray-950 transition-all font-black text-gray-400"
           >
             Back To Drivers

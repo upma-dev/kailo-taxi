@@ -21,7 +21,7 @@ const DriverImportCreate = () => {
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const goBack = () => navigate('/taxi/admin/drivers/bulk-upload');
+  const goBack = () => navigate('/admin/drivers/bulk-upload');
 
   const selectFile = async (file) => {
     if (!file) return;
@@ -89,7 +89,7 @@ const DriverImportCreate = () => {
 
       if ((result.created_count || 0) > 0) {
         toast.success(summary);
-        navigate('/taxi/admin/drivers');
+        navigate('/admin/drivers');
         return;
       }
 

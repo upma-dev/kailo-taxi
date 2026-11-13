@@ -1,9 +1,38 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Phone, Mail, MapPin, Clock } from 'lucide-react';
+import api from '../../../shared/api/axiosInstance';
+
+// Managed from Admin -> App Customization -> Login Screens -> Contact page.
+// These are only the fallbacks shown until (or if) the saved content loads.
+const DEFAULT_CONTACT = {
+  contact_heading: "We're Here to",
+  contact_highlight: 'Help',
+  contact_intro: 'Got a question or need assistance? Reach out to our dedicated support team available 24/7.',
+  contact_phone: '7409129517',
+  contact_email: 'support@kailotaxi.com',
+  contact_address: 'Office No. 110,\nB. K Tower, H-65, Sec-63,\nNoida 201301',
+  contact_hours: 'Our platform operates 24 hours a day, 7 days a week. Support is always online.',
+};
 
 const ContactPage = () => {
   const navigate = useNavigate();
+  const [content, setContent] = useState(DEFAULT_CONTACT);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.get('/common/contact-page')
+      .then((response) => {
+        const payload = response?.data?.data || response?.data || response || {};
+        if (cancelled) return;
+        setContent({
+          ...DEFAULT_CONTACT,
+          ...Object.fromEntries(Object.entries(payload).filter(([key, value]) => key in DEFAULT_CONTACT && value !== undefined && value !== null && value !== '')),
+        });
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-gray-900">
@@ -21,10 +50,10 @@ const ContactPage = () => {
       <div className="bg-[#1a1a1a] text-white pt-32 pb-20 px-6">
         <div className="max-w-4xl mx-auto text-center">
             <h1 className="text-5xl md:text-6xl font-black tracking-tight mb-6">
-                We're Here to <span className="text-[#FFB300]">Help</span>
+                {content.contact_heading} <span className="text-[#FFB300]">{content.contact_highlight}</span>
             </h1>
             <p className="text-xl text-gray-400 leading-relaxed max-w-2xl mx-auto">
-                Got a question or need assistance? Reach out to our dedicated support team available 24/7.
+                {content.contact_intro}
             </p>
         </div>
       </div>
@@ -40,7 +69,7 @@ const ContactPage = () => {
                 <p className="text-gray-500 mb-6 leading-relaxed">
                     Call our toll-free line anytime for immediate assistance with your rides or accounts.
                 </p>
-                <p className="text-3xl font-black text-[#1a1a1a]">7409129517</p>
+                <p className="text-3xl font-black text-[#1a1a1a]">{content.contact_phone}</p>
             </div>
 
             <div className="bg-white p-10 rounded-3xl shadow-sm border border-gray-100 flex flex-col items-center text-center">
@@ -51,7 +80,7 @@ const ContactPage = () => {
                 <p className="text-gray-500 mb-6 leading-relaxed">
                     Prefer writing? Send us an email and our team will get back to you within 2 hours.
                 </p>
-                <p className="text-2xl font-bold text-[#FFB300]">support@kailotaxi.com</p>
+                <p className="text-2xl font-bold text-[#FFB300]">{content.contact_email}</p>
             </div>
 
             <div className="bg-white p-10 rounded-3xl shadow-sm border border-gray-100 flex flex-col items-center text-center">
@@ -59,8 +88,8 @@ const ContactPage = () => {
                     <MapPin className="text-gray-800" size={32} />
                 </div>
                 <h3 className="text-2xl font-bold mb-4">Headquarters</h3>
-                <p className="text-gray-500 mb-6 leading-relaxed">
-                    Office No. 110,<br/>B. K Tower, H-65, Sec-63,<br/>Noida 201301
+                <p className="text-gray-500 mb-6 leading-relaxed whitespace-pre-line">
+                    {content.contact_address}
                 </p>
             </div>
 
@@ -70,7 +99,7 @@ const ContactPage = () => {
                 </div>
                 <h3 className="text-2xl font-bold mb-4">Operating Hours</h3>
                 <p className="text-gray-500 mb-6 leading-relaxed">
-                    Our platform operates 24 hours a day, 7 days a week. Support is always online.
+                    {content.contact_hours}
                 </p>
             </div>
         </div>

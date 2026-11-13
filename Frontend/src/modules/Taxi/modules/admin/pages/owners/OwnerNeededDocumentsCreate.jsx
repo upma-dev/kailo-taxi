@@ -96,7 +96,7 @@ const OwnerNeededDocumentsCreate = () => {
 
       const json = await res.json();
       if (json?.success) {
-        navigate('/taxi/admin/owners/documents');
+        navigate('/admin/owners/documents');
         return;
       }
       alert(json?.message || 'Operation failed');
@@ -115,7 +115,7 @@ const OwnerNeededDocumentsCreate = () => {
           module="Owner Management"
           page="Owner Needed Documents"
           title="Create Owner Needed Document"
-          backto="/taxi/admin/owners/documents"
+          backto="/admin/owners/documents"
         />
 
         <div className="mt-6">

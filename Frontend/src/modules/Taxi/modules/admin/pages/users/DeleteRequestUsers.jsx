@@ -139,7 +139,7 @@ const DeleteRequestUsers = () => {
             </div>
             <button
               type="button"
-              onClick={() => navigate('/taxi/admin/users')}
+              onClick={() => navigate('/admin/users')}
               className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-orange-600 bg-white rounded-full shadow-md shadow-orange-700/20 hover:bg-orange-50 transition-colors"
             >
               <ArrowLeft size={16} /> Back
@@ -220,7 +220,7 @@ const DeleteRequestUsers = () => {
                             <div>
                               <button
                                 type="button"
-                                onClick={() => navigate(`/taxi/admin/users/${user._id}`)}
+                                onClick={() => navigate(`/admin/users/${user._id}`)}
                                 className="text-left text-sm font-medium text-gray-900 hover:text-orange-600 hover:underline transition-colors"
                               >
                                 {user.name || user.user_id?.name || 'Unknown'}
@@ -246,7 +246,7 @@ const DeleteRequestUsers = () => {
                             <button
                               type="button"
                               disabled={isSubmitting}
-                              onClick={() => navigate(`/taxi/admin/users/${user._id}`)}
+                              onClick={() => navigate(`/admin/users/${user._id}`)}
                               title="View Customer Profile"
                               className="p-2 text-gray-500 hover:text-orange-600 hover:bg-orange-50 rounded-full transition-colors disabled:opacity-50"
                             >

@@ -165,7 +165,7 @@ const AppModules = ({ mode: propMode }) => {
         await adminService.createAppModule(payload);
         toast.success('New module created');
       }
-      navigate('/taxi/admin/pricing/app-modules');
+      navigate('/admin/pricing/app-modules');
     } catch (err) {
       toast.error(err.message || 'Failed to save module');
     } finally {
@@ -460,7 +460,7 @@ const AppModules = ({ mode: propMode }) => {
       <div className="bg-white border-b border-gray-200 px-8 py-4 flex items-center justify-between shrink-0 shadow-sm relative z-10">
         <h1 className="text-[14px] font-black text-slate-900 uppercase tracking-tight">{isEdit ? 'EDIT' : 'CREATE'}</h1>
         <div className="flex items-center gap-2 text-[11px] font-bold text-gray-400">
-          <span className="hover:text-indigo-600 cursor-pointer" onClick={() => navigate("/taxi/admin/pricing/app-modules")}>App Modules</span>
+          <span className="hover:text-indigo-600 cursor-pointer" onClick={() => navigate("/admin/pricing/app-modules")}>App Modules</span>
           <ChevronRight size={12} className="opacity-50" />
           <span className="text-gray-700">{isEdit ? 'Edit' : 'Create'}</span>
         </div>
@@ -550,7 +550,7 @@ const AppModules = ({ mode: propMode }) => {
 
           <div className="mt-12 flex justify-end gap-3 pt-8 border-t border-gray-100">
              <button 
-                onClick={() => navigate('/taxi/admin/pricing/app-modules')}
+                onClick={() => navigate('/admin/pricing/app-modules')}
                 className="px-6 py-2.5 bg-gray-50 text-gray-500 border border-gray-200 rounded-lg text-sm font-semibold hover:bg-gray-100 transition-all active:scale-95"
              >
                 Cancel

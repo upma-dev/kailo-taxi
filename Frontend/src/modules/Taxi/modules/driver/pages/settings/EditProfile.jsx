@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Camera, User, Phone, Mail, Check, CheckCircle2, Loader2, Car, Layers } from 'lucide-react';
+import { ArrowLeft, Camera, User, Phone, Mail, Check, CheckCircle2, Loader2, Car, Layers, MapPin } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useImageUpload } from '../../../../shared/hooks/useImageUpload';
 import { getCurrentDriver, updateDriverProfile } from '../../services/registrationService';
@@ -70,6 +70,7 @@ const EditProfile = () => {
                     name: data.name || '',
                     phone: data.phone || '',
                     email: data.email || '',
+                    savedAddress: data.savedAddress || '',
                     transportType: String(data.registerFor || data.transport_type || 'taxi').toLowerCase() === 'both' ? 'all' : (data.registerFor || data.transport_type || 'taxi'),
                     serviceCategories: rawCategories,
                 });
@@ -120,6 +121,7 @@ const EditProfile = () => {
             const payload = {
                 name: trimmedName,
                 email,
+                savedAddress: String(formData.savedAddress || '').trim(),
                 registerFor: formData.transportType,
                 transport_type: formData.transportType,
                 serviceCategories: formData.serviceCategories,
@@ -241,6 +243,21 @@ const EditProfile = () => {
                             ) : null}
                         </div>
                     ))}
+
+                    {/* Saved Address */}
+                    <div className="bg-white p-4 py-5 rounded-2xl border border-slate-100 shadow-sm space-y-2 focus-within:border-slate-900 focus-within:ring-4 focus-within:ring-slate-900/5">
+                        <div className="flex items-center gap-2 text-slate-400">
+                            <MapPin size={16} />
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">Saved Address</span>
+                        </div>
+                        <textarea
+                            rows={2}
+                            value={formData.savedAddress || ''}
+                            onChange={(e) => setFormData(prev => ({ ...prev, savedAddress: e.target.value }))}
+                            placeholder="Enter your home / base address"
+                            className="w-full resize-none text-[15px] font-semibold text-slate-900 bg-transparent border-none p-0 focus:ring-0 tracking-tight"
+                        />
+                    </div>
 
                     {/* Transport Type Select */}
                     <div className="bg-white p-4 py-5 rounded-2xl border border-slate-100 shadow-sm space-y-2 focus-within:border-slate-900">

@@ -179,7 +179,7 @@ const WithdrawalRequestDetail = () => {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <button
-            onClick={() => navigate('/taxi/admin/drivers/wallet/withdrawals')}
+            onClick={() => navigate('/admin/drivers/wallet/withdrawals')}
             className="p-3 bg-white border border-gray-100 rounded-2xl hover:bg-gray-50 text-gray-400 hover:text-gray-950 transition-all shadow-sm"
           >
             <ArrowLeft size={20} />

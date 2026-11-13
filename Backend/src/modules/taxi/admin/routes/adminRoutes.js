@@ -18,7 +18,6 @@ import {
   createRentalPackageType,
   createOwner,
   createOwnerBooking,
-  createOnboardingScreen,
   createOwnerNeededDocument,
   createPreference,
   createRole,
@@ -40,7 +39,6 @@ import {
   deleteDriver,
   deleteDriverNeededDocument,
   deleteGoodsType,
-  deleteOnboardingScreen,
   deleteRentalPackageType,
   deleteLanguage,
   deleteOngoingRide,
@@ -82,7 +80,6 @@ import {
   getDriverNeededDocument,
   getDriverNeededDocuments,
   getDriverProfile,
-  getDriverOnboarding,
   getDrivers,
   getDriverRatings,
   getDriverRatingDetail,
@@ -101,6 +98,10 @@ import {
   getReferralTranslations,
   getGeneralSettingsCategory,
   getLanguages,
+  getAvailableLanguages,
+  getLanguage,
+  createLanguage,
+  updateLanguage,
   getMailSettings,
   getMapSettings,
   getNearbyServiceLocations,
@@ -110,7 +111,6 @@ import {
   getOwner,
   getOwners,
   getFleetVehicles,
-  getOwnerOnboarding,
   getOwnerBookings,
   getOwnerDashboardData,
   getOwnerNeededDocuments,
@@ -138,7 +138,6 @@ import {
   getUserSubscriptions,
   updateSubscriptionSettings,
   getTodayEarnings,
-  getUserOnboarding,
   getUser,
   getUsers,
   getDeletedUsers,
@@ -175,7 +174,6 @@ import {
   updateDriverNeededDocument,
   updateDriverPassword,
   updateFirebaseSettings,
-  updateOnboardingScreen,
   updateGoodsType,
   updateRentalPackageType,
   updateGeneralSettingsCategory,
@@ -448,6 +446,10 @@ adminRouter.delete('/admin/zones/:id', deleteZone);
 adminRouter.patch('/admin/zones/:id/toggle-status', toggleZoneStatus);
 
 adminRouter.get('/admin/languages', getLanguages);
+adminRouter.get('/admin/languages/available', getAvailableLanguages);
+adminRouter.post('/admin/languages', createLanguage);
+adminRouter.get('/admin/languages/:id', getLanguage);
+adminRouter.patch('/admin/languages/:id', updateLanguage);
 adminRouter.patch('/admin/languages/:id/status', updateLanguageStatus);
 adminRouter.delete('/admin/languages/:id', deleteLanguage);
 
@@ -488,12 +490,6 @@ adminRouter.patch('/admin/integration-settings/mail', updateMailSettings);
 
 adminRouter.patch('/admin/general-settings/:category', updateGeneralSettingsCategory);
 
-adminRouter.get('/on-boarding', getUserOnboarding);
-adminRouter.post('/on-boarding', createOnboardingScreen);
-adminRouter.patch('/on-boarding/:id', updateOnboardingScreen);
-adminRouter.delete('/on-boarding/:id', deleteOnboardingScreen);
-adminRouter.get('/on-boarding-driver', getDriverOnboarding);
-adminRouter.get('/on-boarding-owner', getOwnerOnboarding);
 
 adminRouter.get('/admin/reports/user/download', downloadUserReport);
 adminRouter.get('/admin/reports/driver/download', downloadDriverReport);

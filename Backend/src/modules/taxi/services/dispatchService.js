@@ -744,6 +744,7 @@ const dispatchAttempt = async (rideId, attemptIndex = 0) => {
       vehicleTypeIds: dispatchVehicleTypeIds,
       serviceType: ride.serviceType || 'ride',
       bookingMode: ride.bookingMode || 'normal',
+      dropCoords: ride.dropLocation?.coordinates || null,
     });
     const effectiveRadius = Number.isFinite(searchRadiusMeters) && searchRadiusMeters > 0
       ? searchRadiusMeters
@@ -1046,6 +1047,7 @@ export const notifyLateAvailableDriver = async (driverId) => {
       vehicleTypeIds: dispatchVehicleTypeIds,
       serviceType: ride.serviceType || 'ride',
       bookingMode: ride.bookingMode || 'normal',
+      dropCoords: ride.dropLocation?.coordinates || null,
     });
 
     const matchedDriver = drivers.find((item) => String(item._id) === driverKey);
@@ -1317,6 +1319,7 @@ export const getActivePendingDispatchForDriver = async (driverId, requestedRideI
           vehicleTypeIds: dispatchVehicleTypeIds,
           serviceType: ride.serviceType || 'ride',
           bookingMode: ride.bookingMode || 'normal',
+          dropCoords: ride.dropLocation?.coordinates || null,
         });
 
         if (drivers.some((d) => String(d._id) === driverKey)) {

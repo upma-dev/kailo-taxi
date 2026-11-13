@@ -167,7 +167,7 @@ const WithdrawalRequestDrivers = () => {
                         type="button"
                         onClick={() =>
                           navigate(
-                            `/taxi/admin/drivers/wallet/withdrawals/${item.driver_id}${item.latest_request_id ? `?requestId=${item.latest_request_id}` : ''
+                            `/admin/drivers/wallet/withdrawals/${item.driver_id}${item.latest_request_id ? `?requestId=${item.latest_request_id}` : ''
                             }`,
                           )
                         }

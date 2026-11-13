@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronRight, ShieldCheck, Briefcase, UserRound, Sparkles, Building2 } from 'lucide-react';
+import { ChevronRight, ShieldCheck, Briefcase, UserRound, Building2 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
@@ -14,6 +14,7 @@ import { useSettings } from '../../../../shared/context/SettingsContext';
 import { RENTAL_ENABLED } from '../../../../shared/featureFlags';
 import { useLandingContent } from '../../../../shared/hooks/useLandingContent';
 import LegalSheetModal from '../../components/LegalSheetModal';
+import LoginBannerCarousel from '@/shared/components/auth/LoginBanners';
 import FloatingAuthLayout, { AUTH_THEMES, AuthButton, AuthError, AuthPhoneField } from '@/shared/components/auth/FloatingAuthLayout';
 
 const PhoneRegistration = () => {
@@ -222,6 +223,7 @@ const PhoneRegistration = () => {
         <>
             <FloatingAuthLayout
                 theme={theme}
+                heroTop={<LoginBannerCarousel app="partner" size="hero" lightDots />}
                 logo={logoSrc}
                 logoAlt={appName}
                 brand={appName}
@@ -283,11 +285,6 @@ const PhoneRegistration = () => {
                 </div>
 
                 <AuthError message={error} />
-
-                <div className="flex w-full flex-wrap items-center justify-center gap-2 px-2 text-center">
-                    <Sparkles size={12} className="shrink-0" style={{ color: theme.accent }} />
-                    <span className="text-[10px] font-bold uppercase leading-tight tracking-widest text-zinc-400">{modeConfig.highlight}</span>
-                </div>
 
                 <AuthButton
                     theme={theme}

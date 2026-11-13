@@ -228,7 +228,7 @@ const UserDetails = () => {
             <AlertCircle size={32} />
          </div>
          <p className="text-lg font-black text-gray-900 uppercase">{error || 'User not found'}</p>
-         <button onClick={() => navigate('/taxi/admin/users')} className="px-6 py-2 bg-black text-white rounded-xl text-[12px] font-black uppercase tracking-widest">Go Back</button>
+         <button onClick={() => navigate('/admin/users')} className="px-6 py-2 bg-black text-white rounded-xl text-[12px] font-black uppercase tracking-widest">Go Back</button>
       </div>
     );
   }
@@ -239,7 +239,7 @@ const UserDetails = () => {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <button 
-            onClick={() => navigate('/taxi/admin/users')}
+            onClick={() => navigate('/admin/users')}
             className="p-2 hover:bg-white rounded-xl border border-transparent hover:border-gray-100 transition-all text-gray-400 hover:text-gray-900"
           >
             <ArrowLeft size={20} />
@@ -612,7 +612,7 @@ const UserDetails = () => {
 
       {/* BACK BUTTON */}
       <button 
-         onClick={() => navigate('/taxi/admin/users')}
+         onClick={() => navigate('/admin/users')}
          className="fixed bottom-10 right-10 w-14 h-14 bg-black text-white rounded-2xl shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all group z-50">
          <ArrowLeft size={24} />
       </button>

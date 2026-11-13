@@ -22,11 +22,15 @@ import {
     Shield,
     Languages,
     BadgePercent,
-    Check
+    Check,
+    MapPin,
+    TrendingUp,
+    Home
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import DriverBottomNav from '../../shared/components/DriverBottomNav';
-import { clearDriverAuthState, getCurrentDriver, updateDriverProfile } from '../services/registrationService';
+import { clearDriverAuthState, getCurrentDriver, getLocalDriverToken, setDriverOffline, updateDriverProfile } from '../services/registrationService';
+import api from '../../../shared/api/axiosInstance';
 import LanguageRow from '@/shared/language/LanguageRow'
 
 const unwrapDriver = (response) => response?.data?.data || response?.data || response || null;
@@ -116,7 +120,15 @@ const DriverProfile = () => {
         };
     }, []);
 
-    const handleLogout = () => {
+    const handleLogout = async () => {
+        // Leave the driver offline so no ride requests reach a logged-out device.
+        if (!isOwner) {
+            try {
+                await Promise.race([setDriverOffline(), new Promise((resolve) => setTimeout(resolve, 2500))]);
+            } catch {
+                // logging out must never be blocked by this
+            }
+        }
         clearDriverAuthState();
         setIsLogoutOpen(false);
         navigate(`${routePrefix}/login`, { replace: true });
@@ -134,6 +146,37 @@ const DriverProfile = () => {
         const parts = [driver?.registerFor, driver?.vehicleType].filter(Boolean);
         return parts.length > 0 ? parts.join(' - ') : 'N/A';
     }, [driver?.registerFor, driver?.vehicleType]);
+    const [summaries, setSummaries] = useState(null);
+
+    useEffect(() => {
+        let active = true;
+        const token = getLocalDriverToken();
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+        const periods = [
+            ['today', 'Today'],
+            ['this_week', 'This Week'],
+            ['this_month', 'This Month'],
+            ['all', 'All Time'],
+        ];
+        Promise.all(
+            periods.map(async ([period, label]) => {
+                try {
+                    const response = await api.get('/drivers/earnings', { headers, params: { period } });
+                    const data = response?.data?.data || response?.data || response || {};
+                    return {
+                        period,
+                        label,
+                        earnings: Number(data.summary?.totalNetEarnings || 0),
+                        trips: Number(data.summary?.totalTrips || 0),
+                    };
+                } catch {
+                    return { period, label, earnings: 0, trips: 0 };
+                }
+            }),
+        ).then((rows) => { if (active) setSummaries(rows); });
+        return () => { active = false; };
+    }, []);
+
     const driverLocation = useMemo(() => driver?.city || 'N/A', [driver?.city]);
     const driverNumber = useMemo(() => driver?.vehicleNumber || 'N/A', [driver?.vehicleNumber]);
     const driverColor = useMemo(() => driver?.vehicleColor || 'N/A', [driver?.vehicleColor]);
@@ -256,6 +299,9 @@ const DriverProfile = () => {
                     title: 'Your Account',
                     items: [
                 { id: 'personal', label: 'Personal Information', sub: driverPhone, icon: <User size={20} />, path: `${routePrefix}/edit-profile` },
+                ...(!isOwner ? [
+                    { id: 'address', label: 'Saved Address', sub: driver?.savedAddress || 'Add your home / base address', icon: <MapPin size={20} />, path: `${routePrefix}/edit-profile` },
+                ] : []),
                 { id: 'wallet', label: 'Wallet', icon: <Wallet size={20} />, path: `${routePrefix}/wallet` },
                 ...(!isOwner ? [
                     { id: 'vehicle', label: 'My Vehicle', icon: <Car size={20} />, path: `${routePrefix}/vehicle-fleet` },
@@ -270,6 +316,7 @@ const DriverProfile = () => {
             items: [
                 { id: 'refer', label: 'Refer & Earn', icon: <Gift size={20} />, path: `${routePrefix}/referral` },
                 { id: 'incentives', label: 'Incentives', icon: <BadgePercent size={20} />, path: `${routePrefix}/incentives` },
+                ...(!isOwner ? [{ id: 'goHome', label: 'Go Home', sub: 'Get rides on your way home', icon: <Home size={20} />, path: `${routePrefix}/go-home` }] : []),
                 { id: 'sos', label: 'Emergency SOS', icon: <Shield size={20} />, path: `${routePrefix}/security` },
             ]
         },
@@ -372,6 +419,30 @@ const DriverProfile = () => {
                     )}
                 </div>
             </header>
+
+            {/* Earnings summary: today / week / month / all time */}
+            <div className="mx-5 mt-5 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+                <div className="mb-3 flex items-center gap-2">
+                    <TrendingUp size={15} className="text-emerald-500" />
+                    <h3 className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">Earnings Summary</h3>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                    {(summaries || [{ label: 'Today' }, { label: 'This Week' }, { label: 'This Month' }, { label: 'All Time' }]).map((row) => (
+                        <button
+                            type="button"
+                            key={row.label}
+                            onClick={() => navigate(`${routePrefix}/earnings`)}
+                            className="rounded-xl bg-slate-50 px-3 py-3 text-left active:scale-95 transition-transform"
+                        >
+                            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{row.label}</p>
+                            <p className="mt-1 text-[18px] font-black text-slate-900">
+                                {summaries ? `₹${Math.round(row.earnings).toLocaleString('en-IN')}` : '...'}
+                            </p>
+                            <p className="text-[11px] font-semibold text-slate-500">{summaries ? `${row.trips} ride${row.trips === 1 ? '' : 's'}` : ' '}</p>
+                        </button>
+                    ))}
+                </div>
+            </div>
 
             {/* Which requests this captain accepts (limited by what the admin allows for the vehicle type) */}
             {!isOwner && (servicePreferenceOptions.length > 0 || rideModeOptions.length > 0) && (

@@ -761,58 +761,59 @@ const AdminLayout = () => {
             icon: UserCog,
             label: 'Admin Management',
             subItems: [
-              { label: 'Admins', path: '/taxi/admin/management/admins', permission: 'subadmins.manage' },
+              { label: 'Admins', path: '/admin/management/admins', permission: 'subadmins.manage' },
             ],
           },
-          { icon: Home, label: 'Dashboard', path: '/taxi/admin/dashboard', permission: 'dashboard.view' },
-          { icon: IndianRupee, label: 'Admin Earnings', path: '/taxi/admin/earnings', permission: 'earnings.view' },
-          { icon: MessageCircle, label: 'Chat', path: '/taxi/admin/chat', permission: 'chat.view' },
+          { icon: Home, label: 'Dashboard', path: '/admin/dashboard', permission: 'dashboard.view' },
+          { icon: IndianRupee, label: 'Admin Earnings', path: '/admin/earnings', permission: 'earnings.view' },
+          { icon: MessageCircle, label: 'Chat', path: '/admin/chat', permission: 'chat.view' },
           {
             icon: TrendingUp,
             label: 'Promotions Management',
             subItems: [
-              { label: 'Promo Code', path: '/taxi/admin/promotions/promo-codes', permission: 'promotions.view' },
-              { label: 'Push Notifications', path: '/taxi/admin/promotions/send-notification', permission: 'promotions.view' },
-              //{ label: 'Banner Image', path: '/taxi/admin/promotions/banner-image', permission: 'promotions.view' },
+              { label: 'Promo Code', path: '/admin/promotions/promo-codes', permission: 'promotions.view' },
+              { label: 'Push Notifications', path: '/admin/promotions/send-notification', permission: 'promotions.view' },
+              { label: 'Login Banners', path: '/admin/promotions/login-banners', permission: 'promotions.view' },
+              //{ label: 'Banner Image', path: '/admin/promotions/banner-image', permission: 'promotions.view' },
             ],
           },
           {
             icon: IndianRupee,
             label: 'Price Management',
             subItems: [
-              { label: 'Service Location', path: '/taxi/admin/pricing/service-location', permission: 'service_locations.view' },
-              { label: 'Zone', path: '/taxi/admin/pricing/zone', permission: 'zones.view' },
-              { label: 'Airport', path: '/taxi/admin/pricing/airport', permission: 'airports.view' },
-              { label: 'App Modules', path: '/taxi/admin/pricing/app-modules', permission: 'settings.view' },
-              { label: 'Vehicle Type', path: '/taxi/admin/pricing/vehicle-type', permission: 'vehicle_types.view' },
-              { label: 'Rental Package Types', path: '/taxi/admin/pricing/rental-packages', permission: 'rental.view' },
-              { label: 'Package Pricing', path: '/taxi/admin/pricing/package-pricing', permission: 'rental.view' },
+              { label: 'Service Location', path: '/admin/pricing/service-location', permission: 'service_locations.view' },
+              { label: 'Zone', path: '/admin/pricing/zone', permission: 'zones.view' },
+              { label: 'Airport', path: '/admin/pricing/airport', permission: 'airports.view' },
+              { label: 'App Modules', path: '/admin/pricing/app-modules', permission: 'settings.view' },
+              { label: 'Vehicle Type', path: '/admin/pricing/vehicle-type', permission: 'vehicle_types.view' },
+              { label: 'Rental Package Types', path: '/admin/pricing/rental-packages', permission: 'rental.view' },
+              { label: 'Package Pricing', path: '/admin/pricing/package-pricing', permission: 'rental.view' },
               ...(RENTAL_ENABLED
                 ? [
                     {
                       label: 'Rental',
                       subItems: [
-                        { label: 'Service Stores', path: '/taxi/admin/pricing/service-stores', permission: 'service_stores.view' },
-                        { label: 'Rental Vehicles', path: '/taxi/admin/pricing/rental-vehicles', permission: 'rental.view' },
-                        { label: 'Track Vehicles', path: '/taxi/admin/pricing/rental-tracking', permission: 'rental.view' },
-                        { label: 'Rental Requests', path: '/taxi/admin/pricing/rental-requests', permission: 'rental.view' },
-                        { label: 'Rental Quote Requests', path: '/taxi/admin/pricing/rental-quotes', permission: 'rental.view' },
+                        { label: 'Service Stores', path: '/admin/pricing/service-stores', permission: 'service_stores.view' },
+                        { label: 'Rental Vehicles', path: '/admin/pricing/rental-vehicles', permission: 'rental.view' },
+                        { label: 'Track Vehicles', path: '/admin/pricing/rental-tracking', permission: 'rental.view' },
+                        { label: 'Rental Requests', path: '/admin/pricing/rental-requests', permission: 'rental.view' },
+                        { label: 'Rental Quote Requests', path: '/admin/pricing/rental-quotes', permission: 'rental.view' },
                       ],
                     },
                   ]
                 : []),
-              { label: 'Set Price', path: '/taxi/admin/pricing/set-price', permission: 'set_prices.view' },
-              { label: 'Goods Types', path: '/taxi/admin/pricing/goods-types', permission: 'goods_types.view' },
+              { label: 'Set Price', path: '/admin/pricing/set-price', permission: 'set_prices.view' },
+              { label: 'Goods Types', path: '/admin/pricing/goods-types', permission: 'goods_types.view' },
             ],
           },
           {
             icon: Bus,
             label: 'Bus Service',
             subItems: [
-              { label: 'All Buses', path: '/taxi/admin/bus-service', permission: 'bus_service.view' },
-              { label: 'Pending Buses', path: '/taxi/admin/bus-service?status=pending_approval', permission: 'bus_service.view' },
-              { label: 'Bus Commission', path: '/taxi/admin/bus-service/commission', permission: 'bus_service.view' },
-              { label: 'Bus Bookings', path: '/taxi/admin/bus-service/bookings', permission: 'bus_service.view' },
+              { label: 'All Buses', path: '/admin/bus-service', permission: 'bus_service.view' },
+              { label: 'Pending Buses', path: '/admin/bus-service?status=pending_approval', permission: 'bus_service.view' },
+              { label: 'Bus Commission', path: '/admin/bus-service/commission', permission: 'bus_service.view' },
+              { label: 'Bus Bookings', path: '/admin/bus-service/bookings', permission: 'bus_service.view' },
             ],
           },
           ...(POOLING_ENABLED
@@ -821,10 +822,10 @@ const AdminLayout = () => {
                   icon: Share2,
                   label: 'Car Pooling',
                   subItems: [
-                    { label: 'Pooling Vehicles', path: '/taxi/admin/pooling/vehicles', permission: 'pooling.view' },
-                    { label: 'Pooling Commission', path: '/taxi/admin/pooling/commission', permission: 'pooling.view' },
-                    { label: 'Routes & Stops', path: '/taxi/admin/pooling/routes', permission: 'pooling.view' },
-                    { label: 'Pooling Bookings', path: '/taxi/admin/pooling/bookings', permission: 'pooling.view' },
+                    { label: 'Pooling Vehicles', path: '/admin/pooling/vehicles', permission: 'pooling.view' },
+                    { label: 'Pooling Commission', path: '/admin/pooling/commission', permission: 'pooling.view' },
+                    { label: 'Routes & Stops', path: '/admin/pooling/routes', permission: 'pooling.view' },
+                    { label: 'Pooling Bookings', path: '/admin/pooling/bookings', permission: 'pooling.view' },
                   ],
                 },
               ]
@@ -833,16 +834,16 @@ const AdminLayout = () => {
             icon: MapPin,
             label: 'Geofencing',
             subItems: [
-              { label: 'Heat Map', path: '/taxi/admin/geo/heatmap', permission: 'geofencing.view' },
-              { label: "God's Eye", path: '/taxi/admin/geo/gods-eye', permission: 'geofencing.view' },
-              { label: 'Peak Zone', path: '/taxi/admin/geo/peak-zone', permission: 'geofencing.view' },
+              { label: 'Heat Map', path: '/admin/geo/heatmap', permission: 'geofencing.view' },
+              { label: "God's Eye", path: '/admin/geo/gods-eye', permission: 'geofencing.view' },
+              { label: 'Peak Zone', path: '/admin/geo/peak-zone', permission: 'geofencing.view' },
             ],
           },
-          { icon: Car, label: 'Trip Requests', path: '/taxi/admin/trips', permission: 'trips.view' },
-          { icon: Car, label: 'Outstation Rides', path: '/taxi/admin/outstation-rides', permission: 'trips.view' },
-          { icon: Ban, label: 'Cancellation Analytics', path: '/taxi/admin/cancellation-analytics', permission: 'cancellation_analytics.view' },
-          { icon: Package, label: 'Delivery Requests', path: '/taxi/admin/deliveries', permission: 'deliveries.view' },
-          { icon: Clock, label: 'Ongoing Requests', path: '/taxi/admin/ongoing', permission: 'ongoing.view' },
+          { icon: Car, label: 'Trip Requests', path: '/admin/trips', permission: 'trips.view' },
+          { icon: Car, label: 'Outstation Rides', path: '/admin/outstation-rides', permission: 'trips.view' },
+          { icon: Ban, label: 'Cancellation Analytics', path: '/admin/cancellation-analytics', permission: 'cancellation_analytics.view' },
+          { icon: Package, label: 'Delivery Requests', path: '/admin/deliveries', permission: 'deliveries.view' },
+          { icon: Clock, label: 'Ongoing Requests', path: '/admin/ongoing', permission: 'ongoing.view' },
         ],
       },
       {
@@ -852,64 +853,64 @@ const AdminLayout = () => {
             icon: Users,
             label: 'Customer Management',
             subItems: [
-              { label: 'User List', path: '/taxi/admin/users', permission: 'users.view' },
-              { label: 'Subscription Management', path: '/taxi/admin/users/subscriptions', permission: 'users.view' },
-              { label: 'Delete Request Users', path: '/taxi/admin/users/delete-requests', permission: 'users.view' },
-              { label: 'User Bulk Upload', path: '/taxi/admin/users/bulk-upload', permission: 'users.view' },
+              { label: 'User List', path: '/admin/users', permission: 'users.view' },
+              { label: 'Subscription Management', path: '/admin/users/subscriptions', permission: 'users.view' },
+              { label: 'Delete Request Users', path: '/admin/users/delete-requests', permission: 'users.view' },
+              { label: 'User Bulk Upload', path: '/admin/users/bulk-upload', permission: 'users.view' },
             ],
           },
-          { icon: Wallet, label: 'Wallet Payment', path: '/taxi/admin/wallet/payment', permission: 'wallet.view' },
+          { icon: Wallet, label: 'Wallet Payment', path: '/admin/wallet/payment', permission: 'wallet.view' },
           {
             icon: Car,
             label: 'Driver Management',
             subItems: [
-              { label: 'Pending Drivers', path: '/taxi/admin/drivers/pending', permission: 'drivers.view' },
-              { label: 'Approved Drivers', path: '/taxi/admin/drivers', permission: 'drivers.view' },
-              { label: 'Active Drivers', path: '/taxi/admin/drivers/active', permission: 'drivers.view' },
-              { label: 'Subscription', path: '/taxi/admin/drivers/subscription', permission: 'drivers.view' },
-              { label: 'Drivers Ratings', path: '/taxi/admin/drivers/ratings', permission: 'drivers.view' },
+              { label: 'Pending Drivers', path: '/admin/drivers/pending', permission: 'drivers.view' },
+              { label: 'Approved Drivers', path: '/admin/drivers', permission: 'drivers.view' },
+              { label: 'Active Drivers', path: '/admin/drivers/active', permission: 'drivers.view' },
+              { label: 'Subscription', path: '/admin/drivers/subscription', permission: 'drivers.view' },
+              { label: 'Drivers Ratings', path: '/admin/drivers/ratings', permission: 'drivers.view' },
               {
                 label: 'Driver Wallet',
                 subItems: [
-                  { label: 'Withdrawal Requests', path: '/taxi/admin/drivers/wallet/withdrawals', permission: 'wallet.view' },
-                  { label: 'Negative Balance Drivers', path: '/taxi/admin/drivers/wallet/negative', permission: 'wallet.view' },
+                  { label: 'Withdrawal Requests', path: '/admin/drivers/wallet/withdrawals', permission: 'wallet.view' },
+                  { label: 'Negative Balance Drivers', path: '/admin/drivers/wallet/negative', permission: 'wallet.view' },
                 ],
               },
-              { label: 'Delete Request Drivers', path: '/taxi/admin/drivers/delete-requests', permission: 'drivers.view' },
-              { label: 'Driver Needed Documents', path: '/taxi/admin/drivers/documents', permission: 'drivers.view' },
-              { label: 'Driver Bulk Upload', path: '/taxi/admin/drivers/bulk-upload', permission: 'drivers.view' },
-              { label: 'Payment Methods', path: '/taxi/admin/drivers/payment-methods', permission: 'wallet.view' },
+              { label: 'Delete Request Drivers', path: '/admin/drivers/delete-requests', permission: 'drivers.view' },
+              { label: 'Driver Needed Documents', path: '/admin/drivers/documents', permission: 'drivers.view' },
+              { label: 'Driver Bulk Upload', path: '/admin/drivers/bulk-upload', permission: 'drivers.view' },
+              { label: 'Payment Methods', path: '/admin/drivers/payment-methods', permission: 'wallet.view' },
             ],
           },
           {
             icon: Share2,
             label: 'Referral Management',
             subItems: [
-              { label: 'Referral Dashboard', path: '/taxi/admin/referrals/dashboard', permission: 'referrals.view' },
-              { label: 'User Referral Settings', path: '/taxi/admin/referrals/user-settings', permission: 'referrals.view' },
-              { label: 'Driver Referral Settings', path: '/taxi/admin/referrals/driver-settings', permission: 'referrals.view' },
-              { label: 'Referral Translation', path: '/taxi/admin/referrals/translation', permission: 'referrals.view' },
+              { label: 'Referral Dashboard', path: '/admin/referrals/dashboard', permission: 'referrals.view' },
+              { label: 'User Referral Settings', path: '/admin/referrals/user-settings', permission: 'referrals.view' },
+              { label: 'Driver Referral Settings', path: '/admin/referrals/driver-settings', permission: 'referrals.view' },
+              { label: 'Referral Translation', path: '/admin/referrals/translation', permission: 'referrals.view' },
             ],
           },
-          { icon: Briefcase, label: 'Owner Management', path: '/taxi/admin/owners/dashboard', permission: 'owners.view' },
+          { icon: Briefcase, label: 'Owner Management', path: '/admin/owners/dashboard', permission: 'owners.view' },
           {
             icon: FileText,
             label: 'Report',
             subItems: [
-              { label: 'User Report', path: '/taxi/admin/reports/user', permission: 'reports.view' },
-              { label: 'Driver Report', path: '/taxi/admin/reports/driver', permission: 'reports.view' },
-              { label: 'Driver Duty Report', path: '/taxi/admin/reports/driver-duty', permission: 'reports.view' },
-              { label: 'Owner Report', path: '/taxi/admin/reports/owner', permission: 'reports.view' },
-              { label: 'Finance Report', path: '/taxi/admin/reports/finance', permission: 'reports.view' },
-              { label: 'Fleet Finance Report', path: '/taxi/admin/reports/fleet-finance', permission: 'reports.view' },
+              { label: 'User Report', path: '/admin/reports/user', permission: 'reports.view' },
+              { label: 'Driver Report', path: '/admin/reports/driver', permission: 'reports.view' },
+              { label: 'Driver Duty Report', path: '/admin/reports/driver-duty', permission: 'reports.view' },
+              { label: 'Owner Report', path: '/admin/reports/owner', permission: 'reports.view' },
+              { label: 'Finance Report', path: '/admin/reports/finance', permission: 'reports.view' },
+              { label: 'Fleet Finance Report', path: '/admin/reports/fleet-finance', permission: 'reports.view' },
             ],
           },
           {
             icon: ShieldCheck,
             label: 'Support Management',
             subItems: [
-              { label: 'Ticket Title', path: '/taxi/admin/support/ticket-title', permission: 'support.view' },
-              { label: 'Support Tickets', path: '/taxi/admin/support/tickets', permission: 'support.view' },
+              { label: 'Ticket Title', path: '/admin/support/ticket-title', permission: 'support.view' },
+              { label: 'Support Tickets', path: '/admin/support/tickets', permission: 'support.view' },
             ],
           },
         ],
@@ -917,9 +918,9 @@ const AdminLayout = () => {
       {
         title: 'Masters',
         items: [
-          { icon: Globe, label: 'Language', path: '/taxi/admin/masters/languages', permission: 'settings.view' },
-          // { icon: Star, label: 'Preferences', path: '/taxi/admin/masters/preferences' },
-          // { icon: ShieldCheck, label: 'Roles', path: '/taxi/admin/masters/roles' },
+          { icon: Globe, label: 'Language', path: '/admin/masters/languages', permission: 'settings.view' },
+          // { icon: Star, label: 'Preferences', path: '/admin/masters/preferences' },
+          // { icon: ShieldCheck, label: 'Roles', path: '/admin/masters/roles' },
         ],
       },
       {
@@ -930,14 +931,14 @@ const AdminLayout = () => {
             label: 'Business Settings',
             permission: 'settings.view',
             subItems: [
-              { label: 'Transport Ride Settings', path: '/taxi/admin/settings/business/transport-ride', permission: 'settings.view' },
-              { label: 'Bid Ride Settings', path: '/taxi/admin/settings/business/bid-ride', permission: 'settings.view' },
+              { label: 'Transport Ride Settings', path: '/admin/settings/business/transport-ride', permission: 'settings.view' },
+              { label: 'Bid Ride Settings', path: '/admin/settings/business/bid-ride', permission: 'settings.view' },
             ],
           },
           // {
           //   icon: PlusCircle,
           //   label: 'Addons',
-          //   subItems: [{ label: 'Dispatcher Addons', path: '/taxi/admin/settings/addons/dispatcher' }],
+          //   subItems: [{ label: 'Dispatcher Addons', path: '/admin/settings/addons/dispatcher' }],
           // },
         ],
       },
@@ -947,46 +948,20 @@ const AdminLayout = () => {
             {
               title: 'Global Settings',
               items: [
+                { icon: Globe, label: 'Landing Page', path: '/admin/global/cms/landing' },
                 {
-                  icon: Settings,
-                  label: 'App Settings',
+                  icon: Smartphone,
+                  label: 'App Customization',
                   subItems: [
-                    { label: 'Branding & Colors', path: '/taxi/admin/global/branding' },
-                    { label: 'Customization', path: '/taxi/admin/global/customization' },
-                    { label: 'Wallet Settings', path: '/taxi/admin/global/app/wallet' },
-                    { label: 'Tip Settings', path: '/taxi/admin/global/app/tip' },
-                    { label: 'App Onboarding Screens', path: '/taxi/admin/global/app/onboard' },
+                    { label: 'Branding & Colors', path: '/admin/global/branding' },
+                    { label: 'Customization', path: '/admin/global/customization' },
+                    { label: 'Login Screens', path: '/admin/global/login-screens' },
+                    { label: 'Wallet Settings', path: '/admin/global/app/wallet' },
+                    { label: 'Tip Settings', path: '/admin/global/app/tip' },
+                    { label: 'Go Home Settings', path: '/admin/global/app/go-home' },
                   ],
                 },
-                {
-                  icon: Zap,
-                  label: 'Third-Party',
-                  subItems: [
-                    { label: 'Payment Gateway', path: '/taxi/admin/global/third-party/payment' },
-                    { label: 'SMS Gateway', path: '/taxi/admin/global/third-party/sms' },
-                    { label: 'Firebase', path: '/taxi/admin/global/third-party/firebase' },
-                    { label: 'Maps & Map APIs', path: '/taxi/admin/global/third-party/map-apis' },
-                    { label: 'Mail Configuration', path: '/taxi/admin/global/third-party/mail' },
-                  ],
-                },
-                {
-                  icon: Globe,
-                  label: 'Website & Pages',
-                  subItems: [
-                    { label: 'Landing Page', path: '/taxi/admin/global/cms/landing' },
-                    { label: 'Header & Footer', path: '/taxi/admin/global/cms/header-footer' },
-                    { label: 'Home', path: '/taxi/admin/global/cms/home' },
-                    { label: 'About Us', path: '/taxi/admin/global/cms/about' },
-                    { label: 'Driver Page', path: '/taxi/admin/global/cms/driver' },
-                    { label: 'User Page', path: '/taxi/admin/global/cms/user' },
-                    { label: 'Contact', path: '/taxi/admin/global/cms/contact' },
-                  ],
-                },
-                {
-                  icon: FileText,
-                  label: 'Legal Pages',
-                  path: '/taxi/admin/global/legal',
-                },
+                { icon: FileText, label: 'Legal Pages', path: '/admin/global/legal' },
               ],
             },
           ]),
@@ -1003,28 +978,28 @@ const AdminLayout = () => {
             icon: Briefcase,
             label: 'Owner Management',
             subItems: [
-              { label: 'Owner Dashboard', path: '/taxi/admin/owners/dashboard', permission: 'owners.view' },
-              { label: 'Pending Owners', path: '/taxi/admin/owners/pending', permission: 'owners.view' },
-              { label: 'Manage Owners', path: '/taxi/admin/owners', permission: 'owners.view' },
+              { label: 'Owner Dashboard', path: '/admin/owners/dashboard', permission: 'owners.view' },
+              { label: 'Pending Owners', path: '/admin/owners/pending', permission: 'owners.view' },
+              { label: 'Manage Owners', path: '/admin/owners', permission: 'owners.view' },
               {
                 label: 'Owner Wallet',
                 subItems: [
-                  { label: 'Payout Settings', path: '/taxi/admin/owners/payout-settings', permission: 'wallet.view' },
-                  { label: 'Withdrawal Requests', path: '/taxi/admin/owners/wallet/withdrawals', permission: 'wallet.view' },
+                  { label: 'Payout Settings', path: '/admin/owners/payout-settings', permission: 'wallet.view' },
+                  { label: 'Withdrawal Requests', path: '/admin/owners/wallet/withdrawals', permission: 'wallet.view' },
                 ],
               },
               {
                 label: 'Fleet Management',
                 subItems: [
-                  { label: 'Fleet Drivers', path: '/taxi/admin/fleet/drivers', permission: 'owners.view' },
-                  { label: 'Pending Fleet Drivers', path: '/taxi/admin/fleet/blocked', permission: 'owners.view' },
-                  { label: 'Fleet Needed Document', path: '/taxi/admin/fleet/documents', permission: 'owners.view' },
-                  { label: 'Manage Fleet', path: '/taxi/admin/fleet/manage', permission: 'owners.view' },
+                  { label: 'Fleet Drivers', path: '/admin/fleet/drivers', permission: 'owners.view' },
+                  { label: 'Pending Fleet Drivers', path: '/admin/fleet/blocked', permission: 'owners.view' },
+                  { label: 'Fleet Needed Document', path: '/admin/fleet/documents', permission: 'owners.view' },
+                  { label: 'Manage Fleet', path: '/admin/fleet/manage', permission: 'owners.view' },
                 ],
               },
-              { label: 'Owner Needed Document', path: '/taxi/admin/owners/documents', permission: 'owners.view' },
-              { label: 'Deleted Owners', path: '/taxi/admin/owners/deleted', permission: 'owners.view' },
-              { label: 'Bookings', path: '/taxi/admin/owners/bookings', permission: 'owners.view' },
+              { label: 'Owner Needed Document', path: '/admin/owners/documents', permission: 'owners.view' },
+              { label: 'Deleted Owners', path: '/admin/owners/deleted', permission: 'owners.view' },
+              { label: 'Bookings', path: '/admin/owners/bookings', permission: 'owners.view' },
             ],
           },
         ],
@@ -1033,8 +1008,8 @@ const AdminLayout = () => {
     []
   );
 
-  const isOwnerRoute = location.pathname.startsWith('/taxi/admin/owners') || location.pathname.startsWith('/taxi/admin/fleet');
-  const isAdminChatRoute = pathMatches(location.pathname, '/taxi/admin/chat');
+  const isOwnerRoute = location.pathname.startsWith('/admin/owners') || location.pathname.startsWith('/admin/fleet');
+  const isAdminChatRoute = pathMatches(location.pathname, '/admin/chat');
   const mode = (!isSubadmin && isOwnerRoute) ? OWNER_MODE : ADMIN_MODE;
   const sidebarSections = useMemo(
     () => filterSidebarSectionsByAccess(mode === OWNER_MODE ? ownerSections : adminSections, adminProfile),
@@ -1045,18 +1020,18 @@ const AdminLayout = () => {
     (newMode) => {
       if (newMode === OWNER_MODE) {
         const filteredOwner = filterSidebarSectionsByAccess(ownerSections, adminProfile);
-        const firstOwnerPath = findFirstAvailablePath(filteredOwner) || '/taxi/admin/owners/dashboard';
+        const firstOwnerPath = findFirstAvailablePath(filteredOwner) || '/admin/owners/dashboard';
         navigate(firstOwnerPath);
       } else {
         const filteredAdmin = filterSidebarSectionsByAccess(adminSections, adminProfile);
-        const firstAdminPath = findFirstAvailablePath(filteredAdmin) || '/taxi/admin/dashboard';
+        const firstAdminPath = findFirstAvailablePath(filteredAdmin) || '/admin/dashboard';
         navigate(firstAdminPath);
       }
     },
     [adminProfile, adminSections, ownerSections, navigate],
   );
 
-  // Auto-redirect if subadmin accesses an unauthorized route or root /taxi/admin without dashboard permission
+  // Auto-redirect if subadmin accesses an unauthorized route or root /admin without dashboard permission
   useEffect(() => {
     if (!adminProfile || Object.keys(adminProfile).length === 0) return;
 
@@ -1078,7 +1053,7 @@ const AdminLayout = () => {
     };
 
     const requiredPermission = findRequiredPermission(allItems);
-    const isRootAdminPath = location.pathname === '/taxi/admin' || location.pathname === '/taxi/admin/' || location.pathname === '/taxi/admin/dashboard';
+    const isRootAdminPath = location.pathname === '/admin' || location.pathname === '/admin/' || location.pathname === '/admin/dashboard';
 
     const lacksPermission = requiredPermission ? !hasAdminPermission(adminProfile, requiredPermission) : false;
     const lacksDashboard = isRootAdminPath && !hasAdminPermission(adminProfile, 'dashboard.view');
@@ -1111,18 +1086,18 @@ const AdminLayout = () => {
 
   const unreadCountsByPath = useMemo(() => {
     const counts = {
-      '/taxi/admin/chat': chatUnreadCount,
-      '/taxi/admin/support/tickets': supportPendingCount,
+      '/admin/chat': chatUnreadCount,
+      '/admin/support/tickets': supportPendingCount,
     };
 
     for (const item of registrationNotifications) {
       const role = String(item.role || item.type || '').toLowerCase();
       let path = '';
-      if (role === 'driver') path = '/taxi/admin/drivers/pending';
-      else if (role === 'owner') path = '/taxi/admin/owners/pending';
-      else if (role === 'bus_driver') path = '/taxi/admin/bus-service/managers';
-      else if (role === 'bus_pending' || role === 'bus_service') path = '/taxi/admin/bus-service?status=pending_approval';
-      else if (role === 'refund') path = '/taxi/admin/drivers/wallet/withdrawals';
+      if (role === 'driver') path = '/admin/drivers/pending';
+      else if (role === 'owner') path = '/admin/owners/pending';
+      else if (role === 'bus_driver') path = '/admin/bus-service/managers';
+      else if (role === 'bus_pending' || role === 'bus_service') path = '/admin/bus-service?status=pending_approval';
+      else if (role === 'refund') path = '/admin/drivers/wallet/withdrawals';
 
       if (path) {
         counts[path] = (counts[path] || 0) + 1;
@@ -1221,11 +1196,11 @@ const AdminLayout = () => {
     localStorage.setItem(MODE_STORAGE_KEY, nextMode);
 
     if (nextMode === OWNER_MODE && !isOwnerRoute) {
-      navigate('/taxi/admin/owners/dashboard');
+      navigate('/admin/owners/dashboard');
     }
 
     if (nextMode === ADMIN_MODE && isOwnerRoute) {
-      navigate('/taxi/admin/dashboard');
+      navigate('/admin/dashboard');
     }
   };
 
@@ -1497,7 +1472,7 @@ const AdminLayout = () => {
   useEffect(() => {
     const { token } = syncAdminSessionBridge();
     if (!token && !window.location.pathname.includes('/admin/login')) {
-      navigate('/taxi/admin/login');
+      navigate('/admin/login');
       return undefined;
     }
 
@@ -1626,7 +1601,7 @@ const AdminLayout = () => {
     socketService.disconnect();
     clearUnifiedAdminSession();
     setIsUserMenuOpen(false);
-    navigate('/taxi/admin/login');
+    navigate('/admin/login');
   };
 
   return (
@@ -1859,7 +1834,7 @@ const AdminLayout = () => {
                               key={item.id || item.requestId}
                               type="button"
                               onClick={() => {
-                                navigate('/taxi/admin/chat');
+                                navigate('/admin/chat');
                                 setIsNotificationsOpen(false);
                               }}
                               className="relative w-full rounded-2xl border border-slate-100 bg-white px-4 py-3 text-left transition-all hover:border-indigo-200 hover:bg-indigo-50/40"
@@ -1919,7 +1894,7 @@ const AdminLayout = () => {
                             key={item._id || item.id || item.booking_reference}
                             type="button"
                             onClick={() => {
-                              navigate('/taxi/admin/owners/bookings');
+                              navigate('/admin/owners/bookings');
                               setIsNotificationsOpen(false);
                             }}
                             className="relative w-full rounded-2xl border border-slate-100 bg-white px-4 py-3 text-left transition-all hover:border-indigo-200 hover:bg-indigo-50/40"
@@ -1989,14 +1964,14 @@ const AdminLayout = () => {
 
                             const targetPath =
                               role === 'refund'
-                                ? '/taxi/admin/drivers/wallet/withdrawals'
+                                ? '/admin/drivers/wallet/withdrawals'
                                 : role === 'owner'
-                                ? '/taxi/admin/owners'
+                                ? '/admin/owners'
                                 : role === 'bus_driver'
-                                ? '/taxi/admin/bus-service/managers'
+                                ? '/admin/bus-service/managers'
                                 : role === 'driver'
-                                ? '/taxi/admin/drivers/pending'
-                                : '/taxi/admin/users';
+                                ? '/admin/drivers/pending'
+                                : '/admin/users';
 
                             return (
                               <button
@@ -2061,7 +2036,7 @@ const AdminLayout = () => {
                             key={item.id}
                             type="button"
                             onClick={() => {
-                              navigate('/taxi/admin/chat');
+                              navigate('/admin/chat');
                               setChatNotifications([]);
                               setIsNotificationsOpen(false);
                             }}

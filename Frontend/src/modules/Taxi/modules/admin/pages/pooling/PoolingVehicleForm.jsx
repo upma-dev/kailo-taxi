@@ -176,7 +176,7 @@ const PoolingVehicleForm = ({ mode: propMode }) => {
         await adminService.createPoolingVehicle(payload);
         toast.success('Vehicle created successfully');
       }
-      navigate('/taxi/admin/pooling/vehicles');
+      navigate('/admin/pooling/vehicles');
     } catch (error) {
       toast.error(error.response?.data?.message || 'Save failed');
     } finally {
@@ -198,7 +198,7 @@ const PoolingVehicleForm = ({ mode: propMode }) => {
         {/* Header */}
         <div className="mb-8">
           <button
-            onClick={() => navigate('/taxi/admin/pooling/vehicles')}
+            onClick={() => navigate('/admin/pooling/vehicles')}
             className="mb-4 flex items-center gap-2 text-sm font-bold text-slate-400 transition hover:text-slate-900"
           >
             <ArrowLeft size={16} />
@@ -215,7 +215,7 @@ const PoolingVehicleForm = ({ mode: propMode }) => {
             </div>
             {isViewMode ? (
               <button
-                onClick={() => navigate(`/taxi/admin/pooling/vehicles/edit/${id}`)}
+                onClick={() => navigate(`/admin/pooling/vehicles/edit/${id}`)}
                 className="inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-6 py-3 text-sm font-black text-white shadow-xl shadow-indigo-200 transition-all hover:bg-indigo-700 active:scale-95"
               >
                 <Save size={18} />

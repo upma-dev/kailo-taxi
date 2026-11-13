@@ -80,7 +80,7 @@ const OwnerCreate = () => {
       const response = await adminService.createOwner(formData);
 
       if (response.success) {
-        navigate('/taxi/admin/owners');
+        navigate('/admin/owners');
         return;
       }
 
@@ -112,7 +112,7 @@ const OwnerCreate = () => {
       transportTypes={transportTypes}
       submitting={submitting}
       onSubmit={handleSave}
-      onCancel={() => navigate('/taxi/admin/owners')}
+      onCancel={() => navigate('/admin/owners')}
     />
   );
 };

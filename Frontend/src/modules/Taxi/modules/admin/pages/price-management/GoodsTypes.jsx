@@ -264,7 +264,7 @@ const GoodsTypes = ({ mode }) => {
         await api.post('/admin/goods-types', payload);
       }
 
-      navigate('/taxi/admin/pricing/goods-types');
+      navigate('/admin/pricing/goods-types');
     } catch (error) {
       setErrorMessage(error.message || 'Could not save goods type.');
     } finally {
@@ -313,7 +313,7 @@ const GoodsTypes = ({ mode }) => {
               <p className="mt-1 text-sm text-slate-500">Manage cargo categories and their compatible vehicle types.</p>
             </div>
             <button
-              onClick={() => navigate('/taxi/admin/pricing/goods-types/create')}
+              onClick={() => navigate('/admin/pricing/goods-types/create')}
               className="inline-flex items-center gap-2 rounded-xl bg-[#ff6b4a] px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-orange-200 transition hover:bg-[#f55a37]"
             >
               <Plus size={18} />
@@ -386,7 +386,7 @@ const GoodsTypes = ({ mode }) => {
                     <td className="px-6 py-5">
                       <div className="flex items-center justify-end gap-2">
                         <button
-                          onClick={() => navigate(`/taxi/admin/pricing/goods-types/edit/${item.id}`)}
+                          onClick={() => navigate(`/admin/pricing/goods-types/edit/${item.id}`)}
                           className="rounded-xl p-2 text-slate-400 transition hover:bg-blue-50 hover:text-blue-600"
                         >
                           <Edit2 size={15} />
@@ -424,7 +424,7 @@ const GoodsTypes = ({ mode }) => {
           <p className="mt-1 text-sm text-slate-500">Define cargo categories, supported vehicle types, and listing status.</p>
         </div>
         <button
-          onClick={() => navigate('/taxi/admin/pricing/goods-types')}
+          onClick={() => navigate('/admin/pricing/goods-types')}
           className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
         >
           <ArrowLeft size={16} />
@@ -558,7 +558,7 @@ const GoodsTypes = ({ mode }) => {
             </button>
             <button
               type="button"
-              onClick={() => navigate('/taxi/admin/pricing/goods-types')}
+              onClick={() => navigate('/admin/pricing/goods-types')}
               className="text-sm font-medium text-slate-500 transition hover:text-slate-700"
             >
               Cancel

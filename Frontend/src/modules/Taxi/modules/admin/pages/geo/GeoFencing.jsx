@@ -23,9 +23,9 @@ const MAP_CONTAINER_STYLE = { width: '100%', height: '100%' };
 const DEFAULT_ZOOM = 12;
 
 const GEO_NAV_ITEMS = [
-  { label: 'Heat Map', path: '/taxi/admin/geo/heatmap' },
-  { label: "God's Eye", path: '/taxi/admin/geo/gods-eye' },
-  { label: 'Peak Zone', path: '/taxi/admin/geo/peak-zone' }
+  { label: 'Heat Map', path: '/admin/geo/heatmap' },
+  { label: "God's Eye", path: '/admin/geo/gods-eye' },
+  { label: 'Peak Zone', path: '/admin/geo/peak-zone' }
 ];
 
 const mapOptions = {

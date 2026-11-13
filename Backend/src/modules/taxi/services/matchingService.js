@@ -5,6 +5,7 @@ import { Vehicle } from '../admin/models/Vehicle.js';
 import { Driver } from '../driver/models/Driver.js';
 import { Zone } from '../driver/models/Zone.js';
 import { getDriverIdsBlockedByUpcomingScheduledRides } from './rideService.js';
+import { applyGoHomeFilter, getGoHomeConfig } from './goHomeService.js';
 
 const EARTH_RADIUS_METERS = 6371000;
 
@@ -369,7 +370,7 @@ const findDriversForZone = async ({
     incompatibleVehicleTypeIds,
   });
   const selectedFields =
-    'name phone socketId vehicleTypeId vehicleType vehicleIconType vehicleNumber vehicleColor vehicleMake vehicleModel rating ratingCount location zoneId isOnline isOnRide routeBooking serviceCategories registerFor';
+    'name phone socketId vehicleTypeId vehicleType vehicleIconType vehicleNumber vehicleColor vehicleMake vehicleModel rating ratingCount location zoneId isOnline isOnRide routeBooking goHome serviceCategories registerFor';
 
   const [liveLocationDrivers, routeBookingDrivers] = await Promise.all([
     Driver.find({
@@ -407,6 +408,7 @@ export const matchDrivers = async (pickupCoords, options = {}) => {
     vehicleTypeIds,
     serviceType = 'ride',
     bookingMode = 'normal',
+    dropCoords = null,
   } = options;
   const normalizedVehicleTypeIds = normalizeVehicleTypeIds(vehicleTypeIds, vehicleTypeId);
   const allowedVehicles = normalizedVehicleTypeIds.length
@@ -454,6 +456,11 @@ export const matchDrivers = async (pickupCoords, options = {}) => {
       drivers.map((driver) => String(driver?._id || '')),
     );
     drivers = drivers.filter((driver) => !fallbackBlockedDriverIds.has(String(driver?._id || '')));
+  }
+
+  // Drivers in Go Home mode only get rides on their way home.
+  if (drivers.some((driver) => driver?.goHome?.active)) {
+    drivers = applyGoHomeFilter(drivers, { pickupCoords: coordinates, dropCoords }, await getGoHomeConfig());
   }
 
   if (drivers.length === 0) {

@@ -21,7 +21,7 @@ const UserImportCreate = () => {
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const goBack = () => navigate('/taxi/admin/users/bulk-upload');
+  const goBack = () => navigate('/admin/users/bulk-upload');
 
   const selectFile = async (file) => {
     if (!file) return;
@@ -89,7 +89,7 @@ const UserImportCreate = () => {
 
       if ((result.created_count || 0) > 0) {
         toast.success(summary);
-        navigate('/taxi/admin/users');
+        navigate('/admin/users');
         return;
       }
 

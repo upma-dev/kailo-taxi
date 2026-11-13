@@ -131,7 +131,7 @@ const FleetDriverCreate = () => {
       });
 
       if (response.success) {
-        navigate('/taxi/admin/fleet/drivers');
+        navigate('/admin/fleet/drivers');
         return;
       }
 
@@ -159,7 +159,7 @@ const FleetDriverCreate = () => {
           module="Fleet Management"
           page="Fleet Drivers"
           title="Create Fleet Driver"
-          backto="/taxi/admin/fleet/drivers"
+          backto="/admin/fleet/drivers"
         />
       </div>
 

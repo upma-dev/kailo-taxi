@@ -338,7 +338,7 @@ const RentalTracking = () => {
                         <td className="px-4 py-4 text-right">
                           <button
                             type="button"
-                            onClick={() => navigate(`/taxi/admin/pricing/rental-tracking/${item.id}`, { state: { item } })}
+                            onClick={() => navigate(`/admin/pricing/rental-tracking/${item.id}`, { state: { item } })}
                             className="inline-flex items-center rounded-xl bg-slate-900 px-4 py-2.5 text-[11px] font-black uppercase tracking-[0.14em] text-white shadow-sm transition hover:bg-black"
                           >
                             Track

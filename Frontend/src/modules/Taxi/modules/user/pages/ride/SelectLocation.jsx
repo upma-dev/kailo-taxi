@@ -6,6 +6,7 @@ import { GoogleMap, MarkerF } from '@react-google-maps/api';
 import { useAppGoogleMapsLoader, INDIA_CENTER, HAS_VALID_GOOGLE_MAPS_KEY } from '../../../admin/utils/googleMaps';
 import api from '../../../../shared/api/axiosInstance';
 import toast from 'react-hot-toast';
+import { getSavedPlaces } from '../../services/savedAddressStore';
 import GpsEnableModal from '@/shared/components/GpsEnableModal';
 import { analyzeGeolocationError } from '@/shared/utils/geolocationHelper';
 import { getSavedLocation, getSavedLocationCoords, saveLocation, getSearchHistory, addSearchHistory, clearSearchHistory } from '../../services/locationStore';
@@ -85,6 +86,7 @@ const SelectLocation = () => {
   const [remoteResults, setRemoteResults] = useState([]);
   const [popularLocations, setPopularLocations] = useState([]);
   const [searchHistory, setSearchHistory] = useState(() => getSearchHistory());
+  const [savedPlaces] = useState(() => getSavedPlaces());
   // A saved place hundreds of km from the pickup is almost always a wrong match: do not suggest it again.
   const nearbyHistory = useMemo(
     () => searchHistory.filter((item) => !pickupCoords || !Array.isArray(item?.coords) || (calculateHaversineDistance(pickupCoords, item.coords, false) ?? 0) <= 150),
@@ -1493,6 +1495,36 @@ const SelectLocation = () => {
         onScroll={dismissKeyboard}
         onTouchMove={dismissKeyboard}
       >
+        {query.trim().length === 0 && savedPlaces.length > 0 && (
+          <div className="mb-5">
+            <div className="flex items-center justify-between mb-3 mx-1">
+              <h2 className="text-[14px] font-bold text-slate-400 uppercase tracking-widest">Saved Places</h2>
+              <button
+                type="button"
+                onClick={() => navigate(`${routePrefix}/profile/addresses`)}
+                className="text-[12px] font-bold text-slate-400 hover:text-slate-700"
+              >
+                Manage
+              </button>
+            </div>
+            <div className="bg-white/75 backdrop-blur-md rounded-2xl border border-white/80 overflow-hidden shadow-[0_14px_34px_rgba(15,23,42,0.06)]">
+              {savedPlaces.map((place) => (
+                <button
+                  key={place.id}
+                  type="button"
+                  onClick={() => handleSelectResult({ title: place.address, address: place.address, coords: place.coords }, place.coords)}
+                  className="w-full text-left flex items-start gap-3 px-4 py-3 border-b border-white/70 last:border-none hover:bg-white/60 active:bg-slate-100 transition-colors"
+                >
+                  <MapPin size={20} className={`shrink-0 mt-1 ${place.kind === 'home' ? 'text-orange-500' : place.kind === 'work' ? 'text-indigo-500' : 'text-emerald-500'}`} strokeWidth={2.5} />
+                  <div className="min-w-0 flex-1">
+                    <h4 className="text-[15px] font-semibold text-slate-900 leading-tight">{place.label}</h4>
+                    <p className="text-[13px] text-slate-500 font-medium mt-1 line-clamp-1">{place.address}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         {query.trim().length === 0 && nearbyHistory.length > 0 && (
           <div className="mb-5">
             <div className="flex items-center justify-between mb-3 mx-1">

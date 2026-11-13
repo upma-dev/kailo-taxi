@@ -99,7 +99,7 @@ const HeatMap = () => {
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-semibold text-gray-900">Heat Map</h1>
           <button 
-             onClick={() => navigate('/taxi/admin/dashboard')}
+             onClick={() => navigate('/admin/dashboard')}
              className="flex items-center gap-2 px-4 py-2 text-sm text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
           >
             <ArrowLeft size={16} /> Back

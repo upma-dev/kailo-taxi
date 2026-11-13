@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { asyncHandler } from "../../../../utils/asyncHandler.js";
 import { authenticate } from "../../middlewares/authMiddleware.js";
+import { getGoHome, saveGoHomeLocation, startGoHome, stopGoHome } from "../controllers/goHomeController.js";
 import {
   addDriverEmergencyContact,
   completeOnboarding,
@@ -486,6 +487,10 @@ driverRouter.patch(
   authenticate(["driver"]),
   asyncHandler(updateDriverLocation),
 );
+driverRouter.get("/go-home", authenticate(["driver"]), asyncHandler(getGoHome));
+driverRouter.put("/go-home/home", authenticate(["driver"]), asyncHandler(saveGoHomeLocation));
+driverRouter.post("/go-home/start", authenticate(["driver"]), asyncHandler(startGoHome));
+driverRouter.post("/go-home/stop", authenticate(["driver"]), asyncHandler(stopGoHome));
 driverRouter.get(
   "/earnings",
   authenticate(["driver", "owner"]),

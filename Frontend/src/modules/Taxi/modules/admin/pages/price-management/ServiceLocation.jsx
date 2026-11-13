@@ -224,7 +224,7 @@ const ServiceLocation = ({ mode }) => {
 
       const res = isEdit ? await adminService.updateServiceLocation(id, payload) : await adminService.createServiceLocation(payload);
       if (res?.success) {
-        navigate('/taxi/admin/pricing/service-location');
+        navigate('/admin/pricing/service-location');
       } else {
         alert(res?.message || "Operation failed");
       }
@@ -261,7 +261,7 @@ const ServiceLocation = ({ mode }) => {
                 <p className="text-xs text-gray-500 mt-1 font-medium">Manage localized settings including currency, timezone, and regional clusters.</p>
               </div>
               <button 
-                onClick={() => navigate('/taxi/admin/pricing/service-location/add')}
+                onClick={() => navigate('/admin/pricing/service-location/add')}
                 className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700 transition-all shadow-md active:scale-95"
               >
                 <Plus size={18} /> Add Location
@@ -343,7 +343,7 @@ const ServiceLocation = ({ mode }) => {
                         </td>
                         <td className="px-6 py-4 text-right whitespace-nowrap">
                            <div className="flex items-center justify-end gap-2">
-                             <button onClick={() => navigate(`/taxi/admin/pricing/service-location/edit/${l._id || l.id}`)} className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all shadow-sm"><Edit2 size={16} /></button>
+                             <button onClick={() => navigate(`/admin/pricing/service-location/edit/${l._id || l.id}`)} className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all shadow-sm"><Edit2 size={16} /></button>
                              <button onClick={() => handleDelete(l._id || l.id)} className="p-2 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all shadow-sm"><Trash2 size={16} /></button>
                            </div>
                         </td>

@@ -211,7 +211,7 @@ const FleetNeededDocuments = () => {
 
                 <button
                   type="button"
-                  onClick={() => navigate('/taxi/admin/fleet/documents/create')}
+                  onClick={() => navigate('/admin/fleet/documents/create')}
                   className="flex h-12 items-center gap-3 rounded bg-indigo-950 px-6 text-sm font-semibold text-white transition-colors hover:bg-indigo-900"
                 >
                   <Plus size={16} /> Add Fleet Needed Documents

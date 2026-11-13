@@ -28,7 +28,7 @@ export const normalizeAppColors = (raw = {}) => {
 
 export const getAppKeyForPath = (pathname = '') => {
   const path = String(pathname).toLowerCase();
-  if (path.startsWith('/admin') || path.startsWith('/taxi/admin')) return 'admin';
+  if (path.startsWith('/admin') || path.startsWith('/admin')) return 'admin';
   if (path.startsWith('/taxi/driver') || path.startsWith('/taxi/owner')) return 'taxiDriver';
   if (path.startsWith('/taxi')) return 'taxiUser';
   return 'taxiUser';

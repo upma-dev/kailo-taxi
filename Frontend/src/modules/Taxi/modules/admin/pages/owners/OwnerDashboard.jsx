@@ -92,15 +92,15 @@ const OwnerDashboard = () => {
   }
 
   const stats = [
-    { icon: Users, label: 'Registered Owners', value: data?.total_owners || 0, color: { bg: 'bg-emerald-50', text: 'text-emerald-500' }, path: '/taxi/admin/owners' },
-    { icon: UserCheck, label: 'Approved Owners', value: data?.approved_owners || 0, color: { bg: 'bg-emerald-50', text: 'text-emerald-500' }, path: '/taxi/admin/owners' },
-    { icon: Clock, label: 'Owner Awaiting Review', value: data?.pending_owners || 0, color: { bg: 'bg-red-50', text: 'text-red-500' }, path: '/taxi/admin/owners' },
-    { icon: Car, label: 'Registered Fleets', value: data?.total_fleets || 0, color: { bg: 'bg-emerald-50', text: 'text-emerald-500' }, path: '/taxi/admin/owners/fleet' },
-    { icon: Monitor, label: 'Approved Fleets', value: data?.approved_fleets || 0, color: { bg: 'bg-emerald-50', text: 'text-emerald-500' }, path: '/taxi/admin/owners/fleet' },
-    { icon: Car, label: 'Fleets Awaiting Review', value: data?.pending_fleets || 0, color: { bg: 'bg-red-50', text: 'text-red-500' }, path: '/taxi/admin/owners/fleet' },
-    { icon: Monitor, label: 'Registered Drivers', value: data?.total_drivers || 0, color: { bg: 'bg-emerald-50', text: 'text-emerald-500' }, path: '/taxi/admin/drivers' },
-    { icon: UserCheck, label: 'Approved Drivers', value: data?.approved_drivers || 0, color: { bg: 'bg-emerald-50', text: 'text-emerald-500' }, path: '/taxi/admin/drivers' },
-    { icon: Clock, label: 'Drivers Awaiting Review', value: data?.pending_drivers || 0, color: { bg: 'bg-red-50', text: 'text-red-500' }, path: '/taxi/admin/drivers/pending' },
+    { icon: Users, label: 'Registered Owners', value: data?.total_owners || 0, color: { bg: 'bg-emerald-50', text: 'text-emerald-500' }, path: '/admin/owners' },
+    { icon: UserCheck, label: 'Approved Owners', value: data?.approved_owners || 0, color: { bg: 'bg-emerald-50', text: 'text-emerald-500' }, path: '/admin/owners' },
+    { icon: Clock, label: 'Owner Awaiting Review', value: data?.pending_owners || 0, color: { bg: 'bg-red-50', text: 'text-red-500' }, path: '/admin/owners' },
+    { icon: Car, label: 'Registered Fleets', value: data?.total_fleets || 0, color: { bg: 'bg-emerald-50', text: 'text-emerald-500' }, path: '/admin/owners/fleet' },
+    { icon: Monitor, label: 'Approved Fleets', value: data?.approved_fleets || 0, color: { bg: 'bg-emerald-50', text: 'text-emerald-500' }, path: '/admin/owners/fleet' },
+    { icon: Car, label: 'Fleets Awaiting Review', value: data?.pending_fleets || 0, color: { bg: 'bg-red-50', text: 'text-red-500' }, path: '/admin/owners/fleet' },
+    { icon: Monitor, label: 'Registered Drivers', value: data?.total_drivers || 0, color: { bg: 'bg-emerald-50', text: 'text-emerald-500' }, path: '/admin/drivers' },
+    { icon: UserCheck, label: 'Approved Drivers', value: data?.approved_drivers || 0, color: { bg: 'bg-emerald-50', text: 'text-emerald-500' }, path: '/admin/drivers' },
+    { icon: Clock, label: 'Drivers Awaiting Review', value: data?.pending_drivers || 0, color: { bg: 'bg-red-50', text: 'text-red-500' }, path: '/admin/drivers/pending' },
   ];
 
   const finances = [

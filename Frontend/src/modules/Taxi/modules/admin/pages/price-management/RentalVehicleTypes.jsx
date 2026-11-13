@@ -585,7 +585,7 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
       }
 
       toast.success(id ? 'Rental vehicle updated' : 'Rental vehicle created');
-      navigate('/taxi/admin/pricing/rental-vehicles');
+      navigate('/admin/pricing/rental-vehicles');
     } catch (error) {
       setErrorMessage(error?.response?.data?.message || error.message || 'Could not save rental vehicle.');
     } finally {
@@ -677,7 +677,7 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
             </div>
             <button
               type="button"
-              onClick={() => navigate('/taxi/admin/pricing/rental-vehicles/create')}
+              onClick={() => navigate('/admin/pricing/rental-vehicles/create')}
               className="inline-flex items-center gap-2 rounded-xl bg-[#2e3c78] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#24305f]"
             >
               <Plus size={18} />
@@ -770,14 +770,14 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
                 <div className="flex items-center justify-end gap-2">
                   <button
                     type="button"
-                    onClick={() => navigate(`/taxi/admin/pricing/rental-vehicles/view/${item.id || item._id}`)}
+                    onClick={() => navigate(`/admin/pricing/rental-vehicles/view/${item.id || item._id}`)}
                     className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
                   >
                     View details
                   </button>
                   <button
                     type="button"
-                    onClick={() => navigate(`/taxi/admin/pricing/rental-vehicles/edit/${item.id || item._id}`)}
+                    onClick={() => navigate(`/admin/pricing/rental-vehicles/edit/${item.id || item._id}`)}
                     className="rounded-xl p-2 text-slate-400 transition hover:bg-blue-50 hover:text-blue-600"
                     title="Edit"
                   >
@@ -818,7 +818,7 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
           <div className="flex items-center gap-3">
             <button
               type="button"
-              onClick={() => navigate('/taxi/admin/pricing/rental-vehicles')}
+              onClick={() => navigate('/admin/pricing/rental-vehicles')}
               className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
             >
               <ArrowLeft size={16} />
@@ -827,7 +827,7 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
             {id ? (
               <button
                 type="button"
-                onClick={() => navigate(`/taxi/admin/pricing/rental-vehicles/edit/${id}`)}
+                onClick={() => navigate(`/admin/pricing/rental-vehicles/edit/${id}`)}
                 className="inline-flex items-center gap-2 rounded-xl bg-[#2e3c78] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#24305f]"
               >
                 <Edit2 size={16} />
@@ -964,7 +964,7 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
         </div>
         <button
           type="button"
-          onClick={() => navigate('/taxi/admin/pricing/rental-vehicles')}
+          onClick={() => navigate('/admin/pricing/rental-vehicles')}
           className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
         >
           <ArrowLeft size={16} />
@@ -1526,7 +1526,7 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
             </button>
             <button
               type="button"
-              onClick={() => navigate('/taxi/admin/pricing/rental-vehicles')}
+              onClick={() => navigate('/admin/pricing/rental-vehicles')}
               className="text-sm font-medium text-slate-500 transition hover:text-slate-700"
             >
               Cancel

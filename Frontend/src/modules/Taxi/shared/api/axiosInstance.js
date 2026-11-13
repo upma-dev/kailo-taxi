@@ -213,7 +213,7 @@ api.interceptors.request.use(
       /^\/drivers\/(register|login|auth\/send-otp|auth\/verify-otp|onboarding\/send-otp|onboarding\/verify-otp|onboarding\/personal|onboarding\/referral|onboarding\/vehicle|onboarding\/documents|onboarding\/complete|onboarding\/session\/|service-locations)(\/|$)/.test(requestPath);
     const isAdminRoute =
       /^\/admin(\/|$)/.test(requestPath) ||
-      /^\/(countries|common\/ride_modules|types\/|on-boarding(?:-|\/|$)|roles\/|permissions\/)/.test(requestPath);
+      /^\/(countries|common\/ride_modules|types\/|roles\/|permissions\/)/.test(requestPath);
     const isDriverRoute = /^\/drivers?(\/|$)/.test(requestPath);
     const isUserRoute = /^\/(users|rides|deliveries|promos)(\/|$)/.test(requestPath);
     const isSupportRoute = /^\/support(\/|$)/.test(requestPath);

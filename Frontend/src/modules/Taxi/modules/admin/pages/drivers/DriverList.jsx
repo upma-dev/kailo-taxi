@@ -15,11 +15,13 @@ import {
   ChevronRight,
   Filter,
   List,
-  LayoutGrid
+  LayoutGrid,
+  X
 } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { adminService } from '../../services/adminService';
+import { resolveFileUrl } from '../../utils/resolveFileUrl';
 import { getUnifiedAdminProfile } from '../../services/adminSession';
 import { hasAdminPermission } from '../../constants/adminAccess';
 
@@ -31,6 +33,7 @@ const DriverList = ({ mode = 'approved' }) => {
   const navigate = useNavigate();
   const adminProfile = getUnifiedAdminProfile();
   const canWrite = hasAdminPermission(adminProfile, 'drivers', 'write');
+  const [selfiePreview, setSelfiePreview] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeMenu, setActiveMenu] = useState(null);
   const [menuPosition, setMenuPosition] = useState(null);
@@ -62,7 +65,7 @@ const DriverList = ({ mode = 'approved' }) => {
             ? Number(d.rating || d.average_rating || d.avg_rating || 0)
             : 0,
           isOnline: Boolean(d.isOnline),
-          onlineSelfieImage: d.online_selfie_image || '',
+          onlineSelfieImage: resolveFileUrl(d.online_selfie_image),
           onlineSelfieCapturedAt: d.online_selfie_captured_at || null,
           registeredAt: d.createdAt || null,
           status: mode === 'active' ? 'Online' : (d.approve ? 'Approved' : (d.status || 'Approved')),
@@ -209,6 +212,13 @@ const DriverList = ({ mode = 'approved' }) => {
   const showingFrom = totalEntries === 0 ? 0 : startIndex + 1;
   const showingTo = totalEntries === 0 ? 0 : Math.min(startIndex + drivers.length, totalEntries);
 
+  useEffect(() => {
+    if (!selfiePreview) return undefined;
+    const onKey = (event) => { if (event.key === 'Escape') setSelfiePreview(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [selfiePreview]);
+
   return (
     <div className="min-h-screen bg-gray-50 p-6 lg:p-8">
       {error && (
@@ -226,7 +236,7 @@ const DriverList = ({ mode = 'approved' }) => {
           <h1 className="text-xl font-semibold text-gray-900">{mode === 'active' ? 'Active Drivers' : 'Approved Drivers'}</h1>
           {mode !== 'active' && canWrite ? (
             <button
-              onClick={() => navigate('/taxi/admin/drivers/create')}
+              onClick={() => navigate('/admin/drivers/create')}
               className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
             >
               <Plus size={15} /> Add Drivers
@@ -321,7 +331,7 @@ const DriverList = ({ mode = 'approved' }) => {
                       {driver.onlineSelfieImage ? (
                         <button
                           type="button"
-                          onClick={() => window.open(driver.onlineSelfieImage, '_blank', 'noopener,noreferrer')}
+                          onClick={() => setSelfiePreview({ url: driver.onlineSelfieImage, name: driver.name, capturedAt: driver.onlineSelfieCapturedAt })}
                           className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-2 py-1.5 hover:bg-slate-50 transition-colors"
                         >
                           <img src={driver.onlineSelfieImage} alt={`${driver.name} selfie`} className="h-10 w-10 rounded-lg object-cover" />
@@ -335,7 +345,7 @@ const DriverList = ({ mode = 'approved' }) => {
                     </td>
                     <td className="px-4 py-4">
                       <button
-                        onClick={() => navigate(`/taxi/admin/drivers/${driver.id}?tab=Documents`)}
+                        onClick={() => navigate(`/admin/drivers/${driver.id}?tab=Documents`)}
                         className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
                       >
                         <FileText size={16} />
@@ -422,7 +432,7 @@ const DriverList = ({ mode = 'approved' }) => {
               <button
                 onClick={() => {
                   closeMenu();
-                  navigate(`/taxi/admin/drivers/edit/${activeMenu}`);
+                  navigate(`/admin/drivers/edit/${activeMenu}`);
                 }}
                 className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2"
               >
@@ -443,7 +453,7 @@ const DriverList = ({ mode = 'approved' }) => {
             <button
               onClick={() => {
                 closeMenu();
-                navigate(`/taxi/admin/drivers/${activeMenu}`);
+                navigate(`/admin/drivers/${activeMenu}`);
               }}
               className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2"
             >
@@ -516,6 +526,37 @@ const DriverList = ({ mode = 'approved' }) => {
             </div>
           </div>
         </div>
+      )}
+
+      {selfiePreview && createPortal(
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 p-4"
+          onClick={() => setSelfiePreview(null)}
+        >
+          <div
+            className="relative w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3">
+              <div>
+                <p className="text-sm font-semibold text-gray-900">{selfiePreview.name}</p>
+                <p className="text-xs text-gray-400">Today's selfie &middot; {formatDate(selfiePreview.capturedAt)}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelfiePreview(null)}
+                className="rounded-full p-2 text-gray-500 hover:bg-gray-100"
+                aria-label="Close"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="flex max-h-[75vh] items-center justify-center bg-gray-50">
+              <img src={selfiePreview.url} alt={`${selfiePreview.name} selfie`} className="max-h-[75vh] w-full object-contain" />
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );

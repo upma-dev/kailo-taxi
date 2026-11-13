@@ -492,7 +492,7 @@ const VehicleType = ({ mode: propMode }) => {
         await api.post('/admin/types/vehicle-types', payload);
       }
 
-      navigate('/taxi/admin/pricing/vehicle-type');
+      navigate('/admin/pricing/vehicle-type');
     } catch (error) {
       setErrorMessage(error?.response?.data?.message || error.message || 'Could not save vehicle type.');
     } finally {
@@ -558,7 +558,7 @@ const VehicleType = ({ mode: propMode }) => {
               <p className="mt-1 text-sm text-slate-500">Manage the ride and delivery vehicle catalog.</p>
             </div>
             <button
-              onClick={() => navigate('/taxi/admin/pricing/vehicle-type/create')}
+              onClick={() => navigate('/admin/pricing/vehicle-type/create')}
               className="inline-flex items-center gap-2 rounded-xl bg-[#ff6b4a] px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-orange-200 transition hover:bg-[#f55a37]"
             >
               <Plus size={18} />
@@ -664,7 +664,7 @@ const VehicleType = ({ mode: propMode }) => {
                     <td className="px-6 py-5">
                       <div className="flex items-center justify-end gap-2">
                         <button
-                          onClick={() => navigate(`/taxi/admin/pricing/vehicle-type/edit/${vehicle.id}`)}
+                          onClick={() => navigate(`/admin/pricing/vehicle-type/edit/${vehicle.id}`)}
                           className="rounded-xl p-2 text-slate-400 transition hover:bg-blue-50 hover:text-blue-600"
                         >
                           <Edit2 size={15} />
@@ -702,7 +702,7 @@ const VehicleType = ({ mode: propMode }) => {
           <p className="mt-1 text-sm text-slate-500">Update the live vehicle catalog with real transport, icon, dispatch, and compatibility data.</p>
         </div>
         <button
-          onClick={() => navigate('/taxi/admin/pricing/vehicle-type')}
+          onClick={() => navigate('/admin/pricing/vehicle-type')}
           className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
         >
           <ArrowLeft size={16} />
@@ -1135,7 +1135,7 @@ const VehicleType = ({ mode: propMode }) => {
               {isSaving ? 'Saving...' : id ? 'Update' : 'Create'}
             </button>
             <button
-              onClick={() => navigate('/taxi/admin/pricing/vehicle-type')}
+              onClick={() => navigate('/admin/pricing/vehicle-type')}
               className="text-sm font-medium text-slate-500 transition hover:text-slate-700"
             >
               Cancel

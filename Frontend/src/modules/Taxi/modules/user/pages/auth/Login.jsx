@@ -13,7 +13,7 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(() => String(location.state?.error || ''));
   const navigate = useNavigate();
-  const appName = settings.general?.app_name || 'App';
+  const appName = settings.general?.app_name || 'Kailo Taxi';
   const userHomeRoute = useMemo(
     () => (location.pathname.startsWith('/taxi/user') ? '/taxi/user' : '/user'),
     [location.pathname],
@@ -54,15 +54,16 @@ const Login = () => {
   return (
     <AuthLayout 
       title="Welcome back" 
-      subtitle={`Enter your mobile number to continue with ${appName} Taxi.`}
+      subtitle={`Enter your mobile number to continue with ${appName}.`}
     >
-      <form onSubmit={handleLogin} className="space-y-8">
-        <div className="space-y-4">
+      <form onSubmit={handleLogin} className="space-y-10">
+        <div className="space-y-3.5">
           <label htmlFor="phone" className="text-xs font-bold text-gray-700 uppercase tracking-wider">
             Mobile Number
           </label>
           <div className="relative group flex items-center transition-all">
-            <div className="absolute left-4 flex items-center pointer-events-none text-gray-500">
+            <div className="absolute left-4 flex items-center gap-2 pointer-events-none text-gray-500 group-focus-within:text-[color:var(--app-primary,#0F766E)] transition-colors">
+               <Phone size={18} />
                <span className="font-semibold">+91</span>
             </div>
             <input
@@ -71,12 +72,11 @@ const Login = () => {
               required
               autoFocus
               maxLength={10}
-              className="w-full pl-16 pr-4 py-4 bg-[#F8F9FA] border border-gray-200 rounded-xl text-[#1A1A1A] focus:border-[color:var(--app-primary,#0F766E)] focus:ring-1 focus:ring-[color:var(--app-primary,#0F766E)] outline-none transition-all placeholder:text-gray-400 font-semibold text-lg"
+              className="w-full pl-[5.5rem] pr-4 py-5 bg-[#F8F9FA] border border-gray-200 rounded-xl text-[#1A1A1A] focus:border-[color:var(--app-primary,#0F766E)] focus:ring-1 focus:ring-[color:var(--app-primary,#0F766E)] outline-none transition-all placeholder:text-gray-400 font-semibold text-lg"
               placeholder="00000 00000"
               value={phoneNumber}
               onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, ''))}
             />
-            <Phone size={20} className="absolute right-4 text-gray-400 group-focus-within:text-[color:var(--app-primary,#0F766E)] transition-colors" />
           </div>
         </div>
 

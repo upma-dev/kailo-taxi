@@ -80,7 +80,7 @@ const EditDriver = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { id } = useParams();
-  const backRoute = location.state?.from || '/taxi/admin/drivers';
+  const backRoute = location.state?.from || '/admin/drivers';
   const [isLoading, setIsLoading] = useState(false);
   const [isFetching, setIsFetching] = useState(true);
   const [locations, setLocations] = useState([]);

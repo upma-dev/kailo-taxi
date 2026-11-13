@@ -29,6 +29,7 @@ import McvIcon from '@/assets/icons/mcv.png';
 import LuxuryIcon from '@/assets/icons/Luxury.png';
 import PremiumIcon from '@/assets/icons/Premium.png';
 import SuvIcon from '@/assets/icons/SUV.png';
+import { resolveFileUrl } from '../../utils/resolveFileUrl';
 
 const mapContainerStyle = { width: '100%', height: '100%' };
 
@@ -320,9 +321,9 @@ const DriverDetails = () => {
   const requests = profile?.requests || [];
   const withdrawals = profile?.withdrawals || [];
   const normalizedBackRoute = typeof location.state?.from === 'string' ? location.state.from.trim() : '';
-  const backRoute = normalizedBackRoute.startsWith('/taxi/admin/')
+  const backRoute = normalizedBackRoute.startsWith('/admin/')
     ? normalizedBackRoute
-    : '/taxi/admin/drivers/pending';
+    : '/admin/drivers/pending';
   const onboardingVehicle = profile?.onboarding?.vehicle || {};
   const vehicleFieldSummary = useMemo(() => ([
     {
@@ -428,7 +429,7 @@ const DriverDetails = () => {
   }, [profile]);
   const chart = profile?.chart || { months: [], earnings: [], trips: { completed: [], cancelled: [] } };
   const profileImage = String(profile?.image || '').trim();
-  const onlineSelfieImage = String(profile?.online_selfie?.imageUrl || '').trim();
+  const onlineSelfieImage = resolveFileUrl(profile?.online_selfie?.imageUrl);
 
   const acceptanceRate = requests.length
     ? Math.round((stats.completed_trips / requests.length) * 100)
@@ -818,7 +819,7 @@ const DriverDetails = () => {
                   {canWrite && (
                     <button
                       type="button"
-                      onClick={() => navigate(`/taxi/admin/drivers/edit/${id}`, { state: { from: location.pathname + location.search } })}
+                      onClick={() => navigate(`/admin/drivers/edit/${id}`, { state: { from: location.pathname + location.search } })}
                       className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
                     >
                       <PencilLine size={15} />
@@ -907,7 +908,7 @@ const DriverDetails = () => {
                                     <button
                                       key={`view-${i}`}
                                       type="button"
-                                      onClick={() => window.open(url, '_blank', 'noopener,noreferrer')}
+                                      onClick={() => window.open(resolveFileUrl(url), '_blank', 'noopener,noreferrer')}
                                       className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-indigo-600 bg-indigo-50 rounded-md hover:bg-indigo-100 transition-colors inline-flex items-center gap-1"
                                     >
                                       <Eye size={10} /> View

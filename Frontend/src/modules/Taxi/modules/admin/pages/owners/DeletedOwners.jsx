@@ -113,7 +113,7 @@ const DeletedOwners = () => {
           module="Owner Management"
           page="Deleted Owners"
           title="Deleted Owners"
-          backto="/taxi/admin/owners"
+          backto="/admin/owners"
         />
 
         <div className="mt-6">

@@ -70,6 +70,8 @@ import {
   updateRentalVehicleType,
 } from "../../admin/services/adminService.js";
 import { resolveConfiguredGatewayCredentials } from "../../services/paymentGatewayService.js";
+import { getGoHomeConfig, serializeGoHome } from "../../services/goHomeService.js";
+import { settleGoHomeOnLocation } from "./goHomeController.js";
 import {
   completeDriverOnboarding,
   getDriverOnboardingSession,
@@ -2228,6 +2230,12 @@ export const loginDriver = async (req, res) => {
 
   await clearDriverActiveRideIfStale(driver);
 
+  // A fresh login always starts offline; going online again needs the daily selfie check.
+  if (driver.isOnline && !driver.isOnRide) {
+    await Driver.updateOne({ _id: driver._id }, { $set: { isOnline: false, socketId: null } });
+    driver.isOnline = false;
+  }
+
   const token = signAccessToken({ sub: String(driver._id), role: "driver" });
 
   res.json({
@@ -2286,6 +2294,12 @@ export const getDriverEarningsFilter = async (req, res) => {
     lastSun.setDate(lastMon.getDate() + 6);
     fromDate = new Date(lastMon.getFullYear(), lastMon.getMonth(), lastMon.getDate(), 0, 0, 0, 0);
     toDate = new Date(lastSun.getFullYear(), lastSun.getMonth(), lastSun.getDate(), 23, 59, 59, 999);
+  } else if (normPeriod === 'this_month') {
+    fromDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+    toDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+  } else if (normPeriod === 'all') {
+    fromDate = new Date(2000, 0, 1, 0, 0, 0, 0);
+    toDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
   } else if (normPeriod === 'custom_date' && date) {
     const parsed = new Date(date);
     if (!isNaN(parsed.getTime())) {
@@ -2443,6 +2457,8 @@ export const updateDriverLocation = async (req, res) => {
     console.warn("[driver-location] could not update live ride location:", error?.message);
   }
 
+  const goHomeEnded = await settleGoHomeOnLocation(driver).catch(() => null);
+
   res.json({
     success: true,
     data: {
@@ -2450,6 +2466,7 @@ export const updateDriverLocation = async (req, res) => {
       location: driver.location,
       isOnline: driver.isOnline,
       isOnRide: driver.isOnRide,
+      ...(goHomeEnded ? { goHomeEnded } : {}),
     },
   });
 };
@@ -2676,6 +2693,8 @@ export const getCurrentDriver = async (req, res) => {
       location: driver.location,
       zoneId: driver.zoneId,
       routeBooking: serializeDriverRouteBooking(driver.routeBooking),
+      goHome: serializeGoHome(driver, await getGoHomeConfig()),
+      savedAddress: driver.savedAddress || "",
       ...(await resolveDriverPreferenceOptions(driver)),
       documents: driver.documents || {},
       emergencyContacts: Array.isArray(driver.emergencyContacts)
@@ -3129,6 +3148,10 @@ export const updateCurrentDriver = async (req, res) => {
 
   if (Object.prototype.hasOwnProperty.call(req.body || {}, "profileImage")) {
     driver.profileImage = String(req.body.profileImage || "").trim();
+  }
+
+  if (Object.prototype.hasOwnProperty.call(req.body || {}, "savedAddress")) {
+    driver.savedAddress = String(req.body.savedAddress || "").trim().slice(0, 300);
   }
 
   if (Object.prototype.hasOwnProperty.call(req.body || {}, "registerFor") || Object.prototype.hasOwnProperty.call(req.body || {}, "transport_type") || Object.prototype.hasOwnProperty.call(req.body || {}, "transportType")) {

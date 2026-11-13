@@ -246,7 +246,7 @@ const ManageOwners = () => {
 
               <div className="mb-6">
                 <button
-                  onClick={() => navigate('/taxi/admin/owners/create')}
+                  onClick={() => navigate('/admin/owners/create')}
                   className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
                 >
                   <Plus size={15} /> Add Owner
@@ -334,7 +334,7 @@ const ManageOwners = () => {
                           <td className="px-4 py-4 text-sm text-gray-500">{formatMobile(owner.mobile)}</td>
                           <td className="px-4 py-4">
                             <button
-                              onClick={() => navigate(`/taxi/admin/owners/${owner._id}/documents`)}
+                              onClick={() => navigate(`/admin/owners/${owner._id}/documents`)}
                               className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
                             >
                               <FileText size={16} />

@@ -591,6 +591,20 @@ export const createNotification = async (payload) => {
   };
 };
 
+export const updateNotification = async (id, payload) => {
+  const existing = await Notification.findById(toObjectIdOrThrow(id, 'notification id'));
+  if (!existing) {
+    throw new ApiError(404, 'Notification not found');
+  }
+  const normalizedPayload = await normalizeNotificationPayload(payload, existing.toObject());
+  Object.assign(existing, normalizedPayload);
+  await existing.save();
+  return {
+    notification: serializeNotification(existing.toObject()),
+    message: 'Notification updated',
+  };
+};
+
 export const deleteNotification = async (id) => {
   const deleted = await Notification.findByIdAndDelete(toObjectIdOrThrow(id, 'notification id'));
   if (!deleted) {

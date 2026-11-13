@@ -45,7 +45,6 @@ import { UserPreference } from '../models/UserPreference.js';
 import { AdminRole } from '../models/AdminRole.js';
 import { PaymentGateway } from '../models/PaymentGateway.js';
 import { PaymentMethod } from '../models/PaymentMethod.js';
-import { OnboardingScreen } from '../models/OnboardingScreen.js';
 import { WithdrawalRequest } from '../models/WithdrawalRequest.js';
 import { SupportTicket } from '../../support/models/SupportTicket.js';
 import TaxiTransportType from '../models/TaxiTransportType.js';
@@ -89,6 +88,7 @@ import {
   isSuperAdminLike,
 } from '../../../../core/admin/adminHierarchy.service.js';
 import { assertPermissionsSubset, assertIdSubset } from '../../../../core/admin/adminAccess.util.js';
+import { invalidateGoHomeConfigCache } from '../../services/goHomeService.js';
 
 const PUBLIC_VEHICLE_CATALOG_CACHE_TTL_MS = 5 * 60 * 1000;
 let publicVehicleCatalogCache = {
@@ -2903,11 +2903,6 @@ const seedInitialData = async () => {
   // Seed Payment Gateways
   if (await PaymentGateway.countDocuments() === 0) {
     await PaymentGateway.insertMany(defaults.paymentGateways);
-  }
-
-  // Seed Onboarding Screens
-  if (await OnboardingScreen.countDocuments() === 0) {
-    await OnboardingScreen.insertMany(defaults.onboardingScreens);
   }
 
   await ensureFleetOwnersSeeded();
@@ -9454,7 +9449,55 @@ export const listOwnerDocumentUploadFields = async ({ activeOnly = true } = {}) 
 
 
 
+  export const listAvailableLanguages = async () => {
+    const { getLanguageCatalog } = await import('./languageCatalog.js');
+    const added = new Set((await AppLanguage.find().select('code').lean()).map((l) => String(l.code || '').toLowerCase()));
+    return getLanguageCatalog().filter((item) => !added.has(item.code));
+  };
+
   export const listLanguages = async () => AppLanguage.find().sort({ code: 1 }).lean();
+
+  const normalizeLanguageInput = (payload = {}) => {
+    const name = String(payload.name || '').trim();
+    const code = String(payload.code || '').trim().toLowerCase();
+    if (!name) throw new ApiError(400, 'Language name is required');
+    if (!code) throw new ApiError(400, 'Language code is required');
+    return { name, code };
+  };
+
+  export const getLanguage = async (id) => {
+    const language = await AppLanguage.findById(id).lean();
+    if (!language) throw new ApiError(404, 'Language not found');
+    return language;
+  };
+
+  export const createLanguage = async (payload) => {
+    const { name, code } = normalizeLanguageInput(payload);
+    if (await AppLanguage.exists({ code })) throw new ApiError(409, 'A language with this code already exists');
+    const hasDefault = await AppLanguage.exists({ default_status: 1 });
+    const language = await AppLanguage.create({ name, code, active: 1, default_status: hasDefault ? 0 : 1 });
+    return language.toObject();
+  };
+
+  export const updateLanguage = async (id, payload = {}) => {
+    const update = {};
+    if (payload.name !== undefined || payload.code !== undefined) {
+      const current = await AppLanguage.findById(id).lean();
+      if (!current) throw new ApiError(404, 'Language not found');
+      const { name, code } = normalizeLanguageInput({ name: payload.name ?? current.name, code: payload.code ?? current.code });
+      if (await AppLanguage.exists({ code, _id: { $ne: id } })) throw new ApiError(409, 'A language with this code already exists');
+      update.name = name;
+      update.code = code;
+    }
+    if (payload.default_status !== undefined && Number(payload.default_status) === 1) {
+      await AppLanguage.updateMany({ _id: { $ne: id } }, { default_status: 0 });
+      update.default_status = 1;
+      update.active = 1;
+    }
+    const language = await AppLanguage.findByIdAndUpdate(id, update, { returnDocument: 'after' });
+    if (!language) throw new ApiError(404, 'Language not found');
+    return language.toObject();
+  };
 
   export const updateLanguageStatus = async (id, payload) => {
     const language = await AppLanguage.findByIdAndUpdate(id, { active: Number(payload.active) }, { returnDocument: 'after' });
@@ -10012,6 +10055,7 @@ export const buildDriverDutyReport = async (query = {}) => {
   const appSettingsCategoryMap = {
     wallet: 'wallet_setting',
     tip: 'tip_setting',
+    go_home: 'go_home_setting',
   };
 
   const generalBusinessSettingsProjection = {
@@ -10103,6 +10147,7 @@ export const buildDriverDutyReport = async (query = {}) => {
       appSettings[key] = { ...(appSettings[key] || {}), ...newValues };
       appSettings.markModified(key);
       await appSettings.save();
+      if (category === 'go_home') invalidateGoHomeConfigCache();
       return { settings: appSettings[key] };
     }
 
@@ -10221,85 +10266,6 @@ export const buildDriverDutyReport = async (query = {}) => {
   export const deleteAppModule = async (id) => {
     const deleted = await TaxiAppModule.findByIdAndDelete(id);
     if (!deleted) throw new ApiError(404, 'App module registration not found');
-    return true;
-  };
-
-  export const listOnboardingScreens = async (audience) => {
-    const query = {};
-    if (audience) {
-      query.$or = [{ audience: audience }, { screen: audience }];
-    }
-    return OnboardingScreen.find(query).sort({ order: 1 }).lean();
-  };
-
-  export const createOnboardingScreen = async (payload = {}) => {
-    const audience = String(payload.audience || payload.screen || 'user').trim().toLowerCase();
-    if (!['user', 'driver', 'owner'].includes(audience)) {
-      throw new ApiError(400, 'Valid onboarding audience is required');
-    }
-
-    const title = String(payload.title || '').trim();
-    if (!title) {
-      throw new ApiError(400, 'Onboarding title is required');
-    }
-
-    const item = await OnboardingScreen.create({
-      audience,
-      screen: audience,
-      order: Number(payload.order || 1),
-      title,
-      description: String(payload.description || '').trim(),
-      active: payload.active !== undefined ? normalizeBoolean(payload.active) : true,
-    });
-
-    return item.toObject();
-  };
-
-  export const updateOnboardingScreen = async (id, payload = {}) => {
-    const update = {};
-
-    if (payload.audience !== undefined || payload.screen !== undefined) {
-      const audience = String(payload.audience || payload.screen || '').trim().toLowerCase();
-      if (!['user', 'driver', 'owner'].includes(audience)) {
-        throw new ApiError(400, 'Valid onboarding audience is required');
-      }
-      update.audience = audience;
-      update.screen = audience;
-    }
-    if (payload.order !== undefined) {
-      update.order = Number(payload.order || 1);
-    }
-    if (payload.title !== undefined) {
-      const title = String(payload.title || '').trim();
-      if (!title) {
-        throw new ApiError(400, 'Onboarding title is required');
-      }
-      update.title = title;
-    }
-    if (payload.description !== undefined) {
-      update.description = String(payload.description || '').trim();
-    }
-    if (payload.active !== undefined) {
-      update.active = normalizeBoolean(payload.active);
-    }
-
-    const item = await OnboardingScreen.findByIdAndUpdate(
-      id,
-      { $set: update },
-      { returnDocument: 'after', runValidators: true },
-    );
-    if (!item) {
-      throw new ApiError(404, 'Onboarding screen not found');
-    }
-
-    return item.toObject();
-  };
-
-  export const deleteOnboardingScreen = async (id) => {
-    const deleted = await OnboardingScreen.findByIdAndDelete(id);
-    if (!deleted) {
-      throw new ApiError(404, 'Onboarding screen not found');
-    }
     return true;
   };
 

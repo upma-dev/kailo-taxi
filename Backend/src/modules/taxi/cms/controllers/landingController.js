@@ -9,10 +9,14 @@ const STATUSES = ['new', 'contacted', 'closed'];
 export const submitLead = asyncHandler(async (req, res) => {
   const b = req.body || {};
   const name = String(b.name || '').trim();
-  const phone = String(b.phone || '').replace(/[^\d+]/g, '');
-  const email = String(b.email || '').trim();
+  // The contact form sends one "Phone / Email" box as `contact`; the registration form sends phone and email separately.
+  const contact = String(b.contact || '').trim();
+  const contactIsEmail = contact.includes('@');
+  const phone = String((contactIsEmail ? b.phone : contact || b.phone) || '').replace(/[^\d+]/g, '');
+  const email = String((contactIsEmail ? contact : b.email) || '').trim();
   if (name.length < 2) throw new ApiError(400, 'Please enter your name');
-  if (!/^\+?\d{7,15}$/.test(phone)) throw new ApiError(400, 'Please enter a valid phone number');
+  if (!phone && !email) throw new ApiError(400, 'Please enter your phone number or email');
+  if (phone && !/^\+?\d{7,15}$/.test(phone)) throw new ApiError(400, 'Please enter a valid phone number');
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new ApiError(400, 'Please enter a valid email');
 
   await LandingLead.create({

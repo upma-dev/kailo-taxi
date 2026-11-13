@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
+  CheckCircle2,
   Clock,
   Mail,
   Search,
@@ -294,7 +295,11 @@ const getStatusColor = (status) => {
         <section className="flex flex-col items-center text-center space-y-6">
             <div className="relative group">
                 <div className="w-28 h-28 bg-white rounded-[2.5rem] flex items-center justify-center text-slate-900 shadow-[0_20px_50px_rgba(0,0,0,0.08)] border border-white/80 group-hover:scale-105 transition-transform duration-500">
-                    <Clock size={42} strokeWidth={2.5} className="animate-pulse" />
+                    {rejectedDocs.length > 0 || pendingReverificationDocs.length > 0 ? (
+                        <Clock size={42} strokeWidth={2.5} className="animate-pulse" />
+                    ) : (
+                        <CheckCircle2 size={46} strokeWidth={2.2} className="text-emerald-500" />
+                    )}
                 </div>
                 <div className="absolute -bottom-1 -right-1 w-10 h-10 bg-slate-950 rounded-2xl flex items-center justify-center text-white border-4 border-white shadow-xl">
                     <Search size={16} strokeWidth={3} />
@@ -303,7 +308,7 @@ const getStatusColor = (status) => {
 
             <div className="space-y-3">
                 <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 opacity-60">
-                    {pendingReverificationDocs.length > 0 ? "Submission received" : isVehicleReapproval ? "Update in review" : "Live Audit Status"}
+                    {pendingReverificationDocs.length > 0 ? "Submission received" : isVehicleReapproval ? "Update submitted" : "Application submitted"}
                 </p>
                 <h1 className=" text-[42px] font-black leading-[1] tracking-[-0.04em] text-slate-900">
                     {rejectedDocs.length > 0 ? (
@@ -311,15 +316,15 @@ const getStatusColor = (status) => {
                     ) : pendingReverificationDocs.length > 0 ? (
                         <>Verification <span className="text-slate-400">Pending</span></>
                     ) : (
-                        <>Review <span className="text-slate-400">Started</span></>
+                        <>Submitted <span className="text-emerald-500">Successfully</span></>
                     )}
                 </h1>
-                <p className="mx-auto max-w-[28ch] text-[15px] font-bold leading-relaxed text-slate-500 opacity-80">
+                <p className="mx-auto max-w-[32ch] text-[15px] font-bold leading-relaxed text-slate-500 opacity-80">
                     {rejectedDocs.length > 0 
                         ? "Some of your documents were rejected. Please re-upload them to continue."
                         : pendingReverificationDocs.length > 0
                         ? "Your updated documents were sent back to admin for another review."
-                        : "Our team is currently performing a manual audit of your profile."}
+                        : `Your registration has been submitted. Please wait while the ${appName} team verifies and approves your profile.`}
                 </p>
             </div>
         </section>
@@ -393,9 +398,12 @@ const getStatusColor = (status) => {
                         )}
                     </div>
                 )) : (
-                    <div className="bg-white rounded-[1.8rem] border border-slate-100 p-10 text-center shadow-sm">
-                        <div className="h-6 w-6 border-2 border-slate-100 border-t-slate-900 rounded-full animate-spin mx-auto mb-4" />
-                        <p className="text-[12px] font-black uppercase tracking-widest text-slate-400 opacity-60">Syncing documents...</p>
+                    <div className="bg-white rounded-[1.8rem] border border-slate-100 p-8 text-center shadow-sm">
+                        <CheckCircle2 size={28} className="mx-auto mb-3 text-emerald-500" />
+                        <p className="text-[14px] font-black text-slate-800">Documents received</p>
+                        <p className="mt-1 text-[12px] font-semibold leading-relaxed text-slate-400">
+                            Waiting for approval from the {appName} team. You will be taken to your dashboard automatically once approved.
+                        </p>
                     </div>
                 )}
             </div>

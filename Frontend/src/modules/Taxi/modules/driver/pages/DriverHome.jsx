@@ -52,6 +52,7 @@ import SuvIcon from '@/assets/icons/SUV.png';
 import { socketService } from '../../../shared/api/socket';
 import { pushDriverLocationRealtime } from '../../../shared/services/rideRealtime';
 import { HAS_VALID_GOOGLE_MAPS_KEY, useAppGoogleMapsLoader } from '../../admin/utils/googleMaps';
+import GoHomeChip from '../components/GoHomeChip';
 import { cancelDriverScheduledRide, getCurrentDriver, getDriverDocumentTemplates, getDriverNotifications, getDriverPendingDispatch, getDriverScheduledRides, getLocalDriverToken } from '../services/registrationService';
 import { addLocalDriverNotification, getUnreadDriverNotificationCount, getVisibleDriverNotifications } from '../utils/notificationState';
 import { getScheduledRideCountdown } from '../utils/scheduledRideTime';
@@ -2680,6 +2681,8 @@ const DriverHome = () => {
                     <Target size={20} strokeWidth={2.4} />
                 </button>
             </div>
+
+            <GoHomeChip />
 
             {/* --- BOTTOM FLOATING UI --- */}
             <div className="fixed bottom-20 left-0 right-0 p-6 pb-4 z-[60] flex flex-col max-w-md mx-auto">

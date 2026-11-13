@@ -9,6 +9,29 @@ import { BusDriver } from '../models/BusDriver.js';
 import { DriverLoginSession } from '../models/DriverLoginSession.js';
 import { signAccessToken } from './authService.js';
 import { sendOtpSms } from '../../services/smsService.js';
+import { buildDriverTodaySummaryFromDocument, mergeOnlineSessionIntoTracking } from './driverTodaySummaryService.js';
+
+// Every login starts offline, so going online again always goes through the daily selfie check.
+// (A driver who is mid-ride is left alone.)
+const resetDriverOnlineOnLogin = async (driver) => {
+  if (!driver?.isOnline || driver.isOnRide) return;
+  const tracking = mergeOnlineSessionIntoTracking(
+    driver.incentiveTracking || {},
+    driver.incentiveTracking?.currentOnlineStartedAt,
+    new Date(),
+  );
+  await Driver.updateOne(
+    { _id: driver._id },
+    {
+      $set: {
+        isOnline: false,
+        socketId: null,
+        incentiveTracking: { ...tracking, currentOnlineStartedAt: null },
+        todaySummary: buildDriverTodaySummaryFromDocument(driver),
+      },
+    },
+  );
+};
 
 const LOGIN_OTP_TTL_MS = 10 * 60 * 1000;
 
@@ -438,6 +461,10 @@ export const verifyDriverLoginOtp = async ({ phone, otp }) => {
   if (normalizedRole === 'bus_driver') {
     account.lastLoginAt = new Date();
     await account.save();
+  }
+
+  if (normalizedRole === 'driver') {
+    await resetDriverOnlineOnLogin(account);
   }
 
   session.verifiedAt = new Date();

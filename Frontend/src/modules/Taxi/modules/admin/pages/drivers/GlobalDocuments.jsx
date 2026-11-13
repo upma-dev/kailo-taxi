@@ -147,7 +147,7 @@ const GlobalDocuments = () => {
     <div className="flex items-center justify-end gap-2">
       <button
         type="button"
-        onClick={() => navigate(`/taxi/admin/drivers/documents/edit/${item.id || item._id}?type=${templateType}`)}
+        onClick={() => navigate(`/admin/drivers/documents/edit/${item.id || item._id}?type=${templateType}`)}
         className="rounded-lg border border-gray-200 p-2 text-amber-600 transition-colors hover:bg-amber-50"
       >
         <PencilLine size={16} />
@@ -180,7 +180,7 @@ const GlobalDocuments = () => {
           <div className="flex flex-wrap gap-3">
             <button
               type="button"
-              onClick={() => navigate('/taxi/admin/drivers/documents/create?type=document')}
+              onClick={() => navigate('/admin/drivers/documents/create?type=document')}
               className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-700"
             >
               <Plus size={16} />
@@ -188,7 +188,7 @@ const GlobalDocuments = () => {
             </button>
             <button
               type="button"
-              onClick={() => navigate('/taxi/admin/drivers/documents/create?type=vehicle_field')}
+              onClick={() => navigate('/admin/drivers/documents/create?type=vehicle_field')}
               className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-white px-4 py-2 text-sm font-medium text-indigo-700 transition-colors hover:bg-indigo-50"
             >
               <Plus size={16} />

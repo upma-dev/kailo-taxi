@@ -477,6 +477,8 @@ export const updateDriverDocument = (documentKey, document) =>
     withDriverAuth(),
   );
 
+export const setDriverOffline = () => api.patch("/drivers/offline", {}, withDriverAuth());
+
 export const getDriverIncentives = () =>
   api.get("/drivers/incentives", withDriverAuth());
 
@@ -485,3 +487,13 @@ export const claimDriverIncentiveReward = (payload) =>
 
 export const createDriverSupportTicket = (payload) =>
   api.post("/drivers/support/tickets", payload, withDriverAuth());
+
+// ---- Go Home mode ----
+export const getGoHomeState = () => api.get("/drivers/go-home", withDriverAuth());
+
+export const saveGoHomeLocation = (payload) =>
+  api.put("/drivers/go-home/home", payload, withDriverAuth());
+
+export const startGoHome = () => api.post("/drivers/go-home/start", {}, withDriverAuth());
+
+export const stopGoHome = () => api.post("/drivers/go-home/stop", {}, withDriverAuth());

@@ -122,7 +122,7 @@ const Admins = () => {
 
           <button
             type="button"
-            onClick={() => navigate('/taxi/admin/management/admins/create')}
+            onClick={() => navigate('/admin/management/admins/create')}
             className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#1D4ED8] px-5 py-3 text-sm font-black text-white shadow-lg shadow-blue-200 transition-all hover:-translate-y-0.5 hover:bg-[#1E40AF]"
           >
             <Plus size={18} />
@@ -296,7 +296,7 @@ const Admins = () => {
                           <div className="flex items-center justify-end gap-2">
                             <button
                               type="button"
-                              onClick={() => navigate(`/taxi/admin/management/admins/edit/${admin.id || admin._id}`)}
+                              onClick={() => navigate(`/admin/management/admins/edit/${admin.id || admin._id}`)}
                               className="rounded-2xl border border-slate-200 p-2.5 text-slate-500 transition-all hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
                               title="Edit Admin"
                             >

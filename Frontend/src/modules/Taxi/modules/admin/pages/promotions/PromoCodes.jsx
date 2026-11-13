@@ -42,8 +42,8 @@ const ADMIN_API_BASE = API_ORIGIN + '/api/v1/admin';
 const TAXI_ADMIN_API_BASE = API_ORIGIN + '/api/v1/taxi/admin';
 const BASE = ADMIN_API_BASE + '/promos';
 const BOOTSTRAP_URL = ADMIN_API_BASE + '/promotions/bootstrap';
-const LIST_PATH = '/taxi/admin/promotions/promo-codes';
-const CREATE_PATH = '/taxi/admin/promotions/promo-codes/create';
+const LIST_PATH = '/admin/promotions/promo-codes';
+const CREATE_PATH = '/admin/promotions/promo-codes/create';
 const Motion = motion;
 const PROMO_TRANSPORT_OPTIONS = [
   { value: 'all', label: 'All Modules' },
@@ -815,7 +815,7 @@ const PromoCodes = () => {
                               </button>
                               <button
                                 type="button"
-                                onClick={() => navigate(`/taxi/admin/promotions/promo-codes/edit/${promo._id}`)}
+                                onClick={() => navigate(`/admin/promotions/promo-codes/edit/${promo._id}`)}
                                 className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 text-gray-500 hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
                               >
                                 <Pencil size={16} />

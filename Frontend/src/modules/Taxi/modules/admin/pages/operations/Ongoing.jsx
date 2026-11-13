@@ -249,7 +249,7 @@ const Ongoing = () => {
                              </button>
                            ) : null}
                            {row.rideType === 'pooling' ? (
-                             <Link to="/taxi/admin/pooling/bookings" className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-[11px] font-bold text-slate-600 hover:bg-slate-50">
+                             <Link to="/admin/pooling/bookings" className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-[11px] font-bold text-slate-600 hover:bg-slate-50">
                                Manage booking
                              </Link>
                            ) : (

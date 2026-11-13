@@ -573,7 +573,7 @@ const PoolingManager = ({ mode: propMode }) => {
       }
 
       toast.success(id ? 'Pooling route updated' : 'Pooling route created');
-      navigate('/taxi/admin/pooling/routes');
+      navigate('/admin/pooling/routes');
     } catch (error) {
       setErrorMessage(error?.response?.data?.message || error.message || 'Could not save pooling route.');
     } finally {
@@ -610,7 +610,7 @@ const PoolingManager = ({ mode: propMode }) => {
             </div>
             <button
               type="button"
-              onClick={() => navigate('/taxi/admin/pooling/create')}
+              onClick={() => navigate('/admin/pooling/create')}
               className="inline-flex items-center gap-2 rounded-xl bg-[#2e3c78] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#24305f]"
             >
               <Plus size={18} />
@@ -742,7 +742,7 @@ const PoolingManager = ({ mode: propMode }) => {
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => navigate(`/taxi/admin/pooling/edit/${item.id || item._id}`)}
+                      onClick={() => navigate(`/admin/pooling/edit/${item.id || item._id}`)}
                       className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
                     >
                       <Edit2 size={14} />
@@ -771,7 +771,7 @@ const PoolingManager = ({ mode: propMode }) => {
       <div className="mx-auto max-w-7xl">
         <button
           type="button"
-          onClick={() => navigate('/taxi/admin/pooling/routes')}
+          onClick={() => navigate('/admin/pooling/routes')}
           className="mb-4 inline-flex items-center gap-2 text-sm font-semibold text-slate-500 transition hover:text-slate-800"
         >
           <ArrowLeft size={16} />
@@ -1286,7 +1286,7 @@ const PoolingManager = ({ mode: propMode }) => {
               </button>
               <button
                 type="button"
-                onClick={() => navigate('/taxi/admin/pooling')}
+                onClick={() => navigate('/admin/pooling')}
                 className="text-sm font-medium text-slate-500 transition hover:text-slate-700"
               >
                 Cancel
