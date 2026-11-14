@@ -9,6 +9,7 @@ import { BusDriver } from '../models/BusDriver.js';
 import { DriverLoginSession } from '../models/DriverLoginSession.js';
 import { signAccessToken } from './authService.js';
 import { sendOtpSms } from '../../services/smsService.js';
+import { resolveStaticOtp } from '../../services/staticOtpService.js';
 import { buildDriverTodaySummaryFromDocument, mergeOnlineSessionIntoTracking } from './driverTodaySummaryService.js';
 
 // Every login starts offline, so going online again always goes through the daily selfie check.
@@ -106,46 +107,10 @@ const normalizeRole = (role) => {
 const hashOtp = (otp) => crypto.createHash('sha256').update(String(otp)).digest('hex');
 const getVisibleOtp = (otp) => (process.env.NODE_ENV !== 'production' ? String(otp) : null);
 const isTruthy = (value) => ['1', 'true', 'yes', 'on'].includes(String(value || '').trim().toLowerCase());
-const TEST_LOGIN_OTP_PHONE = '6268423925';
-const TEST_LOGIN_OTP_CODE = '0000';
-const getStaticDriverOtpConfig = (phone) => {
-  const normalizedPhone = normalizePhone(phone);
-  const staticNumbers = ['9755633147', '7974161582', '9641119590', '7354126134'];
-  if (staticNumbers.includes(normalizedPhone)) {
-    return { phone: normalizedPhone, otp: '1234' };
-  }
-  return {
-    phone: normalizePhone(env.sms?.staticOtpPhone || TEST_LOGIN_OTP_PHONE),
-    otp: String(env.sms?.staticOtpCode || TEST_LOGIN_OTP_CODE).trim(),
-  };
-};
 const resolveDriverLoginOtpForPhone = (phone) => {
-  // Fixed test OTPs are for development only. In production they work only if ALLOW_STATIC_OTP=true is set.
-  if (process.env.NODE_ENV === 'production' && !['1', 'true', 'yes', 'on'].includes(String(process.env.ALLOW_STATIC_OTP || '').trim().toLowerCase())) {
-    return { otp: generateOtp(), isStatic: false };
-  }
-  const normalizedPhone = normalizePhone(phone);
-  const staticOtpConfig = getStaticDriverOtpConfig(normalizedPhone);
-  const defaultOtpEnabled = isTruthy(env.sms?.useDefaultOtp);
-
-  if (defaultOtpEnabled && staticOtpConfig.otp) {
-    return {
-      otp: staticOtpConfig.otp,
-      isStatic: true,
-    };
-  }
-
-  if (staticOtpConfig.phone && staticOtpConfig.otp && normalizedPhone === staticOtpConfig.phone) {
-    return {
-      otp: staticOtpConfig.otp,
-      isStatic: true,
-    };
-  }
-
-  return {
-    otp: generateOtp(),
-    isStatic: false,
-  };
+  // Only the test numbers in services/staticOtpService.js get a fixed OTP; everyone else gets a real OTP.
+  const staticOtp = resolveStaticOtp('driver', phone);
+  return staticOtp ? { otp: staticOtp, isStatic: true } : { otp: generateOtp(), isStatic: false };
 };
 
 const getSession = async (phone) => {
@@ -259,7 +224,7 @@ const isApprovedServiceCenterStaff = (staff) =>
   String(staff.status || '').toLowerCase() !== 'inactive';
 
 // App-store review number: its Owner and Bus Driver accounts are created on first login so the
-// static OTP (see getStaticDriverOtpConfig) works on every tab without manual seeding.
+// static OTP (see services/staticOtpService.js) works on every tab without manual seeding.
 const REVIEW_ACCOUNT_PHONE = '9755633147';
 const ensureReviewAccount = async (role, phone) => {
   if (normalizePhone(phone) !== REVIEW_ACCOUNT_PHONE) return null;

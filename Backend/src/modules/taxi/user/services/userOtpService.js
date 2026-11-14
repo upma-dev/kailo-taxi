@@ -6,6 +6,7 @@ import { User } from '../models/User.js';
 import { signAccessToken } from './authService.js';
 import { sendOtpSms } from '../../services/smsService.js';
 import { assignPushTokenToEntity } from '../../services/pushTokenService.js';
+import { resolveStaticOtp } from '../../services/staticOtpService.js';
 
 const OTP_TTL_MS = 10 * 60 * 1000;
 const VERIFIED_SESSION_TTL_MS = 10 * 60 * 1000;
@@ -26,39 +27,10 @@ const generateOtp = () => String(Math.floor(1000 + Math.random() * 9000));
 const hashOtp = (otp) => crypto.createHash('sha256').update(String(otp)).digest('hex');
 const getVisibleOtp = (otp) => (process.env.NODE_ENV !== 'production' ? String(otp) : null);
 const isTruthy = (value) => ['1', 'true', 'yes', 'on'].includes(String(value || '').trim().toLowerCase());
-const TEST_LOGIN_OTP_PHONE = '7610416911';
-const TEST_LOGIN_OTP_CODE = '0000';
-const getStaticUserOtpConfig = () => ({
-  phone: normalizeUserPhone(env.sms?.staticOtpPhone || TEST_LOGIN_OTP_PHONE),
-  otp: String(env.sms?.staticOtpCode || TEST_LOGIN_OTP_CODE).trim(),
-});
 const resolveUserOtpForPhone = (phone) => {
-  // Fixed test OTPs are for development only. In production they work only if ALLOW_STATIC_OTP=true is set.
-  if (process.env.NODE_ENV === 'production' && !['1', 'true', 'yes', 'on'].includes(String(process.env.ALLOW_STATIC_OTP || '').trim().toLowerCase())) {
-    return { otp: generateOtp(), isStatic: false };
-  }
-  const normalizedPhone = normalizeUserPhone(phone);
-  const staticOtpConfig = getStaticUserOtpConfig();
-  const defaultOtpEnabled = isTruthy(env.sms?.useDefaultOtp);
-
-  if (defaultOtpEnabled && staticOtpConfig.otp) {
-    return {
-      otp: staticOtpConfig.otp,
-      isStatic: true,
-    };
-  }
-
-  if (staticOtpConfig.phone && staticOtpConfig.otp && normalizedPhone === staticOtpConfig.phone) {
-    return {
-      otp: staticOtpConfig.otp,
-      isStatic: true,
-    };
-  }
-
-  return {
-    otp: generateOtp(),
-    isStatic: false,
-  };
+  // Only the test numbers in services/staticOtpService.js get a fixed OTP; everyone else gets a real OTP.
+  const staticOtp = resolveStaticOtp('user', phone);
+  return staticOtp ? { otp: staticOtp, isStatic: true } : { otp: generateOtp(), isStatic: false };
 };
 
 const ensureUserCanLogin = (user) => {
