@@ -36,6 +36,10 @@ export const sendNotification = asyncHandler(async (req, res) =>
   ok(res, await promotionsService.createNotification(req.body)),
 );
 
+export const updateNotification = asyncHandler(async (req, res) =>
+  ok(res, await promotionsService.updateNotification(req.params.id, req.body)),
+);
+
 export const deleteNotification = asyncHandler(async (req, res) => {
   await promotionsService.deleteNotification(req.params.id);
   ok(res, { deleted: true });

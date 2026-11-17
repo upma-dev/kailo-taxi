@@ -307,7 +307,7 @@ const BusHome = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 max-w-lg mx-auto font-sans pb-32 relative overflow-hidden">
+    <div className="min-h-screen bg-slate-50 max-w-lg mx-auto font-booking pb-32 relative overflow-hidden">
       <header className="bg-white px-5 pt-10 pb-4 sticky top-0 z-20 border-b border-slate-100 shadow-sm">
         <div className="flex items-center gap-3">
           <button
@@ -317,53 +317,14 @@ const BusHome = () => {
             <ArrowLeft size={18} className="text-slate-900" />
           </button>
           <div className="flex-1">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Bus Tickets</p>
-            <h1 className="text-xl font-bold text-slate-900">Book your journey</h1>
+            <h1 className="text-xl font-bold text-slate-900">Book bus tickets</h1>
+            <p className="text-xs font-medium text-slate-500">Where do you want to go?</p>
           </div>
         </div>
       </header>
 
       <div className="px-5 pt-6 space-y-6">
-        <div className="rounded-3xl bg-slate-900 p-6 text-white shadow-xl shadow-slate-200">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h2 className="text-2xl font-bold leading-tight">Travel with ease</h2>
-              <p className="mt-2 text-sm text-slate-300 font-medium">
-                Find and book bus tickets for your preferred routes in just a few clicks.
-              </p>
-            </div>
-            <div className="w-12 h-12 rounded-2xl bg-white/10 flex items-center justify-center shrink-0">
-              <BusFront size={24} className="text-white" />
-            </div>
-          </div>
-
-          <div className="mt-6 grid grid-cols-3 gap-4 border-t border-white/10 pt-4">
-            <div>
-              <p className="text-[10px] font-bold uppercase text-slate-400">Routes</p>
-              <p className="mt-1 text-lg font-bold">{routeSuggestions.length || 0}</p>
-            </div>
-            <div>
-              <p className="text-[10px] font-bold uppercase text-slate-400">Cities</p>
-              <p className="mt-1 text-lg font-bold">{cityOptions.length || 0}</p>
-            </div>
-            <div>
-              <p className="text-[10px] font-bold uppercase text-slate-400">Date</p>
-              <p className="mt-1 text-sm font-bold">{formatTravelDate(date) || 'Choose'}</p>
-            </div>
-          </div>
-        </div>
-
         <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 space-y-6">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-slate-50 text-slate-600 flex items-center justify-center">
-              <Search size={20} />
-            </div>
-            <div>
-              <h3 className="text-lg font-bold text-slate-900">Search Buses</h3>
-              <p className="text-xs text-slate-500 font-medium">Find available buses on your route</p>
-            </div>
-          </div>
-
           <div className="space-y-4">
             <div className="relative">
               <div className="absolute left-4 top-4 text-slate-400">
@@ -425,8 +386,7 @@ const BusHome = () => {
             </button>
           </div>
 
-          <div className="space-y-3">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Quick dates</p>
+          <div>
             <div className="flex flex-wrap gap-2">
               {quickDates.map((item) => (
                 <button
@@ -435,7 +395,7 @@ const BusHome = () => {
                   onClick={() => setDate(item.value)}
                   className={`rounded-full px-4 py-2 text-xs font-bold transition-all ${
                     date === item.value
-                      ? 'bg-slate-900 text-white'
+                      ? 'bg-[var(--app-primary,#0F766E)] text-white'
                       : 'bg-slate-50 text-slate-600 border border-slate-100 hover:border-slate-300'
                   }`}
                 >
@@ -485,7 +445,7 @@ const BusHome = () => {
             <motion.button
               whileTap={{ scale: 0.98 }}
               onClick={handleSearch}
-              className="w-full bg-slate-900 text-white py-4 rounded-2xl text-base font-bold flex items-center justify-center gap-2 shadow-lg shadow-slate-200 active:scale-95 transition-all"
+              className="w-full bg-[var(--app-primary,#0F766E)] text-white py-4 rounded-2xl text-base font-bold flex items-center justify-center gap-2 shadow-lg shadow-slate-200 active:scale-95 transition-all"
             >
               Search Buses <ChevronRight size={18} />
             </motion.button>
@@ -597,7 +557,7 @@ const BusHome = () => {
                     onClick={() => selectCalendarDate(day)}
                     className={`aspect-square rounded-xl text-sm font-bold transition-all flex items-center justify-center ${
                       isSelected
-                        ? 'bg-slate-900 text-white shadow-lg'
+                        ? 'bg-[var(--app-primary,#0F766E)] text-white shadow-lg'
                         : isDisabled
                           ? 'text-slate-200'
                           : isCurrentMonth
@@ -620,12 +580,12 @@ const BusHome = () => {
                 }}
                 className="flex-1 py-3 rounded-2xl bg-slate-50 text-slate-700 text-sm font-bold border border-slate-100"
               >
-                Tomorrow
+                Today
               </button>
               <button
                 type="button"
                 onClick={() => setCalendarOpen(false)}
-                className="flex-1 py-3 rounded-2xl bg-slate-900 text-white text-sm font-bold"
+                className="flex-1 py-3 rounded-2xl bg-[var(--app-primary,#0F766E)] text-white text-sm font-bold"
               >
                 Confirm
               </button>

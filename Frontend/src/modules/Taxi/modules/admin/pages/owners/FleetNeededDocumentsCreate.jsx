@@ -50,7 +50,7 @@ const FleetNeededDocumentsCreate = () => {
 
       const json = await res.json();
       if (json?.success) {
-        navigate('/taxi/admin/fleet/documents');
+        navigate('/admin/fleet/documents');
         return;
       }
       alert(json?.message || 'Operation failed');
@@ -69,7 +69,7 @@ const FleetNeededDocumentsCreate = () => {
           module="Fleet Management"
           page="Fleet Needed Documents"
           title="Create Fleet Needed Document"
-          backto="/taxi/admin/fleet/documents"
+          backto="/admin/fleet/documents"
         />
       </div>
 

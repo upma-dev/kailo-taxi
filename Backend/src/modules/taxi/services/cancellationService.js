@@ -8,9 +8,101 @@ import { applyDriverWalletAdjustment } from '../driver/services/walletService.js
 import { resolveSetPriceForRide } from './rideService.js';
 import { releasePromoForCancelledRide } from './promoService.js';
 import { AdminBusinessSetting } from '../admin/models/AdminBusinessSetting.js';
+import { SetPrice } from '../admin/models/SetPrice.js';
+import { Vehicle } from '../admin/models/Vehicle.js';
 import { createDefaultBusinessSettings } from '../admin/data/defaultBusinessSettings.js';
 
 const roundMoney = (val) => Math.round((Number(val || 0) + Number.EPSILON) * 100) / 100;
+
+const hasSetPricePolicy = (setPrice) => Boolean(setPrice?.cancellation_policy && Object.keys(setPrice.cancellation_policy).length > 0);
+
+const policyFromSetPrice = (setPrice) => {
+  const userCancelFeeType = String(setPrice.user_cancellation_fee_type || '').trim().toLowerCase();
+  const userCancelFee = Number(setPrice.user_cancellation_fee ?? 0);
+
+  const fixedCharge = userCancelFeeType === 'percentage'
+    ? 0
+    : userCancelFeeType === 'fixed'
+    ? userCancelFee
+    : Number(setPrice.cancellation_policy.fixed_cancellation_charge ?? 50);
+
+  const percentageCharge = userCancelFeeType === 'percentage'
+    ? userCancelFee
+    : 0;
+
+  return {
+    // Admin's "Fee Goes to" choice on the price rule: 'driver' means the rider's cancellation fee is paid out to the driver.
+    fee_goes_to: String(setPrice.cancellation_fee_goes_to || 'admin').trim().toLowerCase(),
+    enable_cancellation_charge: setPrice.cancellation_policy.enable_cancellation_charge ?? true,
+    free_cancellation_time_mins: Number(setPrice.cancellation_policy.free_cancellation_time_mins ?? 2),
+    fixed_cancellation_charge: fixedCharge,
+    percentage_cancellation_charge: percentageCharge,
+    max_cancellation_fee: Number(setPrice.cancellation_policy.max_cancellation_fee ?? 150),
+    charge_after_driver_accepted: setPrice.cancellation_policy.charge_after_driver_accepted ?? true,
+    charge_after_driver_arrived: setPrice.cancellation_policy.charge_after_driver_arrived ?? true,
+    driver_cancellation_penalty: Number(setPrice.cancellation_policy.driver_cancellation_penalty ?? 30),
+    driver_compensation_percentage: Number(setPrice.cancellation_policy.driver_compensation_percentage ?? 0),
+    cancellation_grace_period_driver_arrived: Number(setPrice.cancellation_policy.cancellation_grace_period_driver_arrived ?? 5),
+  };
+};
+
+const policyFromBusinessSettings = (bizSetting) => {
+  const defaultPolicy = createDefaultBusinessSettings().transport_ride.cancellation_policy;
+  const policyFromBiz = bizSetting?.transport_ride?.cancellation_policy || defaultPolicy;
+
+  return {
+    fee_goes_to: String(policyFromBiz.fee_goes_to || 'admin').trim().toLowerCase(),
+    enable_cancellation_charge: Boolean(policyFromBiz.enable_cancellation_charge ?? true),
+    free_cancellation_time_mins: Number(policyFromBiz.free_cancellation_time_mins ?? 2),
+    fixed_cancellation_charge: Number(policyFromBiz.fixed_cancellation_charge ?? 50),
+    percentage_cancellation_charge: Number(policyFromBiz.percentage_cancellation_charge ?? 0),
+    max_cancellation_fee: Number(policyFromBiz.max_cancellation_fee ?? 150),
+    charge_after_driver_accepted: Boolean(policyFromBiz.charge_after_driver_accepted ?? true),
+    charge_after_driver_arrived: Boolean(policyFromBiz.charge_after_driver_arrived ?? true),
+    driver_cancellation_penalty: Number(policyFromBiz.driver_cancellation_penalty ?? 30),
+    driver_compensation_percentage: Number(policyFromBiz.driver_compensation_percentage ?? 0),
+    cancellation_grace_period_driver_arrived: Number(policyFromBiz.cancellation_grace_period_driver_arrived ?? 5),
+  };
+};
+
+/**
+ * Public view of the cancellation rules for the website: the default rule from Business Settings plus one entry per
+ * vehicle that has its own rule on a price (Set Price). Uses the same mapping as real cancellations, so the page
+ * always shows the numbers riders are actually charged.
+ */
+export const getPublicCancellationPolicy = async () => {
+  const [bizSetting, rows] = await Promise.all([
+    AdminBusinessSetting.findOne({ scope: 'default' }).select('customization transport_ride').lean(),
+    SetPrice.find({
+      active: 1,
+      status: 'active',
+      transport_type: { $in: ['taxi', 'both'] },
+      vehicle_type: { $ne: null },
+    })
+      .sort({ updatedAt: -1, createdAt: -1 })
+      .populate({ path: 'vehicle_type', model: Vehicle, select: 'name status active' })
+      .lean(),
+  ]);
+
+  const defaultPolicy = policyFromBusinessSettings(bizSetting);
+  const seen = new Set();
+  const vehicles = [];
+  for (const row of rows) {
+    const vehicle = row.vehicle_type;
+    if (!vehicle?._id || !vehicle.name || vehicle.active === false || vehicle.status === 0) continue;
+    const key = String(vehicle._id);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    vehicles.push({ id: key, name: vehicle.name, policy: hasSetPricePolicy(row) ? policyFromSetPrice(row) : defaultPolicy });
+  }
+  vehicles.sort((a, b) => a.name.localeCompare(b.name));
+
+  return {
+    currency_symbol: bizSetting?.customization?.currency_symbol || '₹',
+    default_policy: defaultPolicy,
+    vehicles,
+  };
+};
 
 export const getCancellationPolicy = async (ride) => {
   let setPrice = null;
@@ -28,53 +120,9 @@ export const getCancellationPolicy = async (ride) => {
     }
   }
 
-  if (setPrice?.cancellation_policy && Object.keys(setPrice.cancellation_policy).length > 0) {
-    const userCancelFeeType = String(setPrice.user_cancellation_fee_type || '').trim().toLowerCase();
-    const userCancelFee = Number(setPrice.user_cancellation_fee ?? 0);
+  if (hasSetPricePolicy(setPrice)) return policyFromSetPrice(setPrice);
 
-    const fixedCharge = userCancelFeeType === 'percentage'
-      ? 0
-      : userCancelFeeType === 'fixed'
-      ? userCancelFee
-      : Number(setPrice.cancellation_policy.fixed_cancellation_charge ?? 50);
-
-    const percentageCharge = userCancelFeeType === 'percentage'
-      ? userCancelFee
-      : 0;
-
-    return {
-      // Admin's "Fee Goes to" choice on the price rule: 'driver' means the rider's cancellation fee is paid out to the driver.
-      fee_goes_to: String(setPrice.cancellation_fee_goes_to || 'admin').trim().toLowerCase(),
-      enable_cancellation_charge: setPrice.cancellation_policy.enable_cancellation_charge ?? true,
-      free_cancellation_time_mins: Number(setPrice.cancellation_policy.free_cancellation_time_mins ?? 2),
-      fixed_cancellation_charge: fixedCharge,
-      percentage_cancellation_charge: percentageCharge,
-      max_cancellation_fee: Number(setPrice.cancellation_policy.max_cancellation_fee ?? 150),
-      charge_after_driver_accepted: setPrice.cancellation_policy.charge_after_driver_accepted ?? true,
-      charge_after_driver_arrived: setPrice.cancellation_policy.charge_after_driver_arrived ?? true,
-      driver_cancellation_penalty: Number(setPrice.cancellation_policy.driver_cancellation_penalty ?? 30),
-      driver_compensation_percentage: Number(setPrice.cancellation_policy.driver_compensation_percentage ?? 0),
-      cancellation_grace_period_driver_arrived: Number(setPrice.cancellation_policy.cancellation_grace_period_driver_arrived ?? 5),
-    };
-  }
-
-  const bizSetting = await AdminBusinessSetting.findOne({ scope: 'default' }).lean();
-  const defaultPolicy = createDefaultBusinessSettings().transport_ride.cancellation_policy;
-  const policyFromBiz = bizSetting?.transport_ride?.cancellation_policy || defaultPolicy;
-
-  return {
-    fee_goes_to: String(policyFromBiz.fee_goes_to || 'admin').trim().toLowerCase(),
-    enable_cancellation_charge: Boolean(policyFromBiz.enable_cancellation_charge ?? true),
-    free_cancellation_time_mins: Number(policyFromBiz.free_cancellation_time_mins ?? 2),
-    fixed_cancellation_charge: Number(policyFromBiz.fixed_cancellation_charge ?? 50),
-    percentage_cancellation_charge: Number(policyFromBiz.percentage_cancellation_charge ?? 0),
-    max_cancellation_fee: Number(policyFromBiz.max_cancellation_fee ?? 150),
-    charge_after_driver_accepted: Boolean(policyFromBiz.charge_after_driver_accepted ?? true),
-    charge_after_driver_arrived: Boolean(policyFromBiz.charge_after_driver_arrived ?? true),
-    driver_cancellation_penalty: Number(policyFromBiz.driver_cancellation_penalty ?? 30),
-    driver_compensation_percentage: Number(policyFromBiz.driver_compensation_percentage ?? 0),
-    cancellation_grace_period_driver_arrived: Number(policyFromBiz.cancellation_grace_period_driver_arrived ?? 5),
-  };
+  return policyFromBusinessSettings(await AdminBusinessSetting.findOne({ scope: 'default' }).lean());
 };
 
 export const calculateCancellationBill = async ({ ride, cancelledBy = 'user', reason = '' }) => {

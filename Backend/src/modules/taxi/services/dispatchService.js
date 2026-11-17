@@ -48,18 +48,20 @@ export const joinRideRoom = (socket, rideId) => {
 };
 
 export const addSocketSubscriptions = (socket, { role, entityId }) => {
-  if (role === 'admin') {
+  const normRole = String(role || '').toLowerCase();
+  if (normRole === 'admin') {
     socket.join(getAdminRoom());
     return;
   }
 
-  if (role === 'user') {
+  if (normRole === 'user') {
     socket.join(getUserRoom(entityId));
     return;
   }
 
-  if (role === 'driver') {
+  if (normRole === 'driver' || normRole === 'owner' || normRole === 'bus_driver') {
     socket.join(getDriverRoom(entityId));
+    socket.join('drivers');
   }
 };
 
@@ -215,8 +217,8 @@ const emitRideRequestToDrivers = async ({
   const requestExpiresAt = new Date(Date.now() + dispatchConfig.retryDelayMs).toISOString();
 
   for (const driver of targetDrivers) {
-    console.log(`[DISPATCH_SERVICE] Emitting 'rideRequest' to Driver: ${driver._id} (Room: ${getDriverRoom(driver._id)}) for Ride: ${ride._id}`);
-    emitToDriver(driver._id, 'rideRequest', {
+    console.log(`[DISPATCH_SERVICE] Emitting 'rideRequest' to Driver: ${driver._id} (Room: ${getDriverRoom(driver._id)}, socketId: ${driver.socketId || 'none'}) for Ride: ${ride._id}`);
+    const rideRequestPayload = {
       rideId: String(ride._id),
       type: ride.serviceType || 'ride',
       serviceType: ride.serviceType || 'ride',
@@ -265,7 +267,11 @@ const emitRideRequestToDrivers = async ({
       expiresInSeconds: dispatchConfig.retryWindowSeconds,
       requestExpiresAt,
       zoneId: zone?._id ? String(zone._id) : null,
-    });
+    };
+    emitToDriver(driver._id, 'rideRequest', rideRequestPayload);
+    if (driver.socketId) {
+      emitToSocket(driver.socketId, 'rideRequest', rideRequestPayload);
+    }
   }
 
   sendPushNotificationToEntities({
@@ -744,6 +750,7 @@ const dispatchAttempt = async (rideId, attemptIndex = 0) => {
       vehicleTypeIds: dispatchVehicleTypeIds,
       serviceType: ride.serviceType || 'ride',
       bookingMode: ride.bookingMode || 'normal',
+      dropCoords: ride.dropLocation?.coordinates || null,
     });
     const effectiveRadius = Number.isFinite(searchRadiusMeters) && searchRadiusMeters > 0
       ? searchRadiusMeters
@@ -1046,6 +1053,7 @@ export const notifyLateAvailableDriver = async (driverId) => {
       vehicleTypeIds: dispatchVehicleTypeIds,
       serviceType: ride.serviceType || 'ride',
       bookingMode: ride.bookingMode || 'normal',
+      dropCoords: ride.dropLocation?.coordinates || null,
     });
 
     const matchedDriver = drivers.find((item) => String(item._id) === driverKey);
@@ -1317,6 +1325,7 @@ export const getActivePendingDispatchForDriver = async (driverId, requestedRideI
           vehicleTypeIds: dispatchVehicleTypeIds,
           serviceType: ride.serviceType || 'ride',
           bookingMode: ride.bookingMode || 'normal',
+          dropCoords: ride.dropLocation?.coordinates || null,
         });
 
         if (drivers.some((d) => String(d._id) === driverKey)) {

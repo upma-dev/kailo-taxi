@@ -12,6 +12,7 @@ import { createDefaultBusinessSettings } from '../data/defaultBusinessSettings.j
 import { createDefaultAppSettings } from '../data/defaultAppSettings.js';
 import { Airport } from '../models/Airport.js';
 import { BusService } from '../models/BusService.js';
+import { BusBooking } from '../../user/models/BusBooking.js';
 import { DriverNeededDocument } from '../models/DriverNeededDocument.js';
 import { GoodsType } from '../models/GoodsType.js';
 import { OwnerNeededDocument } from '../models/OwnerNeededDocument.js';
@@ -40,12 +41,13 @@ import { AppLanguage } from '../models/AppLanguage.js';
 import { RideModule } from '../models/RideModule.js';
 import { SubscriptionPlan } from '../models/SubscriptionPlan.js';
 import { TaxiAppModule } from '../models/TaxiAppModule.js';
+import { AdminMeta } from '../models/AdminMeta.js';
+import { isRentalEnabled, invalidateRentalSettingCache } from '../../services/rentalSettingsService.js';
 import { NotificationChannel } from '../models/NotificationChannel.js';
 import { UserPreference } from '../models/UserPreference.js';
 import { AdminRole } from '../models/AdminRole.js';
 import { PaymentGateway } from '../models/PaymentGateway.js';
 import { PaymentMethod } from '../models/PaymentMethod.js';
-import { OnboardingScreen } from '../models/OnboardingScreen.js';
 import { WithdrawalRequest } from '../models/WithdrawalRequest.js';
 import { SupportTicket } from '../../support/models/SupportTicket.js';
 import TaxiTransportType from '../models/TaxiTransportType.js';
@@ -63,6 +65,7 @@ import {
   notifyUserAccountDeleted,
 } from '../../services/dispatchService.js';
 import { buildRentalTrackingSnapshot, listActiveRentalTrackingBookings } from '../../services/rentalTrackingService.js';
+import { sendPushNotificationToEntities } from '../../services/pushNotificationService.js';
 import { sendEmail } from '../../services/mailService.js';
 import { getTransportRideSettings, invalidateTransportSettingsCache } from '../../services/transportSettingsService.js';
 import { createTaxiPayout } from '../../services/withdrawalPayout.service.js';
@@ -89,6 +92,7 @@ import {
   isSuperAdminLike,
 } from '../../../../core/admin/adminHierarchy.service.js';
 import { assertPermissionsSubset, assertIdSubset } from '../../../../core/admin/adminAccess.util.js';
+import { invalidateGoHomeConfigCache } from '../../services/goHomeService.js';
 
 const PUBLIC_VEHICLE_CATALOG_CACHE_TTL_MS = 5 * 60 * 1000;
 let publicVehicleCatalogCache = {
@@ -855,13 +859,29 @@ const syncBusDriverForBusService = async (busService, normalizedPayload = {}) =>
     (existingDriverId && await BusDriver.findById(existingDriverId)) ||
     (await BusDriver.findOne({ phone: driverPhone }));
 
+  // A phone number can captain only one bus. Do not silently take a driver away from another live bus.
+  const otherBusId = existingDriver?.assignedBusServiceId;
+  if (otherBusId && String(otherBusId) !== String(busService._id)) {
+    const otherBusExists = await BusService.exists({ _id: otherBusId });
+    if (otherBusExists) {
+      throw new ApiError(409, 'This phone number is already assigned as driver on another bus');
+    }
+  }
+
+  // Phone owned by a different bus driver record than the one linked to this bus.
+  if (existingDriver && existingDriverId && String(existingDriver._id) !== String(existingDriverId)) {
+    await BusDriver.findByIdAndDelete(existingDriverId);
+  }
+
   const driver = existingDriver || new BusDriver();
+  // The captain can work only once admin has approved the bus.
+  const busIsLive = String(busService.status || '') === 'active';
 
   driver.name = driverName;
   driver.phone = driverPhone;
-  driver.approve = true;
+  driver.approve = busIsLive;
   driver.active = true;
-  driver.status = 'approved';
+  driver.status = busIsLive ? 'approved' : 'pending';
   driver.assignedBusServiceId = busService._id;
   driver.operatorName = busService.operatorName || '';
   driver.busName = busService.busName || '';
@@ -1008,6 +1028,12 @@ const normalizeRentalAdvancePayment = (value = {}, existing = {}) => {
   };
 };
 
+const normalizeRentalSafetyMoney = (value = {}, existing = {}) => ({
+  enabled: normalizeBoolean(value?.enabled ?? existing?.enabled ?? false),
+  amount: Math.max(0, sanitizeBusSeatPrice(value?.amount, existing?.amount ?? 0)),
+  notes: sanitizeBusText(value?.notes, existing?.notes || ''),
+});
+
 const normalizeRentalVehiclePayload = (payload = {}, existing = {}) => {
   const fallbackBlueprint = existing.blueprint?.lowerDeck?.length
     ? {
@@ -1071,6 +1097,7 @@ const normalizeRentalVehiclePayload = (payload = {}, existing = {}) => {
       payload.advancePayment,
       existing.advancePayment,
     ),
+    safetyMoney: normalizeRentalSafetyMoney(payload.safetyMoney, existing.safetyMoney),
     status: payload.status
       ? (payload.status === 'inactive' ? 'inactive' : 'active')
       : normalizeBoolean(payload.active ?? existing.active ?? true)
@@ -1231,6 +1258,7 @@ const serializeRentalVehicleType = (item = {}) => ({
     : [],
   poolingEnabled: Boolean(item.poolingEnabled),
   advancePayment: normalizeRentalAdvancePayment(item.advancePayment),
+  safetyMoney: normalizeRentalSafetyMoney(item.safetyMoney),
   blueprint: {
     templateKey: item.blueprint?.templateKey || 'compact_4',
     lowerDeck: normalizeBusDeck(item.blueprint?.lowerDeck || []),
@@ -1395,6 +1423,20 @@ const serializeRentalBookingRequest = (item = {}) => ({
   totalCost: Number(item.totalCost || 0),
   payableNow: Number(item.payableNow || 0),
   advancePaymentLabel: item.advancePaymentLabel || '',
+  conditionPhoto: {
+    imageUrl: item.conditionPhoto?.imageUrl || '',
+    fileName: item.conditionPhoto?.fileName || '',
+    uploadedAt: item.conditionPhoto?.uploadedAt || null,
+  },
+  paymentOption: item.paymentOption === 'safety_money' ? 'safety_money' : 'advance',
+  safetyMoney: {
+    amount: Number(item.safetyMoney?.amount || 0),
+    status: item.safetyMoney?.status || 'none',
+    deductedAmount: Number(item.safetyMoney?.deductedAmount || 0),
+    refundedAmount: Number(item.safetyMoney?.refundedAmount || 0),
+    dueAmount: Number(item.safetyMoney?.dueAmount || 0),
+    settledAt: item.safetyMoney?.settledAt || null,
+  },
   paymentStatus: item.paymentStatus || 'pending',
   paymentMethod: item.paymentMethod || '',
   paymentMethodLabel: item.paymentMethodLabel || '',
@@ -1497,47 +1539,51 @@ const resolveRentalSelectedPackagePricing = (item = {}) => {
 };
 
 const computeRentalRideMetrics = (item = {}, endedAt = null) => {
-  const startDate = item.assignedAt || item.pickupDateTime || item.createdAt;
+  const startDate = item.assignedAt || item.reviewedAt || item.createdAt;
   const startMs = startDate ? new Date(startDate).getTime() : NaN;
   const endMs = endedAt ? new Date(endedAt).getTime() : Date.now();
   const { includedHours, basePrice, extraHourPrice } = resolveRentalSelectedPackagePricing(item);
   const hourlyRate = includedHours > 0 ? basePrice / includedHours : 0;
+  const round2 = (value) => Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
 
-  if (!Number.isFinite(startMs)) {
-    return {
-      hourlyRate: Math.max(0, hourlyRate),
-      includedHours,
-      basePrice,
-      extraHourRate: extraHourPrice,
-      elapsedMinutes: 0,
-      elapsedHours: 0,
-      currentCharge: Math.max(basePrice, Number(item.payableNow || 0)),
-      remainingDue: Math.max(0, Math.max(basePrice, Number(item.payableNow || 0)) - Number(item.payableNow || 0)),
-    };
-  }
+  // Two ways to pay at booking: a small advance (it is also the minimum bill) or refundable safety money
+  // (no minimum: the final bill is deducted from it and the balance is refunded).
+  const isSafetyMoney = item.paymentOption === 'safety_money';
+  const paidNow = Number(item.payableNow || 0);
+  const safetyAmount = isSafetyMoney ? Number(item.safetyMoney?.amount || paidNow) : 0;
+  const minimumCharge = isSafetyMoney ? 0 : paidNow;
 
-  const elapsedMs = Math.max(0, endMs - startMs);
+  const hasStart = Number.isFinite(startMs);
+  const elapsedMs = hasStart ? Math.max(0, endMs - startMs) : 0;
   const elapsedMinutes = Math.max(0, Math.ceil(elapsedMs / 60000));
   const elapsedHours = elapsedMs / 3600000;
-  const elapsedChargeWithinPackage = elapsedHours <= includedHours
+  // The bill grows with the running time (per minute): hourly rate while inside the package,
+  // then the extra-hour rate.
+  const overtimeRate = extraHourPrice > 0 ? extraHourPrice : hourlyRate;
+  // Safety money option: the rental package is always charged in full (even if the ride is returned early);
+  // only time beyond the package adds to the bill. Advance option: the bill grows with the running time.
+  const runningCharge = !hasStart
     ? basePrice
-    : basePrice + Math.ceil(Math.max(0, elapsedHours - includedHours)) * extraHourPrice;
-  const uncappedCharge = Math.max(Number(item.payableNow || 0), elapsedChargeWithinPackage);
-  const currentCharge = Math.round((uncappedCharge + Number.EPSILON) * 100) / 100;
-  const remainingDue = Math.max(
-    0,
-    Math.round((currentCharge - Number(item.payableNow || 0) + Number.EPSILON) * 100) / 100,
-  );
+    : elapsedHours <= includedHours
+      ? (isSafetyMoney ? basePrice : hourlyRate * elapsedHours)
+      : basePrice + (elapsedHours - includedHours) * overtimeRate;
+  const currentCharge = round2(Math.max(minimumCharge, runningCharge));
+  const dueAmount = isSafetyMoney ? round2(Math.max(0, currentCharge - safetyAmount)) : round2(Math.max(0, currentCharge - paidNow));
 
   return {
-    hourlyRate: Math.max(0, Math.round((hourlyRate + Number.EPSILON) * 100) / 100),
+    hourlyRate: Math.max(0, round2(hourlyRate)),
     includedHours,
-    basePrice: Math.round((basePrice + Number.EPSILON) * 100) / 100,
-    extraHourRate: Math.round((extraHourPrice + Number.EPSILON) * 100) / 100,
+    basePrice: round2(basePrice),
+    extraHourRate: round2(extraHourPrice),
     elapsedMinutes,
-    elapsedHours: Math.round((elapsedHours + Number.EPSILON) * 100) / 100,
+    elapsedSeconds: Math.floor(elapsedMs / 1000),
+    elapsedHours: round2(elapsedHours),
     currentCharge,
-    remainingDue,
+    remainingDue: dueAmount,
+    paymentOption: isSafetyMoney ? 'safety_money' : 'advance',
+    safetyMoneyAmount: round2(safetyAmount),
+    safetyDeducted: isSafetyMoney ? round2(Math.min(currentCharge, safetyAmount)) : 0,
+    safetyRefund: isSafetyMoney ? round2(Math.max(0, safetyAmount - currentCharge)) : 0,
   };
 };
 
@@ -2858,10 +2904,8 @@ const seedInitialData = async () => {
     await User.insertMany(defaults.users.map(u => ({ ...u, phone: u.mobile, password: 'password123' })));
   }
 
-  // Seed Service Locations
-  if (await ServiceLocation.countDocuments() === 0) {
-    await ServiceLocation.insertMany(defaults.serviceLocations);
-  }
+  // Seed Service Locations (a country; its cities are zones)
+  await ensureServiceLocationsSeeded();
 
   // Seed Drivers
   if (await Driver.countDocuments() === 0) {
@@ -2905,19 +2949,662 @@ const seedInitialData = async () => {
     await PaymentGateway.insertMany(defaults.paymentGateways);
   }
 
-  // Seed Onboarding Screens
-  if (await OnboardingScreen.countDocuments() === 0) {
-    await OnboardingScreen.insertMany(defaults.onboardingScreens);
-  }
-
   await ensureFleetOwnersSeeded();
 };
 
-export const ensureServiceLocationsSeeded = async () => {
-  if (await ServiceLocation.countDocuments() === 0) {
-    const defaults = createDefaultAdminState();
-    await ServiceLocation.insertMany(defaults.serviceLocations);
+// A service location is a country / region (India); the zones inside it are its cities (Indore, Dewas ...).
+const DEFAULT_SERVICE_LOCATION = {
+  name: 'India',
+  service_location_name: 'India',
+  address: 'India',
+  country: 'India',
+  currency_name: 'Indian Rupee',
+  currency_symbol: '₹',
+  currency_code: 'INR',
+  timezone: 'Asia/Kolkata',
+  unit: 'km',
+  latitude: 20.5937,
+  longitude: 78.9629,
+  location: { type: 'Point', coordinates: [78.9629, 20.5937] },
+  status: 'active',
+  active: true,
+};
+
+let serviceLocationSeedRun = null;
+
+// Many admin requests can arrive at once on an empty database; sharing one run stops them each inserting
+// the defaults (that is how duplicate service locations appeared).
+export const ensureServiceLocationsSeeded = () => {
+  if (!serviceLocationSeedRun) {
+    serviceLocationSeedRun = (async () => {
+      if ((await ServiceLocation.countDocuments()) === 0) {
+        await ServiceLocation.create(DEFAULT_SERVICE_LOCATION);
+      }
+    })().finally(() => {
+      serviceLocationSeedRun = null;
+    });
   }
+  return serviceLocationSeedRun;
+};
+
+// ---------------------------------------------------------------------------------------------
+// Starter catalog data, created once so a fresh install is usable:
+//  1. a Preview Image for every vehicle type that has none,
+//  2. one zone inside every service location that has no zone (drivers and riders are matched by zone),
+//  3. a ride price (Set Price) for each of those zones and each ride vehicle type.
+// Every item is created at most once (a marker is stored), so whatever the admin edits or deletes later
+// does not come back.
+// ---------------------------------------------------------------------------------------------
+const VEHICLE_ART_FILES = {
+  bike: 'bike.png',
+  auto: 'auto.png',
+  truck: 'truck.png',
+  luxury: 'Luxury.png',
+  premium: 'Premium.png',
+  suv: 'SUV.png',
+  hatchback: 'Hatchback.png',
+  car: 'car.png',
+};
+
+const vehicleArtKind = (vehicle = {}) => {
+  const text = `${vehicle.icon_types || ''} ${vehicle.name || ''}`.toLowerCase();
+  if (/bike|scoot|moto/.test(text)) return 'bike';
+  if (/auto|rickshaw/.test(text)) return 'auto';
+  if (/truck|lcv|hcv|mcv|pickup|loader/.test(text)) return 'truck';
+  if (/lux/.test(text)) return 'luxury';
+  if (/premium|prime/.test(text)) return 'premium';
+  if (/suv|innova|xl|muv/.test(text)) return 'suv';
+  if (/hatch|mini|micro/.test(text)) return 'hatchback';
+  return 'car';
+};
+
+// Starting ride prices in INR: base price for the base distance, then per km and per minute.
+const STARTER_RIDE_PRICES = {
+  bike: { base_price: 30, per_km: 8, per_min: 0.5 },
+  auto: { base_price: 45, per_km: 12, per_min: 0.75 },
+  hatchback: { base_price: 80, per_km: 14, per_min: 1 },
+  car: { base_price: 80, per_km: 14, per_min: 1 },
+  premium: { base_price: 110, per_km: 18, per_min: 1.25 },
+  suv: { base_price: 130, per_km: 20, per_min: 1.5 },
+  luxury: { base_price: 180, per_km: 28, per_min: 2 },
+};
+const STARTER_ZONE_RADIUS_METERS = 15000;
+
+// Claims a marker; false when it was already claimed (so the item was seeded before).
+const claimSeedMarker = async (key) => {
+  try {
+    await AdminMeta.create({ key });
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const seedVehiclePreviewImages = async () => {
+  const vehicles = await Vehicle.find({ $or: [{ image: '' }, { image: null }, { image: { $exists: false } }] })
+    .select('name icon_types')
+    .lean();
+  for (const vehicle of vehicles) {
+    if (!(await claimSeedMarker(`vehicle_image:${vehicle._id}`))) continue;
+    const file = VEHICLE_ART_FILES[vehicleArtKind(vehicle)];
+    // Relative path under the backend; the apps put the backend address in front of it.
+    await Vehicle.updateOne({ _id: vehicle._id, $or: [{ image: '' }, { image: null }] }, { $set: { image: `/api/v1/static/vehicle-art/${file}` } });
+  }
+};
+
+// Cities created as zones inside a country-level service location.
+const STARTER_CITIES = {
+  india: [
+    { name: 'Indore', lat: 22.7196, lng: 75.8577, radiusMeters: 20000 },
+    { name: 'Dewas', lat: 22.9676, lng: 76.0534, radiusMeters: 12000 },
+  ],
+};
+
+const seedZonesForServiceLocations = async () => {
+  await ensureServiceLocationsSeeded();
+  const locations = await ServiceLocation.find({ active: { $ne: false } }).select('name service_location_name country unit').lean();
+  for (const location of locations) {
+    const country = countryOfServiceLocation(location);
+    const cities = Object.entries(COUNTRY_BOUNDS).find(([, value]) => value === country)?.[0];
+    for (const city of (cities && STARTER_CITIES[cities]) || []) {
+      if (!(await claimSeedMarker(`zone:${location._id}:${city.name.toLowerCase()}`))) continue;
+
+      // Skip when this city already has a zone (for example one the admin drew).
+      const existing = await Zone.find({ service_location_id: location._id }).select('circle_center geometry').lean();
+      const hasZoneHere = existing.some((zone) => {
+        const centre = zoneCentre({ circle_center: zone.circle_center, geometry: zone.geometry });
+        return centre && haversineKm(centre.lat, centre.lng, city.lat, city.lng) < 8;
+      });
+      if (hasZoneHere) continue;
+
+      const geometry = normalizeZoneGeometryPayload({
+        boundary_mode: 'circle',
+        circle_center: { lat: city.lat, lng: city.lng },
+        circle_radius_meters: city.radiusMeters,
+      });
+      await Zone.create({
+        name: city.name,
+        service_location_id: location._id,
+        unit: location.unit || 'km',
+        active: true,
+        status: 'active',
+        boundary_mode: geometry.boundary_mode,
+        circle_center: geometry.circle_center,
+        circle_radius_meters: geometry.circle_radius_meters,
+        geometry: geometry.geometry,
+      });
+    }
+  }
+};
+
+const seedStarterRidePrices = async () => {
+  const [zones, vehicles] = await Promise.all([
+    Zone.find({ active: { $ne: false } }).select('service_location_id name').lean(),
+    Vehicle.find({ active: { $ne: false }, status: { $ne: 0 }, transport_type: { $in: ['taxi', 'both'] } }).select('name icon_types').lean(),
+  ]);
+  const rideVehicles = vehicles.filter((vehicle) => !/cycle/.test(`${vehicle.icon_types || ''} ${vehicle.name || ''}`.toLowerCase()));
+
+  let order = 1;
+  for (const zone of zones) {
+    for (const vehicle of rideVehicles) {
+      if (!(await claimSeedMarker(`price:${zone._id}:${vehicle._id}`))) continue;
+      if (await SetPrice.exists({ zone_id: zone._id, vehicle_type: vehicle._id, pricing_scope: 'ride' })) continue;
+
+      const price = STARTER_RIDE_PRICES[vehicleArtKind(vehicle)] || STARTER_RIDE_PRICES.car;
+      await SetPrice.create({
+        zone_id: zone._id,
+        service_location_id: zone.service_location_id || null,
+        pricing_scope: 'ride',
+        transport_type: 'taxi',
+        vehicle_type: vehicle._id,
+        payment_type: ['cash', 'online'],
+        base_price: price.base_price,
+        base_distance: 2,
+        price_per_distance: price.per_km,
+        time_price: price.per_min,
+        waiting_charge: 1,
+        free_waiting_before: 3,
+        free_waiting_after: 0,
+        ride_surge_amount: 0,
+        service_tax: 0,
+        // Percentage commissions: 10% is taken from the driver's earning, nothing extra from the rider.
+        admin_commision_type: 1,
+        admin_commision: 0,
+        admin_commission_type_from_driver: 1,
+        admin_commission_from_driver: 10,
+        admin_commission_type_for_owner: 1,
+        admin_commission_for_owner: 0,
+        order_number: order,
+        bill_status: 1,
+        status: 'active',
+        active: 1,
+      });
+      order += 1;
+    }
+  }
+};
+
+// ---------------------------------------------------------------------------------------------
+// Clean-up of the starter data of earlier versions. They created a service location per CITY (Indore, New
+// Delhi), twice because of a race, and then created zones under all of them. The result: duplicate service
+// locations and many duplicate zones. The structure is now: a service location is a COUNTRY (India) and its
+// zones are the CITIES (Indore, Dewas, New Delhi). This merges everything into that, and nothing is lost:
+// drivers, owners, prices, rides, airports ... are moved to the surviving service location / zone first.
+// `dryRun: true` only reports what it would do.
+// ---------------------------------------------------------------------------------------------
+const DEFAULT_CITY_SERVICE_LOCATIONS = [
+  { name: 'indore', latitude: 22.7196, longitude: 75.8577 },
+  { name: 'new delhi', latitude: 28.6139, longitude: 77.209 },
+];
+
+// City centres used to name merged zones (Indore Zone, Indore ... all become "Indore").
+const KNOWN_ZONE_CITIES = [
+  { name: 'Indore', lat: 22.7196, lng: 75.8577 },
+  { name: 'Dewas', lat: 22.9676, lng: 76.0534 },
+  { name: 'New Delhi', lat: 28.6139, lng: 77.209 },
+];
+
+// Points every record that references `fromId` (in any model that has one of `fields`) to `toId`.
+const repointReferences = async (fields, fromId, toId, dryRun) => {
+  let total = 0;
+  for (const modelName of mongoose.modelNames()) {
+    const model = mongoose.model(modelName);
+    for (const field of fields) {
+      const path = model.schema.path(field);
+      if (!path || path.instance !== 'ObjectId') continue;
+      const count = await model.countDocuments({ [field]: fromId });
+      if (!count) continue;
+      total += count;
+      if (!dryRun) await model.updateMany({ [field]: fromId }, { $set: { [field]: toId } });
+    }
+  }
+  return total;
+};
+
+export const cleanUpServiceLocations = async ({ dryRun = false } = {}) => {
+  const report = [];
+  const note = (message) => report.push(message);
+
+  if (!dryRun) await ensureServiceLocationsSeeded();
+  const label = (location) => `${location.service_location_name || location.name} (${String(location._id).slice(-6)})`;
+
+  // 1) exact duplicates of a service location -> keep the oldest
+  const all = await ServiceLocation.find().sort({ createdAt: 1 }).lean();
+  const kept = new Map();
+  const survivors = [];
+  const duplicateIds = [];
+  for (const location of all) {
+    const key = [String(location.service_location_name || location.name || '').trim().toLowerCase(), location.currency_code, location.latitude, location.longitude].join('|');
+    if (!kept.has(key)) {
+      kept.set(key, location);
+      survivors.push(location);
+      continue;
+    }
+    const keeper = kept.get(key);
+    duplicateIds.push(location._id);
+    const moved = await repointReferences(['service_location_id'], location._id, keeper._id, dryRun);
+    note(`merge duplicate service location ${label(location)} into ${label(keeper)} (${moved} records moved)`);
+    if (!dryRun) await ServiceLocation.deleteOne({ _id: location._id });
+  }
+
+  // 2) the default city-level service locations -> the country-level one (India), created when missing
+  const cityDefaults = survivors.filter((location) =>
+    DEFAULT_CITY_SERVICE_LOCATIONS.some((city) =>
+      city.name === String(location.service_location_name || location.name || '').trim().toLowerCase() &&
+      Math.abs(Number(location.latitude) - city.latitude) < 0.001 &&
+      Math.abs(Number(location.longitude) - city.longitude) < 0.001));
+
+  let india = survivors.find((location) => countryOfServiceLocation(location) === COUNTRY_BOUNDS.india && !cityDefaults.includes(location));
+  if (cityDefaults.length > 0 && !india) {
+    note('create the country-level service location "India"');
+    india = dryRun ? { _id: 'new-india', name: 'India' } : (await ServiceLocation.create(DEFAULT_SERVICE_LOCATION)).toObject();
+  }
+  for (const city of cityDefaults) {
+    const moved = await repointReferences(['service_location_id'], city._id, india._id, dryRun);
+    note(`fold city-level service location ${label(city)} into ${label(india)} (${moved} records moved)`);
+    if (!dryRun) await ServiceLocation.deleteOne({ _id: city._id });
+  }
+  if (!india || india._id === 'new-india') return report;
+
+  // 3a) the same destination package priced several times for one service location (the outstation starter data
+  //     was created once per duplicate location) -> keep the oldest
+  const packages = await SetPrice.find({ pricing_scope: 'package', service_location_id: { $in: [india._id, ...cityDefaults.map((c) => c._id), ...duplicateIds] } })
+    .select('package_destination service_location_id createdAt').sort({ createdAt: 1 }).lean();
+  const seenPackages = new Set();
+  for (const pkg of packages) {
+    const key = String(pkg.package_destination || '').trim().toLowerCase();
+    if (!key) continue;
+    if (!seenPackages.has(key)) {
+      seenPackages.add(key);
+      continue;
+    }
+    note(`remove duplicate package price for destination "${pkg.package_destination}"`);
+    if (!dryRun) await SetPrice.deleteOne({ _id: pkg._id });
+  }
+
+  // 3) zones of the service location: one zone per city. Duplicates (same centre) are merged into one,
+  //    named after the city, and the prices / drivers / rides of the duplicates move to the survivor.
+  // (in a dry run nothing was moved yet, so the zones of the locations that would be folded are included too)
+  const zoneLocationIds = dryRun ? [india._id, ...cityDefaults.map((c) => c._id), ...duplicateIds] : [india._id];
+  const zones = await Zone.find({ service_location_id: { $in: zoneLocationIds } }).sort({ createdAt: 1 }).lean();
+  const groups = [];
+  for (const zone of zones) {
+    const centre = zoneCentre({ circle_center: zone.circle_center, geometry: zone.geometry });
+    if (!centre) continue;
+    const group = groups.find((item) => haversineKm(item.centre.lat, item.centre.lng, centre.lat, centre.lng) < 3);
+    if (group) group.zones.push(zone);
+    else groups.push({ centre, zones: [zone] });
+  }
+
+  for (const group of groups) {
+    const city = KNOWN_ZONE_CITIES.find((item) => haversineKm(item.lat, item.lng, group.centre.lat, group.centre.lng) < 8);
+    const stripSuffix = (zone) => String(zone.name || '').replace(/ Zone$/, '').trim();
+    // keep the oldest zone that is already named after the city, else the oldest
+    const keeper = (city && group.zones.find((zone) => stripSuffix(zone).toLowerCase() === city.name.toLowerCase())) || group.zones[0];
+    const finalName = city ? city.name : stripSuffix(keeper);
+
+    for (const duplicate of group.zones) {
+      if (String(duplicate._id) === String(keeper._id)) continue;
+
+      // prices: drop those the survivor already has (same vehicle + scope), move the rest
+      const prices = await SetPrice.find({ zone_id: duplicate._id }).select('vehicle_type pricing_scope package_destination').lean();
+      for (const price of prices) {
+        const already = await SetPrice.exists({
+          zone_id: keeper._id,
+          vehicle_type: price.vehicle_type,
+          pricing_scope: price.pricing_scope,
+          package_destination: price.package_destination,
+        });
+        if (already) {
+          if (!dryRun) await SetPrice.deleteOne({ _id: price._id });
+        } else if (!dryRun) {
+          await SetPrice.updateOne({ _id: price._id }, { $set: { zone_id: keeper._id, service_location_id: india._id } });
+        }
+      }
+      const moved = await repointReferences(['zone_id', 'zoneId'], duplicate._id, keeper._id, dryRun);
+      note(`merge duplicate zone "${duplicate.name}" into "${finalName}" (${prices.length} prices checked, ${moved} other records moved)`);
+      if (!dryRun) await Zone.deleteOne({ _id: duplicate._id });
+    }
+
+    const updates = {};
+    if (keeper.name !== finalName) updates.name = finalName;
+    if (String(keeper.service_location_id) !== String(india._id)) updates.service_location_id = india._id;
+    if (Object.keys(updates).length) {
+      note(`zone "${keeper.name}" -> name "${finalName}", service location ${label(india)}`);
+      if (!dryRun) await Zone.updateOne({ _id: keeper._id }, { $set: updates });
+    }
+  }
+  return report;
+};
+
+// Runs at start-up. The "done" flag is set only after a successful run, so a failed run is retried next start.
+const migrateCityLevelServiceLocations = async () => {
+  const flag = 'migration:service_location_country_level_v3';
+  if (await AdminMeta.exists({ key: flag })) return;
+  const report = await cleanUpServiceLocations();
+  report.forEach((line) => console.log(`[catalog-seed] ${line}`));
+  await claimSeedMarker(flag);
+};
+
+// Parcel prices live on the vehicle type itself (Delivery Distance Based Charges): base price for the free
+// distance, then a price per km. A delivery vehicle without them has no parcel fare, so fill in starters.
+const STARTER_PARCEL_PRICES = {
+  bike: { base_price: 35, free_distance: 2, distance_price: 9 },
+  auto: { base_price: 60, free_distance: 2, distance_price: 12 },
+  truck: { base_price: 250, free_distance: 3, distance_price: 22 },
+  other: { base_price: 90, free_distance: 2, distance_price: 14 },
+};
+
+const seedDeliveryPricing = async () => {
+  const vehicles = await Vehicle.find({ transport_type: { $in: ['delivery', 'both'] } }).select('name icon_types delivery_distance_pricing').lean();
+  for (const vehicle of vehicles) {
+    const pricing = vehicle.delivery_distance_pricing || {};
+    const isEmpty = !pricing.enabled && !Number(pricing.base_price) && !Number(pricing.distance_price) && !Number(pricing.time_price);
+    if (!isEmpty) continue;
+    if (!(await claimSeedMarker(`delivery_pricing:${vehicle._id}`))) continue;
+
+    const kind = vehicleArtKind(vehicle);
+    const starter = STARTER_PARCEL_PRICES[kind] || STARTER_PARCEL_PRICES.other;
+    await Vehicle.updateOne(
+      { _id: vehicle._id },
+      { $set: { delivery_distance_pricing: { enabled: true, ...starter, free_time: 0, time_price: 0 } } },
+    );
+  }
+};
+
+// Outstation trips are priced per destination (Set Price -> package prices, one row per vehicle type), and the
+// user app lists those destinations. Starter destinations from Indore with a distance-based price per car type.
+const STARTER_OUTSTATION_DESTINATIONS = {
+  india: [
+    { destination: 'Ujjain', km: 55 },
+    { destination: 'Dewas', km: 38 },
+    { destination: 'Bhopal', km: 190 },
+  ],
+};
+// Rupees per km for an outstation trip, by vehicle kind (cars only; bikes, autos and trucks are not offered).
+const OUTSTATION_RATE_PER_KM = { hatchback: 11, car: 11, premium: 14, suv: 16, luxury: 24 };
+
+// Package Pricing needs a Package Type on every package (the admin form will not save one without it), so the
+// outstation starter packages get an "Outstation" package type, created once.
+const ensureOutstationPackageType = async () => {
+  let type = await RentalPackageType.findOne({ name: /^outstation$/i, transport_type: 'taxi' }).lean();
+  if (!type && (await claimSeedMarker('package_type:outstation'))) {
+    type = (await RentalPackageType.create({
+      name: 'Outstation',
+      transport_type: 'taxi',
+      short_description: 'Trips to other cities',
+      description: 'One-way and round trips from the city to a destination, priced per destination and vehicle type.',
+      status: 'active',
+      active: true,
+    })).toObject();
+  }
+  return type || null;
+};
+
+const seedOutstationPackages = async () => {
+  await ensureServiceLocationsSeeded();
+  const outstationType = await ensureOutstationPackageType();
+  const locations = await ServiceLocation.find({ active: { $ne: false } }).select('name service_location_name country').lean();
+  const vehicles = await Vehicle.find({ active: { $ne: false }, status: { $ne: 0 }, transport_type: { $in: ['taxi', 'both'] } }).select('name icon_types').lean();
+  const cars = vehicles
+    .map((vehicle) => ({ vehicle, rate: OUTSTATION_RATE_PER_KM[vehicleArtKind(vehicle)] }))
+    .filter((item) => item.rate);
+  if (cars.length === 0) return;
+
+  for (const location of locations) {
+    const country = countryOfServiceLocation(location);
+    const key = Object.entries(COUNTRY_BOUNDS).find(([, value]) => value === country)?.[0];
+    for (const item of (key && STARTER_OUTSTATION_DESTINATIONS[key]) || []) {
+      if (!(await claimSeedMarker(`outstation:${location._id}:${item.destination.toLowerCase()}`))) continue;
+      if (await SetPrice.exists({ pricing_scope: 'package', service_location_id: location._id, package_destination: new RegExp(`^${item.destination}$`, 'i') })) continue;
+
+      await SetPrice.create({
+        service_location_id: location._id,
+        pricing_scope: 'package',
+        transport_type: 'taxi',
+        package_destination: item.destination,
+        package_type_id: outstationType?._id || null,
+        package_availability: 'available',
+        payment_type: ['cash', 'online'],
+        package_vehicle_prices: cars.map(({ vehicle, rate }) => ({
+          vehicle_type: vehicle._id,
+          // The fare for the whole trip covers the destination's distance; every km beyond it is charged per km.
+          base_price: Math.round((item.km * rate) / 50) * 50,
+          free_distance: item.km,
+          distance_price: rate,
+          free_time: 0,
+          time_price: 0,
+          admin_commission_type_from_driver: 1,
+          admin_commission_from_driver: 10,
+          admin_commission_type_for_owner: 1,
+          admin_commission_for_owner: 0,
+          admin_commision_type: 1,
+          admin_commision: 0,
+          service_tax: 0,
+          cancellation_fee: 0,
+          active: 1,
+        })),
+        active: 1,
+        status: 'active',
+        bill_status: 1,
+      });
+    }
+  }
+};
+
+// Parcel prices are Set Price rules with transport type "delivery": base price, per km, per minute, service tax,
+// driver commission and waiting charge, separate from the ride price. A vehicle that does both Ride and Parcel
+// (a bike) gets one rule of each; a ride booking uses its "taxi" rule and a parcel booking its "delivery" rule.
+const STARTER_PARCEL_RULES = {
+  bike: { per_min: 0.4 },
+  auto: { per_min: 0.6 },
+  truck: { per_min: 1 },
+  other: { per_min: 0.8 },
+};
+
+const seedStarterParcelPrices = async () => {
+  const [zones, vehicles] = await Promise.all([
+    Zone.find({ active: { $ne: false } }).select('service_location_id').lean(),
+    Vehicle.find({ active: { $ne: false }, status: { $ne: 0 }, transport_type: { $in: ['delivery', 'both'] } }).select('name icon_types').lean(),
+  ]);
+
+  let order = 1;
+  for (const zone of zones) {
+    for (const vehicle of vehicles) {
+      if (!(await claimSeedMarker(`parcel_price:${zone._id}:${vehicle._id}`))) continue;
+      if (await SetPrice.exists({ zone_id: zone._id, vehicle_type: vehicle._id, transport_type: 'delivery', pricing_scope: 'ride' })) continue;
+
+      const kind = vehicleArtKind(vehicle);
+      const key = STARTER_PARCEL_PRICES[kind] ? kind : 'other';
+      const charges = STARTER_PARCEL_PRICES[key];
+      await SetPrice.create({
+        zone_id: zone._id,
+        service_location_id: zone.service_location_id || null,
+        pricing_scope: 'ride',
+        transport_type: 'delivery',
+        vehicle_type: vehicle._id,
+        payment_type: ['cash', 'online'],
+        base_price: charges.base_price,
+        base_distance: charges.free_distance,
+        price_per_distance: charges.distance_price,
+        time_price: STARTER_PARCEL_RULES[key].per_min,
+        waiting_charge: 1,
+        free_waiting_before: 5,
+        free_waiting_after: 0,
+        ride_surge_amount: 0,
+        // 5% service tax on the parcel fare, 10% commission from the driver, nothing extra from the sender.
+        service_tax: 5,
+        admin_commision_type: 1,
+        admin_commision: 0,
+        admin_commission_type_from_driver: 1,
+        admin_commission_from_driver: 10,
+        admin_commission_type_for_owner: 1,
+        admin_commission_for_owner: 0,
+        order_number: order,
+        bill_status: 1,
+        status: 'active',
+        active: 1,
+      });
+      order += 1;
+    }
+  }
+};
+
+// Packages created before the type existed: give them the Outstation type, once.
+const linkOutstationPackagesToType = async () => {
+  const outstationType = await ensureOutstationPackageType();
+  if (!outstationType) return;
+  if (!(await claimSeedMarker('package_type:outstation_linked'))) return;
+  await SetPrice.updateMany({ pricing_scope: 'package', package_type_id: null }, { $set: { package_type_id: outstationType._id } });
+};
+
+// Rental vehicles to start with, so the Rental service can be tried out of the box. Each has booking plans
+// (hours, price, included km, extra hour / extra km rates) and a 20% advance payment. Created once, and only
+// when there are no rental vehicles yet; the admin edits or removes them under Rental -> Rental Vehicles.
+const STARTER_RENTAL_VEHICLES = [
+  {
+    name: 'Scooter', vehicleCategory: 'Scooter', art: 'bike.png', capacity: 2, luggage: 1,
+    short: 'Easy city scooter', description: 'A light, easy scooter for getting around the city.',
+    amenities: ['Helmet included', 'Fuel efficient'],
+    plans: [[4, 149, 40], [8, 249, 80], [24, 449, 200]], extraHour: 30, extraKm: 3,
+  },
+  {
+    name: 'Bike', vehicleCategory: 'Bike', art: 'bike.png', capacity: 2, luggage: 1,
+    short: 'Comfortable motorcycle', description: 'A comfortable motorcycle for longer rides.',
+    amenities: ['Helmet included', 'Free servicing'],
+    plans: [[4, 199, 40], [8, 349, 80], [24, 599, 200]], extraHour: 40, extraKm: 4,
+  },
+  {
+    name: 'Hatchback Car', vehicleCategory: 'Car', art: 'Hatchback.png', capacity: 4, luggage: 2,
+    short: 'Compact car for the city', description: 'A compact hatchback, easy to drive and park.',
+    amenities: ['Air conditioning', 'Music system'],
+    plans: [[4, 699, 40], [8, 1199, 80], [24, 1999, 250]], extraHour: 120, extraKm: 11,
+  },
+  {
+    name: 'SUV', vehicleCategory: 'Car', art: 'SUV.png', capacity: 6, luggage: 3,
+    short: 'Spacious family SUV', description: 'A spacious SUV for family trips and longer journeys.',
+    amenities: ['Air conditioning', 'Extra luggage space'],
+    plans: [[4, 1199, 40], [8, 1999, 80], [24, 3499, 250]], extraHour: 200, extraKm: 16,
+  },
+];
+
+const seedRentalCatalog = async () => {
+  if (!(await claimSeedMarker('rental_catalog_seeded'))) return;
+  if ((await RentalVehicleType.countDocuments()) === 0) {
+    await RentalVehicleType.insertMany(STARTER_RENTAL_VEHICLES.map((item) => ({
+      transport_type: 'rental',
+      name: item.name,
+      short_description: item.short,
+      description: item.description,
+      vehicleCategory: item.vehicleCategory,
+      image: `/api/v1/static/vehicle-art/${item.art}`,
+      capacity: item.capacity,
+      luggageCapacity: item.luggage,
+      amenities: item.amenities,
+      pricing: item.plans.map(([hours, price, km]) => ({
+        id: `${item.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${hours}h`,
+        label: `${hours} Hours`,
+        durationHours: hours,
+        price,
+        includedKm: km,
+        extraHourPrice: item.extraHour,
+        extraKmPrice: item.extraKm,
+        active: true,
+      })),
+      advancePayment: { enabled: true, paymentMode: 'percentage', amount: 20, label: 'Advance booking payment', notes: '' },
+      status: 'active',
+      active: true,
+    })));
+  }
+  // The Rental service was seeded as switched off while the feature was disabled; it is on now.
+  await TaxiAppModule.updateMany({ service_type: 'rental', active: 0 }, { $set: { active: 1 } });
+};
+
+// Rental pickup points (Service Stores): the places where a rider collects the rental vehicle. Each is placed inside
+// the zone of its city (a zone must already exist there), under that zone's service location. Created once each;
+// the admin edits or removes them under Rental -> Service Stores. The phone is the support number of the app.
+const STARTER_RENTAL_STORES = [
+  { city: { lat: 22.7196, lng: 75.8577 }, name: 'Kailo Rental Hub - Vijay Nagar', address: 'Vijay Nagar, Indore, Madhya Pradesh', lat: 22.7533, lng: 75.8937 },
+  { city: { lat: 22.7196, lng: 75.8577 }, name: 'Kailo Rental Hub - Rajwada', address: 'Rajwada, Indore, Madhya Pradesh', lat: 22.7185, lng: 75.8553 },
+  { city: { lat: 22.9676, lng: 76.0534 }, name: 'Kailo Rental Hub - Dewas Bus Stand', address: 'Bus Stand Road, Dewas, Madhya Pradesh', lat: 22.9623, lng: 76.0508 },
+  { city: { lat: 28.6139, lng: 77.209 }, name: 'Kailo Rental Hub - Connaught Place', address: 'Connaught Place, New Delhi', lat: 28.6315, lng: 77.2167 },
+];
+
+const seedRentalStores = async () => {
+  const zones = await Zone.find({ active: { $ne: false } }).select('service_location_id circle_center geometry').lean();
+  for (const store of STARTER_RENTAL_STORES) {
+    const zone = zones.find((item) => {
+      const centre = zoneCentre({ circle_center: item.circle_center, geometry: item.geometry });
+      return centre && haversineKm(centre.lat, centre.lng, store.city.lat, store.city.lng) < 10;
+    });
+    if (!zone) continue; // no zone in that city
+    if (!(await claimSeedMarker(`rental_store:${zone._id}:${store.name.toLowerCase()}`))) continue;
+    if (await ServiceStore.exists({ zone_id: zone._id, name: store.name })) continue;
+
+    await ServiceStore.create({
+      name: store.name,
+      zone_id: zone._id,
+      service_location_id: zone.service_location_id || null,
+      address: store.address,
+      owner_name: 'Kailo Rentals',
+      owner_phone: '7409129517',
+      latitude: store.lat,
+      longitude: store.lng,
+      location: { type: 'Point', coordinates: [store.lng, store.lat] },
+      status: 'active',
+      active: true,
+    });
+  }
+};
+
+let catalogSeedRun = null;
+
+/** Runs the starter-data steps (at most once per process; each item is created at most once ever). */
+export const ensureCatalogSeeded = () => {
+  if (!catalogSeedRun) {
+    catalogSeedRun = (async () => {
+      for (const [label, step] of [
+        ['service locations', migrateCityLevelServiceLocations],
+        ['vehicle images', seedVehiclePreviewImages],
+        ['zones', seedZonesForServiceLocations],
+        ['ride prices', seedStarterRidePrices],
+        ['parcel prices', seedDeliveryPricing],
+        ['parcel set prices', seedStarterParcelPrices],
+        ['outstation prices', seedOutstationPackages],
+        ['outstation package type', linkOutstationPackagesToType],
+        ['rental vehicles', seedRentalCatalog],
+        ['rental stores', seedRentalStores],
+      ]) {
+        try {
+          await step();
+        } catch (error) {
+          console.error(`[catalog-seed] ${label} failed:`, error?.message || error);
+        }
+      }
+      publicVehicleCatalogCache = { value: null, expiresAt: 0 };
+    })();
+  }
+  return catalogSeedRun;
 };
 
 export const ensureFleetOwnersSeeded = async () => {
@@ -5314,6 +6001,10 @@ export const updateSubscriptionSettings = async (payload) => {
     { returnDocument: 'after', upsert: true },
   );
 
+  // The new mode applies at once (online check, ride matching, commission).
+  const { clearDriverSubscriptionModeCache } = await import('../../services/driverSubscriptionService.js');
+  clearDriverSubscriptionModeCache();
+
   return setting.subscription;
 };
 
@@ -5367,6 +6058,8 @@ export const updateReferralSettings = async (type, payload) => {
 
   if (type === 'driver') {
     updateData.milestone_program_enabled = Boolean(payload.milestone_program_enabled);
+    // Minutes online needed for a day to count in the driver's streak.
+    updateData.active_day_minutes = Math.min(720, Math.max(1, Math.round(Number(payload.active_day_minutes) || 60)));
     updateData.milestone_programs = sanitizeReferralMilestones(payload.milestone_programs);
     updateData.reward_features = sanitizeReferralRewardFeatures(payload.reward_features);
   }
@@ -5380,29 +6073,10 @@ export const updateReferralSettings = async (type, payload) => {
   return setting.referral[type];
 };
 
+// Real referral numbers (who joined with a code, rewards paid, monthly joins, latest referrals).
 export const getReferralDashboard = async () => {
-  const [totalDrivers, totalUsers] = await Promise.all([
-    Driver.countDocuments(),
-    User.countDocuments(),
-  ]);
-
-  // Mocking some parts for the dashboard view
-  return {
-    total_drivers: totalDrivers,
-    total_users: totalUsers,
-    active_referrals: 0,
-    referral_earning: 0,
-    user_referrals: {
-      normal_user: totalUsers,
-      referral_user: 0,
-      monthly: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-    },
-    driver_referrals: {
-      normal_driver: totalDrivers,
-      referral_driver: 0,
-      monthly: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-    }
-  };
+  const { getReferralDashboardData } = await import('../../services/referralReportService.js');
+  return getReferralDashboardData();
 };
 
 export const listSubscriptionPlans = async () =>
@@ -6152,11 +6826,11 @@ export const listVehicleTypes = async (queryParams = {}) => {
       ? 'both'
       : { $in: [normalizedTransportType, 'both'] };
   }
-  const items = await Vehicle.find(query).sort({ createdAt: -1 }).lean();
+  const items = await Vehicle.find(query).sort({ order_by: 1, createdAt: -1 }).lean();
   const results = items.map((item) => ({
     ...item,
-    icon: item.map_icon || item.icon || item.image || '',
-    map_icon: item.map_icon || item.icon || item.image || '',
+    icon: item.map_icon || item.icon || '',
+    map_icon: item.map_icon || item.icon || '',
     delivery_category: item.delivery_category || '',
     ride_surge_amount: Number(item.ride_surge_amount || 0),
     delivery_distance_pricing: normalizeDeliveryDistancePricing(item.delivery_distance_pricing),
@@ -6178,13 +6852,14 @@ export const listVehicleTypes = async (queryParams = {}) => {
 
 
 export const listVehicleCatalog = async () => {
-  const items = await Vehicle.find().sort({ createdAt: -1 }).lean();
+  await ensureCatalogSeeded();
+  const items = await Vehicle.find().sort({ order_by: 1, createdAt: -1 }).lean();
 
   const results = items.map((item) => ({
     ...item,
     id: String(item._id),
-    icon: item.map_icon || item.icon || item.image || '',
-    map_icon: item.map_icon || item.icon || item.image || '',
+    icon: item.map_icon || item.icon || '',
+    map_icon: item.map_icon || item.icon || '',
     delivery_category: item.delivery_category || '',
     ride_surge_amount: Number(item.ride_surge_amount || 0),
     delivery_distance_pricing: normalizeDeliveryDistancePricing(item.delivery_distance_pricing),
@@ -6217,8 +6892,8 @@ export const listPublicVehicleCatalog = async () => {
   }
 
   const items = await Vehicle.find()
-    .select('name short_description description transport_type dispatch_type icon_types delivery_category delivery_distance_pricing capacity ride_surge_amount image icon map_icon status active')
-    .sort({ createdAt: -1 })
+    .select('name short_description description transport_type dispatch_type icon_types delivery_category delivery_distance_pricing capacity ride_surge_amount image icon map_icon status active app_module_id order_by extra_services')
+    .sort({ order_by: 1, createdAt: -1 })
     .lean();
 
   const results = items.map((item) => ({
@@ -6235,13 +6910,23 @@ export const listPublicVehicleCatalog = async () => {
     capacity: Number(item.capacity || 0),
     ride_surge_amount: Number(item.ride_surge_amount || 0),
     image: item.image || '',
-    map_icon: item.map_icon || item.icon || item.image || '',
+    app_module_id: item.app_module_id ? String(item.app_module_id) : '',
+    order_by: Number(item.order_by || 0),
+    ...(Array.isArray(item.extra_services) ? { extra_services: item.extra_services } : {}),
+    map_icon: item.map_icon || item.icon || '',
     status: item.status ?? 1,
     active: item.active !== false && Number(item.status ?? 1) !== 0,
   }));
 
+  // Which long-distance services the admin has switched on in Set Price (shown as cards on the user home).
+  const [outstationOn, airportOn] = await Promise.all([
+    SetPrice.exists({ enable_outstation_ride: true, active: { $ne: 0 }, status: { $ne: 'inactive' } }),
+    SetPrice.exists({ enable_airport_ride: true, active: { $ne: 0 }, status: { $ne: 'inactive' } }),
+  ]);
+
   const payload = {
     results,
+    services: { outstation: Boolean(outstationOn), airport: Boolean(airportOn) },
     paginator: {
       data: results,
       total: results.length,
@@ -6285,10 +6970,15 @@ export const createVehicleType = async (payload) => {
     throw new ApiError(400, 'Transport type is required');
   }
 
-  const mapIcon = payload.map_icon ?? payload.mapIcon ?? payload.icon ?? payload.image ?? '';
+  const mapIcon = payload.map_icon ?? payload.mapIcon ?? payload.icon ?? '';
   const transportType = normalizeVehicleTransportType(payload.transport_type);
 
+  const appModuleId = await resolveVehicleModuleId(payload.app_module_id, transportType);
+
   const vehicle = await Vehicle.create({
+    ...(payload.extra_services !== undefined ? { extra_services: normalizeExtraServices(payload.extra_services) } : {}),
+    app_module_id: appModuleId,
+    order_by: Number(payload.order_by || 0) || 0,
     name: payload.name.trim(),
     short_description: payload.short_description ?? '',
     description: payload.description ?? '',
@@ -6345,14 +7035,23 @@ export const updateVehicleType = async (id, payload) => {
   if (payload.dispatch_type !== undefined) {
     vehicle.dispatch_type = payload.dispatch_type || 'normal';
   }
+  if (payload.app_module_id !== undefined) {
+    vehicle.app_module_id = await resolveVehicleModuleId(payload.app_module_id, vehicle.transport_type);
+  }
+  if (payload.extra_services !== undefined) {
+    vehicle.extra_services = normalizeExtraServices(payload.extra_services);
+  }
+  if (payload.order_by !== undefined) {
+    vehicle.order_by = Number(payload.order_by || 0) || 0;
+  }
   if (payload.icon_types !== undefined) {
     vehicle.icon_types = payload.icon_types || 'car';
   }
   if (payload.image !== undefined) {
     vehicle.image = payload.image ?? '';
   }
-  if (payload.icon !== undefined || payload.map_icon !== undefined || payload.mapIcon !== undefined || payload.image !== undefined) {
-    const mapIcon = payload.map_icon ?? payload.mapIcon ?? payload.icon ?? payload.image ?? '';
+  if (payload.icon !== undefined || payload.map_icon !== undefined || payload.mapIcon !== undefined) {
+    const mapIcon = payload.map_icon ?? payload.mapIcon ?? payload.icon ?? '';
     vehicle.icon = mapIcon;
     vehicle.map_icon = mapIcon;
   }
@@ -6411,6 +7110,7 @@ export const deleteVehicleType = async (id) => {
 };
 
 export const listSetPrices = async (queryArgs = {}, currentAdmin = null) => {
+  await ensureCatalogSeeded();
   const scope = String(queryArgs.scope || '').trim();
   const query = scope ? { pricing_scope: scope } : {};
 
@@ -7760,7 +8460,8 @@ export const getDashboardData = async (currentAdmin = {}) => {
     if (currentAdmin) {
       assertAdminPermission(currentAdmin, 'zones.view', 'zones');
     }
-    const query = currentAdmin ? buildServiceLocationScopeQuery(currentAdmin) : {};
+    await ensureCatalogSeeded();
+    const query = currentAdmin ? await buildServiceLocationScopeQuery(currentAdmin) : {};
     const zones = await Zone.find(query)
       .populate('service_location_id', 'name service_location_name country timezone')
       .sort({ createdAt: -1 })
@@ -7773,7 +8474,7 @@ export const getDashboardData = async (currentAdmin = {}) => {
     if (currentAdmin) {
       assertAdminPermission(currentAdmin, 'service_stores.view', 'service stores');
     }
-    const query = currentAdmin ? buildServiceLocationScopeQuery(currentAdmin) : {};
+    const query = currentAdmin ? await buildServiceLocationScopeQuery(currentAdmin) : {};
     const stores = await ServiceStore.find(query)
       .populate({
         path: 'zone_id',
@@ -7948,6 +8649,65 @@ export const getDashboardData = async (currentAdmin = {}) => {
     return true;
   };
 
+  // A service location is a country / region and its zones are cities inside it, so a zone has to lie in the
+  // service location's country. If the zone is somewhere else, the wrong service location was chosen.
+  // (Only countries listed here are checked; any other service location accepts any zone.)
+  const COUNTRY_BOUNDS = {
+    india: { label: 'India', minLat: 6, maxLat: 37.5, minLng: 68, maxLng: 97.5, match: /\bindia\b/ },
+    uae: { label: 'United Arab Emirates', minLat: 22, maxLat: 26.5, minLng: 51, maxLng: 56.5, match: /united arab emirates|\buae\b|dubai|abu dhabi/ },
+    uk: { label: 'United Kingdom', minLat: 49.8, maxLat: 60.9, minLng: -8.7, maxLng: 1.8, match: /united kingdom|\buk\b|great britain|england/ },
+    usa: { label: 'United States', minLat: 18, maxLat: 72, minLng: -180, maxLng: -66, match: /united states|\busa\b|\bu\.s\.a?\b/ },
+  };
+
+  const countryOfServiceLocation = (location = {}) => {
+    const countryText = typeof location.country === 'object' && location.country !== null ? location.country.name : location.country;
+    const text = `${location.service_location_name || ''} ${location.name || ''} ${countryText || ''}`.toLowerCase();
+    return Object.values(COUNTRY_BOUNDS).find((country) => country.match.test(text)) || null;
+  };
+
+  const haversineKm = (lat1, lng1, lat2, lng2) => {
+    const toRad = (deg) => (deg * Math.PI) / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLng = toRad(lng2 - lng1);
+    const h = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+    return 6371 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+  };
+
+  const zoneCentre = (geometryPayload) => {
+    const center = geometryPayload?.circle_center;
+    if (Number.isFinite(Number(center?.lat)) && Number.isFinite(Number(center?.lng))) {
+      return { lat: Number(center.lat), lng: Number(center.lng) };
+    }
+    const ring = geometryPayload?.geometry?.coordinates?.[0];
+    if (!Array.isArray(ring) || ring.length === 0) return null;
+    const points = ring.length > 1 ? ring.slice(0, -1) : ring; // the last point repeats the first
+    return {
+      lat: points.reduce((sum, point) => sum + Number(point[1]), 0) / points.length,
+      lng: points.reduce((sum, point) => sum + Number(point[0]), 0) / points.length,
+    };
+  };
+
+  const assertZoneInsideServiceLocation = async (serviceLocationId, geometryPayload) => {
+    const location = await ServiceLocation.findById(serviceLocationId).select('name service_location_name country').lean();
+    if (!location) {
+      throw new ApiError(400, 'Please select a valid service location for this zone.');
+    }
+    const country = countryOfServiceLocation(location);
+    const centre = zoneCentre(geometryPayload);
+    if (!country || !centre) return;
+
+    const inside =
+      centre.lat >= country.minLat && centre.lat <= country.maxLat &&
+      centre.lng >= country.minLng && centre.lng <= country.maxLng;
+    if (!inside) {
+      const name = location.service_location_name || location.name || country.label;
+      throw new ApiError(
+        400,
+        `This zone is outside ${country.label}. Please select the correct service location for where the zone is, or draw the zone inside ${name}.`,
+      );
+    }
+  };
+
   export const createZone = async (payload, currentAdmin = null) => {
     if (!payload.service_location_id) {
       throw new ApiError(400, 'Service location is required');
@@ -7961,6 +8721,7 @@ export const getDashboardData = async (currentAdmin = {}) => {
     }
 
     const normalizedGeometry = normalizeZoneGeometryPayload(payload);
+    await assertZoneInsideServiceLocation(payload.service_location_id, normalizedGeometry);
 
     const zone = await Zone.create({
       name: String(payload.name).trim(),
@@ -8058,6 +8819,20 @@ export const getDashboardData = async (currentAdmin = {}) => {
       zone.geometry = normalizedGeometry.geometry;
     }
 
+    // Moving a zone, or giving it another service location, must keep it inside its service location.
+    if (
+      payload.service_location_id !== undefined ||
+      payload.coordinates !== undefined ||
+      payload.boundary_mode !== undefined ||
+      payload.circle_center !== undefined ||
+      payload.circle_radius_meters !== undefined
+    ) {
+      await assertZoneInsideServiceLocation(zone.service_location_id, {
+        circle_center: zone.circle_center,
+        geometry: zone.geometry,
+      });
+    }
+
     await zone.save();
 
     const populatedZone = await Zone.findById(zone._id)
@@ -8100,7 +8875,7 @@ export const getDashboardData = async (currentAdmin = {}) => {
     if (currentAdmin) {
       assertAdminPermission(currentAdmin, 'airports.view', 'airports');
     }
-    const query = currentAdmin ? buildServiceLocationScopeQuery(currentAdmin) : {};
+    const query = currentAdmin ? await buildServiceLocationScopeQuery(currentAdmin) : {};
     const items = await Airport.find(query)
       .populate('service_location_id', 'name service_location_name country')
       .populate('zone_id', 'name')
@@ -8295,8 +9070,14 @@ export const createBusService = async (payload = {}, options = {}) => {
     ...normalizedPayload,
     ownerId,
   });
-  await syncBusDriverForBusService(item, normalizedPayload);
-  await item.save();
+  try {
+    await syncBusDriverForBusService(item, normalizedPayload);
+    await item.save();
+  } catch (error) {
+    // Do not leave a bus behind when its driver could not be linked.
+    await BusService.findByIdAndDelete(item._id);
+    throw error;
+  }
   return serializeBusService(item.toObject());
 };
 
@@ -8340,6 +9121,25 @@ export const updateBusService = async (id, payload = {}, options = {}) => {
 
   export const deleteBusService = async (id, options = {}) => {
     const scopedOwnerId = toObjectId(options.ownerId);
+    const target = scopedOwnerId
+      ? await BusService.findOne({ _id: id, ownerId: scopedOwnerId }).select('_id')
+      : await BusService.findById(id).select('_id');
+    if (!target) throw new ApiError(404, 'Bus service not found');
+
+    // Passengers have paid for these seats: cancel/refund them first instead of deleting the bus under them.
+    const istToday = new Date(Date.now() + 330 * 60 * 1000).toISOString().slice(0, 10);
+    const liveBookings = await BusBooking.countDocuments({
+      busServiceId: target._id,
+      status: { $in: ['pending', 'confirmed', 'boarded', 'partially_cancelled'] },
+      travelDate: { $gte: istToday },
+    });
+    if (liveBookings > 0) {
+      throw new ApiError(
+        409,
+        `This bus has ${liveBookings} upcoming booking${liveBookings === 1 ? '' : 's'}. Cancel them first, then delete the bus.`,
+      );
+    }
+
     const item = scopedOwnerId
       ? await BusService.findOneAndDelete({ _id: id, ownerId: scopedOwnerId })
       : await BusService.findByIdAndDelete(id);
@@ -8356,6 +9156,9 @@ export const updateBusService = async (id, payload = {}, options = {}) => {
     item.status = 'active';
     item.rejectionReason = '';
     await item.save();
+    if (item.busDriverId) {
+      await BusDriver.findByIdAndUpdate(item.busDriverId, { approve: true, status: 'approved' });
+    }
     return serializeBusService(item.toObject());
   };
 
@@ -8365,6 +9168,9 @@ export const updateBusService = async (id, payload = {}, options = {}) => {
     item.status = 'rejected';
     item.rejectionReason = String(reason || 'Bus registration requires details update').trim();
     await item.save();
+    if (item.busDriverId) {
+      await BusDriver.findByIdAndUpdate(item.busDriverId, { approve: false, status: 'pending' });
+    }
     return serializeBusService(item.toObject());
   };
 
@@ -8679,8 +9485,10 @@ export const getRentalTrackingDashboard = async () => {
       throw new ApiError(404, 'Rental booking request not found');
     }
 
+    const previousRentalStatus = String(item.status || '');
+
     if (payload.status !== undefined) {
-      if (!['pending', 'confirmed', 'assigned', 'end_requested', 'completed', 'cancelled'].includes(String(payload.status))) {
+      if (!['pending', 'confirmed','assigned', 'end_requested', 'completed', 'cancelled'].includes(String(payload.status))) {
         throw new ApiError(400, 'Invalid rental booking request status');
       }
       item.status = String(payload.status);
@@ -8773,9 +9581,91 @@ export const getRentalTrackingDashboard = async () => {
       item.completedAt = null;
     }
 
+    // Safety money: when the ride is completed deduct the final bill from it and refund the rest to the rider's wallet.
+    if (
+      item.status === 'completed' &&
+      item.paymentOption === 'safety_money' &&
+      item.safetyMoney?.status === 'held'
+    ) {
+      const heldAmount = Number(item.safetyMoney.amount || item.payableNow || 0);
+      const finalBill = Math.max(0, Number(item.finalCharge || 0));
+      const deducted = Math.min(finalBill, heldAmount);
+      const refund = Math.round((heldAmount - deducted + Number.EPSILON) * 100) / 100;
+      const due = Math.round((Math.max(0, finalBill - heldAmount) + Number.EPSILON) * 100) / 100;
+
+      if (refund > 0 && item.userId) {
+        let wallet = await UserWallet.findOne({ userId: item.userId });
+        if (!wallet) {
+          wallet = new UserWallet({ userId: item.userId, balance: 0, refundWallet: 0, transactions: [] });
+        }
+        const referenceKey = `rental_safety_refund_${item.bookingReference}`;
+        const alreadyRefunded = (wallet.transactions || []).some((entry) => String(entry?.referenceKey || '') === referenceKey);
+        if (!alreadyRefunded) {
+          wallet.balance = Math.round((Number(wallet.balance || 0) + refund + Number.EPSILON) * 100) / 100;
+          wallet.transactions.push({
+            kind: 'credit',
+            amount: refund,
+            title: 'Rental refund (safety money)',
+            description: `${item.assignedVehicle?.name || item.vehicleName || 'Rental vehicle'} - ${item.bookingReference} - final bill Rs.${finalBill.toFixed(2)} deducted`,
+            provider: 'wallet',
+            providerPaymentId: String(item.bookingReference || ''),
+            referenceKey,
+          });
+          if (wallet.transactions.length > 50) {
+            wallet.transactions = wallet.transactions.slice(-50);
+          }
+          await wallet.save();
+        }
+      }
+
+      item.safetyMoney.status = 'settled';
+      item.safetyMoney.deductedAmount = deducted;
+      item.safetyMoney.refundedAmount = refund;
+      item.safetyMoney.dueAmount = due;
+      item.safetyMoney.settledAt = new Date();
+    }
+
+    // The rental clock starts once, when the admin first approves it (later edits must not restart it).
+    if (['confirmed', 'assigned'].includes(String(item.status)) && !item.assignedAt) {
+      item.assignedAt = new Date();
+    }
+
     item.reviewedAt = new Date();
     item.reviewedBy = adminId || null;
     await item.save();
+
+    // Tell the rider when the admin approves (or declines) the rental request.
+    const newRentalStatus = String(item.status || '');
+    if (newRentalStatus !== previousRentalStatus && item.userId) {
+      const vehicleLabel = item.assignedVehicle?.name || item.vehicleName || 'rental vehicle';
+      const messages = {
+        confirmed: ['Rental request accepted', `Your rental request for ${vehicleLabel} (${item.bookingReference}) has been accepted.`],
+        assigned: ['Rental request accepted', `Your rental request for ${vehicleLabel} (${item.bookingReference}) has been accepted. A vehicle is assigned to you.`],
+        completed: [
+          'Rental ride completed',
+          item.paymentOption === 'safety_money'
+            ? `Final bill Rs.${Number(item.finalCharge || 0).toFixed(0)}. Rs.${Number(item.safetyMoney?.deductedAmount || 0).toFixed(0)} deducted from your safety money, Rs.${Number(item.safetyMoney?.refundedAmount || 0).toFixed(0)} refunded to your wallet${Number(item.safetyMoney?.dueAmount || 0) > 0 ? `, Rs.${Number(item.safetyMoney.dueAmount).toFixed(0)} still due` : ''}.`
+            : `Your rental ride (${item.bookingReference}) has been completed. Final total is Rs.${Number(item.finalCharge || 0).toFixed(0)}.`,
+        ],
+        cancelled: ['Rental request cancelled', `Your rental request (${item.bookingReference}) was cancelled${item.cancelReason ? `: ${item.cancelReason}` : '.'}`],
+      };
+      const message = messages[newRentalStatus];
+      if (message) {
+        sendPushNotificationToEntities({
+          userIds: [String(item.userId)],
+          title: message[0],
+          body: message[1],
+          data: {
+            type: 'rental_request_status',
+            status: newRentalStatus,
+            bookingReference: String(item.bookingReference || ''),
+            link: '/taxi/user/activity',
+          },
+        }).catch((error) => {
+          console.error('Failed to send rental request status push', error);
+        });
+      }
+    }
 
     const populated = await RentalBookingRequest.findById(item._id)
       .populate('userId', 'name phone email')
@@ -9447,7 +10337,55 @@ export const listOwnerDocumentUploadFields = async ({ activeOnly = true } = {}) 
 
 
 
+  export const listAvailableLanguages = async () => {
+    const { getLanguageCatalog } = await import('./languageCatalog.js');
+    const added = new Set((await AppLanguage.find().select('code').lean()).map((l) => String(l.code || '').toLowerCase()));
+    return getLanguageCatalog().filter((item) => !added.has(item.code));
+  };
+
   export const listLanguages = async () => AppLanguage.find().sort({ code: 1 }).lean();
+
+  const normalizeLanguageInput = (payload = {}) => {
+    const name = String(payload.name || '').trim();
+    const code = String(payload.code || '').trim().toLowerCase();
+    if (!name) throw new ApiError(400, 'Language name is required');
+    if (!code) throw new ApiError(400, 'Language code is required');
+    return { name, code };
+  };
+
+  export const getLanguage = async (id) => {
+    const language = await AppLanguage.findById(id).lean();
+    if (!language) throw new ApiError(404, 'Language not found');
+    return language;
+  };
+
+  export const createLanguage = async (payload) => {
+    const { name, code } = normalizeLanguageInput(payload);
+    if (await AppLanguage.exists({ code })) throw new ApiError(409, 'A language with this code already exists');
+    const hasDefault = await AppLanguage.exists({ default_status: 1 });
+    const language = await AppLanguage.create({ name, code, active: 1, default_status: hasDefault ? 0 : 1 });
+    return language.toObject();
+  };
+
+  export const updateLanguage = async (id, payload = {}) => {
+    const update = {};
+    if (payload.name !== undefined || payload.code !== undefined) {
+      const current = await AppLanguage.findById(id).lean();
+      if (!current) throw new ApiError(404, 'Language not found');
+      const { name, code } = normalizeLanguageInput({ name: payload.name ?? current.name, code: payload.code ?? current.code });
+      if (await AppLanguage.exists({ code, _id: { $ne: id } })) throw new ApiError(409, 'A language with this code already exists');
+      update.name = name;
+      update.code = code;
+    }
+    if (payload.default_status !== undefined && Number(payload.default_status) === 1) {
+      await AppLanguage.updateMany({ _id: { $ne: id } }, { default_status: 0 });
+      update.default_status = 1;
+      update.active = 1;
+    }
+    const language = await AppLanguage.findByIdAndUpdate(id, update, { returnDocument: 'after' });
+    if (!language) throw new ApiError(404, 'Language not found');
+    return language.toObject();
+  };
 
   export const updateLanguageStatus = async (id, payload) => {
     const language = await AppLanguage.findByIdAndUpdate(id, { active: Number(payload.active) }, { returnDocument: 'after' });
@@ -10005,6 +10943,7 @@ export const buildDriverDutyReport = async (query = {}) => {
   const appSettingsCategoryMap = {
     wallet: 'wallet_setting',
     tip: 'tip_setting',
+    go_home: 'go_home_setting',
   };
 
   const generalBusinessSettingsProjection = {
@@ -10096,6 +11035,7 @@ export const buildDriverDutyReport = async (query = {}) => {
       appSettings[key] = { ...(appSettings[key] || {}), ...newValues };
       appSettings.markModified(key);
       await appSettings.save();
+      if (category === 'go_home') invalidateGoHomeConfigCache();
       return { settings: appSettings[key] };
     }
 
@@ -10108,13 +11048,188 @@ export const buildDriverDutyReport = async (query = {}) => {
     bizSettings.markModified(bizKey);
     await bizSettings.save();
     invalidateTransportSettingsCache();
+    invalidateRentalSettingCache();
     return { settings: bizSettings[bizKey] };
+  };
+
+  // ---------------------------------------------------------------------------------------------
+  // App Modules are the services of the app (Ride, Outstation, Airport, Parcel, Bus, Car Pooling, Rental).
+  // Every Vehicle Type belongs to one module (Vehicle.app_module_id): Bike, Auto and Sedan live in Ride,
+  // the delivery vehicles in Parcel, and so on. The user home is built from this: modules in their
+  // order, with the Ride module expanded into its vehicle types.
+  // ---------------------------------------------------------------------------------------------
+  const DEFAULT_APP_MODULES = [
+    { name: 'Ride', service_type: 'normal', transport_type: 'taxi', order_by: 1, short_description: 'Bike, auto and cab rides', description: 'Book a bike, auto or cab for a trip inside the city.', active: 1 },
+    { name: 'Outstation', service_type: 'outstation', transport_type: 'taxi', order_by: 2, short_description: 'Intercity trips', description: 'Fixed-fare one-way and round trips to other cities.', active: 1 },
+    { name: 'Airport', service_type: 'airport', transport_type: 'taxi', order_by: 3, short_description: 'Pickup & drop', description: 'On-time airport pickups and drops.', active: 1 },
+    { name: 'Parcel', service_type: 'parcel', transport_type: 'delivery', order_by: 4, short_description: 'Send anything', description: 'Send parcels across the city with a secure OTP handover.', active: 1 },
+    { name: 'Bus', service_type: 'bus', transport_type: 'taxi', order_by: 5, short_description: 'Book bus tickets', description: 'Pick your seat and book bus tickets inside the app.', active: 1 },
+    { name: 'Car Pooling', service_type: 'pooling', transport_type: 'pooling', order_by: 6, short_description: 'Share & save', description: 'Travel with people going your way and split the fare.', active: 1 },
+    { name: 'Rental', service_type: 'rental', transport_type: 'taxi', order_by: 7, short_description: 'By the hour or day', description: 'Rent a vehicle by the hour or day.', active: 1 },
+  ];
+
+  // The module a vehicle belongs to when none is chosen, from its transport type.
+  const MODULE_SERVICE_FOR_TRANSPORT = { taxi: 'normal', both: 'normal', delivery: 'parcel', pooling: 'pooling' };
+
+  export const defaultModuleIdForTransport = async (transportType) => {
+    const serviceType = MODULE_SERVICE_FOR_TRANSPORT[String(transportType || 'taxi').toLowerCase()] || 'normal';
+    const module = await TaxiAppModule.findOne({ service_type: serviceType }).sort({ order_by: 1, createdAt: 1 }).select('_id').lean();
+    return module?._id || null;
+  };
+
+  // Puts vehicle types that have no module yet into the module that matches their transport type.
+  const ensureVehiclesLinked = async () => {
+    if (!(await Vehicle.exists({ app_module_id: null }))) return;
+    const groups = [
+      [['taxi', 'both'], 'normal'],
+      [['delivery'], 'parcel'],
+      [['pooling'], 'pooling'],
+    ];
+    for (const [transports, serviceType] of groups) {
+      const module = await TaxiAppModule.findOne({ service_type: serviceType }).sort({ order_by: 1, createdAt: 1 }).select('_id').lean();
+      if (module) {
+        await Vehicle.updateMany({ app_module_id: null, transport_type: { $in: transports } }, { $set: { app_module_id: module._id } });
+      }
+    }
+    publicVehicleCatalogCache = { value: null, expiresAt: 0 };
+  };
+
+  // The header banner of each service: standard title / text / button and a picture, stored on the module so the
+  // admin sees and edits them (Admin -> App Modules). Filled once per module, and only where still blank.
+  const MODULE_BANNER_DEFAULTS = {
+    parcel: { title: 'Send anything, anywhere', text: 'Pickup in minutes with a secure OTP handover.', cta: 'Send parcel', image: 'gift.png' },
+    outstation: { title: 'Go beyond the city', text: 'Fixed-fare intercity cabs with no surprises.', cta: 'Plan a trip', image: 'cab.png' },
+    airport: { title: 'Never miss a flight', text: 'On-time airport pickups and drops.', cta: 'Book transfer', image: 'airplane.png' },
+    bus: { title: 'Pick your seat', text: 'Book bus tickets right inside the app.', cta: 'Find buses', image: 'bus.png' },
+    pooling: { title: 'Share the ride, split the fare', text: 'Travel with people going your way and save more.', cta: 'Find a pool', image: 'taxi.png' },
+    rental: { title: 'Rent by the hour or day', text: 'Verified vehicles with simple packages.', cta: 'Book rental', image: 'cab.png' },
+  };
+
+  const fillModuleBannerDefaults = async () => {
+    const modules = await TaxiAppModule.find().select('service_type transport_type banner_title banner_text banner_cta mobile_menu_icon').lean();
+    for (const module of modules) {
+      const type = module.service_type === 'normal' && module.transport_type === 'delivery' ? 'parcel' : module.service_type;
+      const defaults = MODULE_BANNER_DEFAULTS[type];
+      if (!defaults) continue;
+      try {
+        await AdminMeta.create({ key: `module_banner:${module._id}` });
+      } catch {
+        continue; // done before
+      }
+      const update = {};
+      if (!module.banner_title) update.banner_title = defaults.title;
+      if (!module.banner_text) update.banner_text = defaults.text;
+      if (!module.banner_cta) update.banner_cta = defaults.cta;
+      // a stock line-icon from a CDN is not a picture
+      if (!module.mobile_menu_icon || /tabler-icons/i.test(module.mobile_menu_icon)) update.mobile_menu_icon = `/api/v1/static/vehicle-art/${defaults.image}`;
+      if (Object.keys(update).length) await TaxiAppModule.updateOne({ _id: module._id }, { $set: update });
+    }
+  };
+
+  // Creates the default modules once (a flag keeps them from coming back after the admin deletes them).
+  const ensureAppModulesSeeded = async () => {
+    try {
+      await AdminMeta.create({ key: 'app_modules_seeded' });
+    } catch {
+      // flag already exists: the defaults were created before
+      await ensureVehiclesLinked();
+      await fillModuleBannerDefaults();
+      return;
+    }
+    if ((await TaxiAppModule.countDocuments()) === 0) {
+      await TaxiAppModule.insertMany(DEFAULT_APP_MODULES);
+    }
+    await ensureVehiclesLinked();
+    await fillModuleBannerDefaults();
+  };
+
+  const normalizeExtraServices = (value) =>
+    [...new Set((Array.isArray(value) ? value : []).map((item) => String(item || '').trim().toLowerCase()).filter((item) => ['outstation', 'pooling'].includes(item)))];
+
+  const resolveVehicleModuleId = async (payloadModuleId, transportType) => {
+    const raw = String(payloadModuleId ?? '').trim();
+    if (!raw) return defaultModuleIdForTransport(transportType);
+    if (!mongoose.isValidObjectId(raw)) throw new ApiError(400, 'App module is invalid');
+    const module = await TaxiAppModule.findById(raw).select('_id').lean();
+    if (!module) throw new ApiError(400, 'App module not found');
+    return module._id;
+  };
+
+  // What the user app home is built from: the active modules in order, each with its active vehicle types.
+  export const listPublicAppModules = async (query = {}) => {
+    await ensureAppModulesSeeded();
+
+    let filter = { active: { $ne: 0 } };
+    const lat = Number(query.lat);
+    const lng = Number(query.lng);
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      const activeZone = await Zone.findOne({
+        active: true,
+        geometry: { $geoIntersects: { $geometry: { type: 'Point', coordinates: [lng, lat] } } },
+      }).lean();
+      if (activeZone && Array.isArray(activeZone.disabled_modules) && activeZone.disabled_modules.length > 0) {
+        filter = { ...filter, _id: { $nin: activeZone.disabled_modules } };
+      }
+    }
+
+    const [modules, vehicles, outstationOn, airportOn] = await Promise.all([
+      TaxiAppModule.find(filter).sort({ order_by: 1, createdAt: 1 }).lean(),
+      Vehicle.find({ active: { $ne: false }, status: { $ne: 0 } })
+        .select('name short_description description transport_type dispatch_type icon_types capacity image app_module_id order_by')
+        .sort({ order_by: 1, createdAt: -1 })
+        .lean(),
+      // Outstation is booked from destination packages (Set Price -> package prices), so it shows once one is available.
+      SetPrice.exists({ pricing_scope: 'package', package_availability: 'available', active: 1, status: 'active' }),
+      SetPrice.exists({ enable_airport_ride: true, active: { $ne: 0 }, status: { $ne: 'inactive' } }),
+    ]);
+
+    const byModule = new Map();
+    vehicles.forEach((vehicle) => {
+      const key = String(vehicle.app_module_id || '');
+      if (!byModule.has(key)) byModule.set(key, []);
+      byModule.get(key).push({
+        id: String(vehicle._id),
+        name: vehicle.name || '',
+        short_description: vehicle.short_description || '',
+        description: vehicle.description || '',
+        transport_type: vehicle.transport_type || 'taxi',
+        dispatch_type: vehicle.dispatch_type || 'normal',
+        icon_types: vehicle.icon_types || 'car',
+        capacity: Number(vehicle.capacity || 0),
+        image: vehicle.image || '',
+        order_by: Number(vehicle.order_by || 0),
+      });
+    });
+
+    // Outstation and Airport only appear once they are switched on in Set Price.
+    const available = { outstation: Boolean(outstationOn), airport: Boolean(airportOn), rental: await isRentalEnabled() };
+
+    return {
+      results: modules
+        .filter((module) => available[module.service_type] !== false)
+        .map((module) => ({
+          id: String(module._id),
+          name: module.name,
+          service_type: module.service_type,
+          transport_type: module.transport_type,
+          short_description: module.short_description || '',
+          description: module.description || '',
+          banner_title: module.banner_title || '',
+          banner_text: module.banner_text || '',
+          banner_cta: module.banner_cta || '',
+          image: module.mobile_menu_icon || '',
+          order_by: module.order_by,
+          vehicles: byModule.get(String(module._id)) || [],
+        })),
+    };
   };
 
   export const listAppModules = async (query = {}) => {
     const safePage = Number(query.page) || 1;
     const safeLimit = Number(query.limit) || 10;
     const start = (safePage - 1) * safeLimit;
+
+    await ensureAppModulesSeeded();
 
     let filter = {};
     const lat = Number(query.lat);
@@ -10147,9 +11262,25 @@ export const buildDriverDutyReport = async (query = {}) => {
       TaxiAppModule.countDocuments(filter),
     ]);
 
+    const moduleVehicles = await Vehicle.find({ app_module_id: { $in: modules.map((m) => m._id) } })
+      .select('name image icon_types app_module_id active status order_by')
+      .sort({ order_by: 1, createdAt: -1 })
+      .lean();
+    const vehiclesOf = (moduleId) => moduleVehicles
+      .filter((vehicle) => String(vehicle.app_module_id) === String(moduleId))
+      .map((vehicle) => ({
+        id: String(vehicle._id),
+        name: vehicle.name,
+        image: vehicle.image || '',
+        icon_types: vehicle.icon_types || 'car',
+        active: vehicle.active !== false && Number(vehicle.status ?? 1) !== 0,
+      }));
+
     const results = modules.map(m => ({
       _id: m._id,
       id: String(m._id),
+      vehicles: vehiclesOf(m._id),
+      vehicle_count: vehiclesOf(m._id).length,
       name: m.name,
       transport_type: m.transport_type,
       service_type: m.service_type,
@@ -10158,6 +11289,9 @@ export const buildDriverDutyReport = async (query = {}) => {
       short_description: m.short_description,
       description: m.description,
       mobile_menu_icon: m.mobile_menu_icon,
+      banner_title: m.banner_title || '',
+      banner_text: m.banner_text || '',
+      banner_cta: m.banner_cta || '',
       mobile_menu_cover_image: m.mobile_menu_cover_image,
       active: m.active,
       created_at: m.createdAt,
@@ -10185,6 +11319,9 @@ export const buildDriverDutyReport = async (query = {}) => {
       short_description: String(payload.short_description || '').trim(),
       description: String(payload.description || '').trim(),
       mobile_menu_icon: String(payload.mobile_menu_icon || '').trim(),
+      banner_title: String(payload.banner_title || '').trim().slice(0, 80),
+      banner_text: String(payload.banner_text || '').trim().slice(0, 140),
+      banner_cta: String(payload.banner_cta || '').trim().slice(0, 30),
       mobile_menu_cover_image: payload.mobile_menu_cover_image || null,
       active: payload.active !== undefined ? (normalizeBoolean(payload.active) ? 1 : 0) : 1,
       company_key: payload.company_key || null
@@ -10202,6 +11339,9 @@ export const buildDriverDutyReport = async (query = {}) => {
     if (payload.short_description !== undefined) update.short_description = String(payload.short_description);
     if (payload.description !== undefined) update.description = String(payload.description);
     if (payload.mobile_menu_icon !== undefined) update.mobile_menu_icon = String(payload.mobile_menu_icon);
+    if (payload.banner_title !== undefined) update.banner_title = String(payload.banner_title || '').trim().slice(0, 80);
+    if (payload.banner_text !== undefined) update.banner_text = String(payload.banner_text || '').trim().slice(0, 140);
+    if (payload.banner_cta !== undefined) update.banner_cta = String(payload.banner_cta || '').trim().slice(0, 30);
     if (payload.mobile_menu_cover_image !== undefined) update.mobile_menu_cover_image = payload.mobile_menu_cover_image;
     if (payload.active !== undefined) update.active = normalizeBoolean(payload.active) ? 1 : 0;
     if (payload.company_key !== undefined) update.company_key = payload.company_key;
@@ -10212,87 +11352,12 @@ export const buildDriverDutyReport = async (query = {}) => {
   };
 
   export const deleteAppModule = async (id) => {
+    const vehicleCount = await Vehicle.countDocuments({ app_module_id: id });
+    if (vehicleCount > 0) {
+      throw new ApiError(409, `This module still has ${vehicleCount} vehicle type${vehicleCount === 1 ? '' : 's'}. Move or delete them first.`);
+    }
     const deleted = await TaxiAppModule.findByIdAndDelete(id);
     if (!deleted) throw new ApiError(404, 'App module registration not found');
-    return true;
-  };
-
-  export const listOnboardingScreens = async (audience) => {
-    const query = {};
-    if (audience) {
-      query.$or = [{ audience: audience }, { screen: audience }];
-    }
-    return OnboardingScreen.find(query).sort({ order: 1 }).lean();
-  };
-
-  export const createOnboardingScreen = async (payload = {}) => {
-    const audience = String(payload.audience || payload.screen || 'user').trim().toLowerCase();
-    if (!['user', 'driver', 'owner'].includes(audience)) {
-      throw new ApiError(400, 'Valid onboarding audience is required');
-    }
-
-    const title = String(payload.title || '').trim();
-    if (!title) {
-      throw new ApiError(400, 'Onboarding title is required');
-    }
-
-    const item = await OnboardingScreen.create({
-      audience,
-      screen: audience,
-      order: Number(payload.order || 1),
-      title,
-      description: String(payload.description || '').trim(),
-      active: payload.active !== undefined ? normalizeBoolean(payload.active) : true,
-    });
-
-    return item.toObject();
-  };
-
-  export const updateOnboardingScreen = async (id, payload = {}) => {
-    const update = {};
-
-    if (payload.audience !== undefined || payload.screen !== undefined) {
-      const audience = String(payload.audience || payload.screen || '').trim().toLowerCase();
-      if (!['user', 'driver', 'owner'].includes(audience)) {
-        throw new ApiError(400, 'Valid onboarding audience is required');
-      }
-      update.audience = audience;
-      update.screen = audience;
-    }
-    if (payload.order !== undefined) {
-      update.order = Number(payload.order || 1);
-    }
-    if (payload.title !== undefined) {
-      const title = String(payload.title || '').trim();
-      if (!title) {
-        throw new ApiError(400, 'Onboarding title is required');
-      }
-      update.title = title;
-    }
-    if (payload.description !== undefined) {
-      update.description = String(payload.description || '').trim();
-    }
-    if (payload.active !== undefined) {
-      update.active = normalizeBoolean(payload.active);
-    }
-
-    const item = await OnboardingScreen.findByIdAndUpdate(
-      id,
-      { $set: update },
-      { returnDocument: 'after', runValidators: true },
-    );
-    if (!item) {
-      throw new ApiError(404, 'Onboarding screen not found');
-    }
-
-    return item.toObject();
-  };
-
-  export const deleteOnboardingScreen = async (id) => {
-    const deleted = await OnboardingScreen.findByIdAndDelete(id);
-    if (!deleted) {
-      throw new ApiError(404, 'Onboarding screen not found');
-    }
     return true;
   };
 

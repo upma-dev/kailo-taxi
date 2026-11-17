@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { asyncHandler } from '../../../../utils/asyncHandler.js';
 import { authenticate, authenticateOrResolveUser } from '../../middlewares/authMiddleware.js';
+import { rateRider } from '../controllers/riderRatingController.js';
 import {
   acceptRideBid,
   createRazorpayRideCompletionOrder,
@@ -49,3 +50,5 @@ rideRouter.post('/:rideId/complete-payment/wallet', authenticate(['user']), asyn
 rideRouter.post('/:rideId/tip/razorpay/order', authenticate(['user']), asyncHandler(createRazorpayRideTipOrder));
 rideRouter.post('/:rideId/tip/razorpay/verify', authenticate(['user']), asyncHandler(verifyRazorpayRideTip));
 rideRouter.patch('/:rideId/feedback', authenticate(['user']), asyncHandler(submitRideReview));
+// The driver rates the rider after a completed trip.
+rideRouter.post('/:rideId/rider-rating', authenticate(['driver']), asyncHandler(rateRider));

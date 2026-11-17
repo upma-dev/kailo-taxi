@@ -30,6 +30,10 @@ const taxiAppModuleSchema = new mongoose.Schema(
       type: String,
       default: '',
     },
+    // Optional copy for this service's banner at the top of the user home. Blank = the built-in text.
+    banner_title: { type: String, default: '' },
+    banner_text: { type: String, default: '' },
+    banner_cta: { type: String, default: '' },
     mobile_menu_icon: {
       type: String,
       default: '',

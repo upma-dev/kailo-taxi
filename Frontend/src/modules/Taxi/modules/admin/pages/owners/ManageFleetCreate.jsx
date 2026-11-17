@@ -131,7 +131,7 @@ const ManageFleetCreate = () => {
 
       const json = await res.json();
       if (json?.success) {
-        navigate('/taxi/admin/fleet/manage');
+        navigate('/admin/fleet/manage');
         return;
       }
       alert(json?.message || 'Operation failed');
@@ -146,7 +146,7 @@ const ManageFleetCreate = () => {
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-gray-950">
       <div className="px-5 pt-3">
-        <AdminPageHeader module="Fleet Management" page="Manage Fleet" title="Create Fleet" backto="/taxi/admin/fleet/manage" />
+        <AdminPageHeader module="Fleet Management" page="Manage Fleet" title="Create Fleet" backto="/admin/fleet/manage" />
       </div>
 
       <div className="px-5 pb-10">

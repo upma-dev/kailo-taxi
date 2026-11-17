@@ -7,6 +7,7 @@ import { WalletTransaction } from '../models/WalletTransaction.js';
 import { Ride } from '../../user/models/Ride.js';
 import { getWalletSettings } from '../../services/appSettingsService.js';
 import { applyOwnerWalletAdjustment, resolveOwnerPayout, splitRideEarning } from '../../services/ownerPayoutService.js';
+import { isCommissionWaivedForDriver } from '../../services/driverSubscriptionService.js';
 
 const normalizeAmount = (value, fieldName = 'amount') => {
   const amount = Number(value);
@@ -422,7 +423,9 @@ export const settleCompletedRideWallet = async ({ rideId }) => {
     const surgeAmount = Math.max(0, Math.round(ride?.pricingSnapshot?.ride_surge_amount || 0));
     const commissionableFare = Math.max(0, Math.round(baseRideFare - surgeAmount));
     const commissionConfig = await resolveCommissionConfigForRide(ride, session);
-    const commissionAmount = Math.round(computeCommissionAmount({
+    // A driver with an active subscription plan pays no commission (subscription modes only).
+    const commissionWaived = await isCommissionWaivedForDriver(ride.driverId);
+    const commissionAmount = commissionWaived ? 0 : Math.round(computeCommissionAmount({
       fare: commissionableFare,
       type: commissionConfig.type,
       value: commissionConfig.value,

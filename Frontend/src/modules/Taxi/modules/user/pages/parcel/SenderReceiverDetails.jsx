@@ -235,7 +235,46 @@ const normalizeDeliveryPricing = (vehicle = {}) => {
   };
 };
 
-const calculateVehicleFare = (vehicle, distanceKm) => {
+const idOf = (value) => String(value?._id || value?.id || value || '').trim();
+
+// The parcel price of a vehicle: the Set Price rule with transport type "delivery" (or "all"), set by the admin
+// under Price Management -> Set Price. A ride price of the same vehicle is never used for a parcel.
+const findParcelPricingRule = (rules = [], vehicle = {}) => {
+  const vehicleId = idOf(vehicle);
+  const candidates = (Array.isArray(rules) ? rules : []).filter((rule) => {
+    const active = Number(rule?.active ?? 1) === 1 && String(rule?.status || 'active').toLowerCase() !== 'inactive';
+    const scope = String(rule?.pricing_scope || 'ride').trim().toLowerCase();
+    const transport = String(rule?.transport_type || '').trim().toLowerCase();
+    return active && scope === 'ride' && ['delivery', 'both'].includes(transport)
+      && idOf(rule?.vehicle_type?._id || rule?.vehicle_type?.id || rule?.vehicle_type || rule?.type_id) === vehicleId;
+  });
+  const newest = (list) => [...list].sort((a, b) => new Date(b?.updatedAt || b?.createdAt || 0) - new Date(a?.updatedAt || a?.createdAt || 0))[0];
+  return newest(candidates.filter((rule) => String(rule?.transport_type).toLowerCase() === 'delivery')) || newest(candidates) || null;
+};
+
+// Same maths as the ride fare: the base price covers the base distance; beyond it, per km and per minute are added,
+// then service tax.
+const calculateParcelRuleFare = (rule, distanceKm) => {
+  const km = Math.max(0, Number(distanceKm || 0));
+  const minutes = Math.max(1, Math.round(km * 2.5) + 2);
+  const basePrice = Math.max(0, Number(rule?.base_price) || 0);
+  const baseDistance = Math.max(0, Number(rule?.base_distance) || 0);
+  const perKm = Math.max(0, Number(rule?.price_per_distance) || 0);
+  const perMinute = Math.max(0, Number(rule?.time_price) || 0);
+  const tax = Math.max(0, Number(rule?.service_tax) || 0);
+
+  const withinBase = baseDistance > 0 && km <= baseDistance;
+  const subtotal = withinBase ? basePrice : basePrice + Math.max(0, km - baseDistance) * perKm + minutes * perMinute;
+  return Math.max(basePrice, Math.round(subtotal + (subtotal * tax) / 100));
+};
+
+const calculateVehicleFare = (vehicle, distanceKm, rules = []) => {
+  const rule = findParcelPricingRule(rules, vehicle);
+  if (rule) {
+    return calculateParcelRuleFare(rule, distanceKm);
+  }
+
+  // No parcel Set Price yet: fall back to the charges on the vehicle type itself.
   const pricing = normalizeDeliveryPricing(vehicle);
   if (!pricing.enabled) {
     return null;
@@ -1366,13 +1405,29 @@ const SenderReceiverDetails = () => {
     }
     return calculateDistanceKm(pickupCoords, dropCoords);
   }, [googleRoadDistanceKm, dropCoords, pickupCoords]);
+  // The admin's parcel prices (Set Price rules with transport type "delivery"), loaded once.
+  const [parcelPricingRules, setParcelPricingRules] = useState([]);
+  useEffect(() => {
+    let active = true;
+    api.get('/admin/types/set-prices', { params: { scope: 'ride' } })
+      .then((response) => {
+        const data = response?.data?.data || response?.data || response || {};
+        const rows = data?.paginator?.data || data?.results || [];
+        if (active) setParcelPricingRules(Array.isArray(rows) ? rows : []);
+      })
+      .catch(() => {
+        // Without them the vehicle's own delivery charges are used.
+      });
+    return () => { active = false; };
+  }, []);
+
   const estimatedFare = useMemo(() => {
     if (!drop.trim()) {
       return null;
     }
 
     const dynamicFares = selectedVehicles
-      .map((vehicle) => calculateVehicleFare(vehicle, estimatedDistanceKm))
+      .map((vehicle) => calculateVehicleFare(vehicle, estimatedDistanceKm, parcelPricingRules))
       .filter((value) => Number.isFinite(value));
 
     if (dynamicFares.length > 0) {
@@ -1387,7 +1442,7 @@ const SenderReceiverDetails = () => {
     }
 
     return null;
-  }, [drop, estimatedDistanceKm, selectedVehicles]);
+  }, [drop, estimatedDistanceKm, selectedVehicles, parcelPricingRules]);
 
   const validate = () => {
     const nextErrors = {};

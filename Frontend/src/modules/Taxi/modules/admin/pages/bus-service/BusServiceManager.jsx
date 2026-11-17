@@ -204,7 +204,7 @@ const SeatDeckPreview = ({ title, deckRows, onToggleSeat }) => {
 const BusServiceManager = ({
   mode: modeProp = null,
   api = {},
-  basePath = '/taxi/admin/bus-service',
+  basePath = '/admin/bus-service',
   badgeLabel = 'Bus Service Control',
   title = 'Manage Bus Fleet & Schedules',
   description = 'Define coaches, preview seat blueprints, manage inventory, and publish recurring departures with multi-stop routes.',

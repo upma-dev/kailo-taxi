@@ -97,6 +97,8 @@ export const userAuthService = {
   uploadProfileImage: (dataUrl) => api.post('/users/profile-image', { dataUrl }),
   updateCurrentUser: (payload) => api.patch('/users/me', payload, withUserAuth()),
   getCurrentUser: () => api.get('/users/me', withUserAuth()),
+  // Everyone who joined with my referral code, with reward status (live from the server).
+  getMyReferrals: () => api.get('/users/referrals/me', withUserAuth()),
   getSubscriptionPlans: () => api.get('/users/subscriptions/plans', withUserAuth()),
   getMySubscriptions: () => api.get('/users/subscriptions/me', withUserAuth()),
   buySubscription: (planId) => api.post('/users/subscriptions/purchase', { planId }, withUserAuth()),

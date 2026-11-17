@@ -48,7 +48,10 @@ const resolveBusSeatPrice = (busService = {}, seat = {}) => {
   const variantPricing = busService?.variantPricing || {};
   const defaultPrice = Number(busService?.seatPrice || 0);
   const variantKey = String(seat?.variant || 'seat').trim().toLowerCase();
-  const resolvedPrice = variantPricing?.[variantKey] ?? variantPricing?.seat ?? defaultPrice;
+  // A price of 0 means "not set": fall back to the plain seat price, then to the bus's base seat price.
+  const resolvedPrice = [variantPricing?.[variantKey], variantPricing?.seat, defaultPrice]
+    .map(Number)
+    .find((value) => Number.isFinite(value) && value > 0) ?? 0;
 
   return Number.isFinite(Number(resolvedPrice)) ? Number(resolvedPrice) : defaultPrice;
 };
@@ -1396,6 +1399,18 @@ export const getLanguages = asyncHandler(async (_req, res) => {
   const items = await adminService.listLanguages();
   res.json({ success: true, paginator: { data: items }, results: items });
 });
+export const getAvailableLanguages = asyncHandler(async (_req, res) =>
+  ok(res, { results: await adminService.listAvailableLanguages() }),
+);
+export const getLanguage = asyncHandler(async (req, res) =>
+  ok(res, await adminService.getLanguage(req.params.id)),
+);
+export const createLanguage = asyncHandler(async (req, res) =>
+  ok(res, await adminService.createLanguage(req.body)),
+);
+export const updateLanguage = asyncHandler(async (req, res) =>
+  ok(res, await adminService.updateLanguage(req.params.id, req.body)),
+);
 export const updateLanguageStatus = asyncHandler(async (req, res) =>
   ok(res, await adminService.updateLanguageStatus(req.params.id, req.body)),
 );
@@ -1432,6 +1447,9 @@ export const deleteRole = asyncHandler(async (req, res) => {
 
 export const getAppModules = asyncHandler(async (req, res) =>
   ok(res, await adminService.listAppModules(req.query)),
+);
+export const getPublicAppModules = asyncHandler(async (req, res) =>
+  ok(res, await adminService.listPublicAppModules(req.query)),
 );
 export const createAppModule = asyncHandler(async (req, res) =>
   ok(res, await adminService.createAppModule(req.body)),
@@ -1517,34 +1535,6 @@ export const getMailSettings = asyncHandler(async (_req, res) =>
 );
 export const updateMailSettings = asyncHandler(async (req, res) =>
   ok(res, { settings: await adminService.updateMailSettings(req.body) }),
-);
-
-export const getUserOnboarding = asyncHandler(async (_req, res) =>
-  res.json({
-    success: true,
-    results: await adminService.listOnboardingScreens("user"),
-  }),
-);
-export const getDriverOnboarding = asyncHandler(async (_req, res) =>
-  res.json({
-    success: true,
-    results: await adminService.listOnboardingScreens("driver"),
-  }),
-);
-export const getOwnerOnboarding = asyncHandler(async (_req, res) =>
-  res.json({
-    success: true,
-    results: await adminService.listOnboardingScreens("owner"),
-  }),
-);
-export const createOnboardingScreen = asyncHandler(async (req, res) =>
-  ok(res, await adminService.createOnboardingScreen(req.body)),
-);
-export const updateOnboardingScreen = asyncHandler(async (req, res) =>
-  ok(res, await adminService.updateOnboardingScreen(req.params.id, req.body)),
-);
-export const deleteOnboardingScreen = asyncHandler(async (req, res) =>
-  ok(res, await adminService.deleteOnboardingScreen(req.params.id)),
 );
 
 export const downloadUserReport = asyncHandler(async (req, res) => {

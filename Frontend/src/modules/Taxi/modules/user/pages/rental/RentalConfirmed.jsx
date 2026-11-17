@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { CheckCircle2, MapPin, Clock, Camera, Home, Upload } from 'lucide-react';
 import { useSettings } from '../../../../shared/context/SettingsContext';
 import { userService } from '../../services/userService';
+import { resolveAssetUrl } from '../../components/useVehicleTiles';
 import { saveCurrentRide, clearCurrentRide } from '../../services/currentRideService';
 
 const buildRentalBookingPayload = ({
@@ -17,7 +18,8 @@ const buildRentalBookingPayload = ({
   returnDateTime: state.returnTime,
   totalCost: Number(state.totalCost || 0),
   payableNow: Number(state.deposit || 0),
-  advancePaymentLabel: state.vehicle?.advancePayment?.label || 'Advance booking payment',
+  advancePaymentLabel: state.paymentOption === 'safety_money' ? 'Refundable safety money' : state.vehicle?.advancePayment?.label || 'Advance booking payment',
+  paymentOption: state.paymentOption || 'advance',
   paymentStatus: state.paymentStatus || 'pending',
   paymentMethod: state.paymentMethod || '',
   paymentMethodLabel: state.paymentMethodLabel || '',
@@ -29,6 +31,7 @@ const buildRentalBookingPayload = ({
   },
   kycCompleted: true,
   kycDocuments: state.rentalKyc?.documents || null,
+  conditionPhoto: state.conditionPhoto || null,
   selectedPackage: state.selectedPackage
     ? {
         id: state.selectedPackage.id || state.selectedPackage._id || '',
@@ -102,21 +105,28 @@ const resolveRentalPricingSummary = ({
   };
 };
 
+// The bill grows with the running time (per second): hourly rate while inside the package, then the
+// extra-hour rate. The advance already paid is the minimum. Same formula as the backend.
 const computeRentalLiveCharge = (ride = {}, pricingSummary = {}, elapsedSeconds = 0) => {
   const elapsedHours = Math.max(0, Number(elapsedSeconds || 0) / 3600);
-  const basePrice = Math.max(
-    Number(pricingSummary?.basePrice || 0),
-    Number(ride?.advancePaid || ride?.payableNow || 0),
-    0,
-  );
+  // Safety money is not a minimum bill (it is refunded); a plain advance is.
+  const advance = ride?.paymentOption === 'safety_money' ? 0 : Number(ride?.advancePaid || ride?.payableNow || 0);
+  const basePrice = Math.max(Number(pricingSummary?.basePrice || 0), 0);
   const includedHours = Math.max(1, Number(pricingSummary?.includedHours || 0));
-  const extraHourRate = Math.max(0, Number(pricingSummary?.extraHourRate || 0));
+  const hourlyRate = basePrice / includedHours;
+  const extraHourRate = Number(pricingSummary?.extraHourRate || 0) > 0 ? Number(pricingSummary.extraHourRate) : hourlyRate;
+  // Safety money option: the package is always charged in full; only time beyond it adds to the bill.
   const packageCharge = elapsedHours <= includedHours
-    ? basePrice
-    : basePrice + Math.ceil(Math.max(0, elapsedHours - includedHours)) * extraHourRate;
+    ? (ride?.paymentOption === 'safety_money' ? basePrice : hourlyRate * elapsedHours)
+    : basePrice + (elapsedHours - includedHours) * extraHourRate;
 
-  return Math.max(Number(ride?.advancePaid || ride?.payableNow || 0), packageCharge);
+  return Math.max(advance, packageCharge);
 };
+
+// Testing aid: lets a tester "teleport" to the hub without really travelling there. Only in dev builds
+// (or when VITE_ENABLE_MAP_SIMULATION=true); never shown in production.
+const HUB_SIMULATOR_ENABLED =
+  import.meta.env.DEV || String(import.meta.env.VITE_ENABLE_MAP_SIMULATION || '').toLowerCase() === 'true';
 
 const RentalConfirmed = () => {
   const navigate = useNavigate();
@@ -126,8 +136,56 @@ const RentalConfirmed = () => {
   const state = location.state || {};
   const [clockNow, setClockNow] = useState(() => Date.now());
 
-  const activeRentalRide = state?.serviceType === 'rental' && state?.rideId ? state : null;
-  const isCompletedRentalRide = Boolean(activeRentalRide?.completedAt || state?.summaryMode === 'completed');
+  // The page opens with a snapshot; keep it fresh from the server so the clock and the bill never go stale.
+  const [freshRide, setFreshRide] = useState(null);
+  const baseRentalRide = state?.serviceType === 'rental' && state?.rideId ? state : null;
+  const activeRentalRide = baseRentalRide ? { ...baseRentalRide, ...(freshRide || {}) } : null;
+
+  useEffect(() => {
+    if (!baseRentalRide || baseRentalRide.summaryMode === 'completed' || baseRentalRide.completedAt) return undefined;
+    let off = false;
+    const refresh = async () => {
+      try {
+        const res = await userService.getActiveRentalBooking();
+        const data = res?.id ? res : res?.data || null;
+        if (off) return;
+        if (data?.id && String(data.id) === String(baseRentalRide.rideId)) {
+          setFreshRide({
+            ...data,
+            rideId: data.id,
+            serviceType: 'rental',
+            advancePaid: data.payableNow ?? baseRentalRide.advancePaid,
+          });
+          return;
+        }
+
+        // No longer an active rental: the admin may have ended it. Show the last step (final summary).
+        const listRes = await userService.getMyRentalBookings({ page: 1, limit: 10 });
+        const results = listRes?.data?.results || listRes?.results || [];
+        const finished = results.find((item) => String(item?.id) === String(baseRentalRide.rideId));
+        if (!off && finished && String(finished.status).toLowerCase() === 'completed') {
+          clearCurrentRide();
+          setFreshRide({
+            ...finished,
+            rideId: finished.id,
+            serviceType: 'rental',
+            summaryMode: 'completed',
+            advancePaid: finished.payableNow ?? baseRentalRide.advancePaid,
+            fare: finished.finalCharge,
+          });
+        }
+      } catch {
+        // keep the snapshot on a transient error
+      }
+    };
+    refresh();
+    const timer = window.setInterval(refresh, 15000);
+    return () => {
+      off = true;
+      window.clearInterval(timer);
+    };
+  }, [baseRentalRide?.rideId, baseRentalRide?.status]);
+  const isCompletedRentalRide = Boolean(activeRentalRide?.completedAt || activeRentalRide?.summaryMode === 'completed' || state?.summaryMode === 'completed');
   
   useEffect(() => {
     if (isCompletedRentalRide) {
@@ -137,6 +195,7 @@ const RentalConfirmed = () => {
   const isEndRequestPending = String(activeRentalRide?.status || '').toLowerCase() === 'end_requested' && !isCompletedRentalRide;
   const [distanceToHub, setDistanceToHub] = useState(null);
   const [locationError, setLocationError] = useState(null);
+  const [simulatedAtHub, setSimulatedAtHub] = useState(false);
 
   useEffect(() => {
     if (!activeRentalRide || isCompletedRentalRide || isEndRequestPending) return undefined;
@@ -176,7 +235,7 @@ const RentalConfirmed = () => {
     return R * c;
   };
 
-  const isWithinHubRange = distanceToHub !== null && distanceToHub <= 100;
+  const isWithinHubRange = (HUB_SIMULATOR_ENABLED && simulatedAtHub) || (distanceToHub !== null && distanceToHub <= 100);
 
   useEffect(() => {
     if (!activeRentalRide || isCompletedRentalRide || isEndRequestPending) return undefined;
@@ -205,10 +264,17 @@ const RentalConfirmed = () => {
     vehicle,
     duration: duration || 'Hourly',
   });
-  const liveElapsedSeconds = activeRentalRide?.assignedAt
+  // The clock starts when the vehicle was assigned; if the admin only confirmed the request, from that approval.
+  const rentalStartedAt =
+    activeRentalRide?.assignedAt ||
+    activeRentalRide?.reviewedAt ||
+    activeRentalRide?.createdAt ||
+    null;
+  const rentalStartMs = rentalStartedAt ? new Date(rentalStartedAt).getTime() : NaN;
+  const liveElapsedSeconds = Number.isFinite(rentalStartMs)
     ? isEndRequestPending && Number(activeRentalRide?.finalElapsedMinutes || 0) > 0
       ? Number(activeRentalRide.finalElapsedMinutes || 0) * 60
-      : Math.max(1, Math.floor((clockNow - new Date(activeRentalRide.assignedAt || activeRentalRide.createdAt).getTime()) / 1000))
+      : Math.max(0, Math.floor((clockNow - rentalStartMs) / 1000))
     : Number(activeRentalRide?.elapsedMinutes || 0) * 60;
   const liveElapsedMinutes = Math.max(1, Math.ceil(liveElapsedSeconds / 60));
 
@@ -229,9 +295,25 @@ const RentalConfirmed = () => {
       : computeRentalLiveCharge(activeRentalRide, activePricingSummary, liveElapsedSeconds)
     : 0;
   const completedCharge = Number(activeRentalRide?.finalCharge || activeRentalRide?.fare || 0);
-  const activeVehicleImage = activeRentalRide?.assignedVehicle?.image || activeRentalRide?.vehicle?.image || state.vehicle?.image;
-  const activeVehicleName = activeRentalRide?.assignedVehicle?.name || activeRentalRide?.vehicle?.name || state.vehicle?.name || 'Rental Vehicle';
-  const activeVehicleCategory = activeRentalRide?.assignedVehicle?.vehicleCategory || activeRentalRide?.driver?.vehicle || state.vehicle?.vehicleCategory || 'Rental';
+  const activeVehicleImage = resolveAssetUrl(
+    activeRentalRide?.assignedVehicle?.image ||
+    activeRentalRide?.vehicle?.image ||
+    activeRentalRide?.vehicleImage ||
+    state.vehicle?.image ||
+    '',
+  );
+  const activeVehicleName =
+    activeRentalRide?.assignedVehicle?.name ||
+    activeRentalRide?.vehicle?.name ||
+    activeRentalRide?.vehicleName ||
+    state.vehicle?.name ||
+    'Rental Vehicle';
+  const activeVehicleCategory =
+    activeRentalRide?.assignedVehicle?.vehicleCategory ||
+    activeRentalRide?.vehicleCategory ||
+    activeRentalRide?.driver?.vehicle ||
+    state.vehicle?.vehicleCategory ||
+    'Rental';
   const [conditionPhoto, setConditionPhoto] = useState(null);
   const [resolvedBookingReference, setResolvedBookingReference] = useState(bookingReference || '');
   const [endingRide, setEndingRide] = useState(false);
@@ -289,8 +371,15 @@ const RentalConfirmed = () => {
     return liveCharge;
   }, [completedCharge, isCompletedRentalRide, liveCharge]);
 
+  const isSafetyOption = activeRentalRide?.paymentOption === 'safety_money';
+  const safetyHeld = Number(activeRentalRide?.safetyMoney?.amount || activeRentalRide?.payableNow || 0);
+  const safetySettled = activeRentalRide?.safetyMoney?.status === 'settled';
+  const safetyDeducted = safetySettled ? Number(activeRentalRide.safetyMoney.deductedAmount || 0) : Math.min(finalTotal, safetyHeld);
+  const safetyRefund = safetySettled ? Number(activeRentalRide.safetyMoney.refundedAmount || 0) : Math.max(0, safetyHeld - finalTotal);
+  const safetyDue = safetySettled ? Number(activeRentalRide.safetyMoney.dueAmount || 0) : Math.max(0, finalTotal - safetyHeld);
+
   if (!state.vehicle && !activeRentalRide) {
-    navigate('/rental');
+    navigate('/taxi/user/rental');
     return null;
   }
 
@@ -313,7 +402,7 @@ const RentalConfirmed = () => {
         finalElapsedMinutes: payload?.finalElapsedMinutes || payload?.rideMetrics?.elapsedMinutes || liveElapsedMinutes,
       };
       saveCurrentRide(nextRideState);
-      navigate('/rental/confirmed', {
+      navigate('/taxi/user/rental/confirmed', {
         replace: true,
         state: nextRideState,
       });
@@ -377,6 +466,44 @@ const RentalConfirmed = () => {
                 </div>
                 <Clock size={18} className="text-orange-500" />
               </div>
+              {isSafetyOption ? (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-[14px] bg-slate-50 px-4 py-3">
+                      <p className="text-[10px] font-bold text-slate-400">Paid (rental + safety)</p>
+                      <p className="mt-1 text-[16px] font-black text-emerald-600">Rs.{safetyHeld.toFixed(0)}</p>
+                    </div>
+                    <div className="rounded-[14px] bg-slate-50 px-4 py-3">
+                      <p className="text-[10px] font-bold text-slate-400">{isCompletedRentalRide ? 'Final bill' : isEndRequestPending ? 'Frozen bill for review' : 'Bill till now'}</p>
+                      <p className="mt-1 text-[16px] font-black text-slate-900">Rs.{finalTotal.toFixed(2)}</p>
+                    </div>
+                  </div>
+                  <div className="rounded-[14px] border border-emerald-100 bg-emerald-50/60 px-4 py-3 space-y-1.5">
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700">
+                      {isCompletedRentalRide ? 'Safety money settlement' : 'Safety money (if you end now)'}
+                    </p>
+                    <div className="flex justify-between text-[12px] font-bold text-slate-600">
+                      <span>Paid (rental + safety money)</span>
+                      <span>Rs.{safetyHeld.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-[12px] font-bold text-slate-600">
+                      <span>Bill deducted</span>
+                      <span>- Rs.{safetyDeducted.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between border-t border-emerald-100 pt-1.5 text-[13px] font-black text-slate-900">
+                      <span>{isCompletedRentalRide ? 'Refunded to your wallet' : 'Will be refunded'}</span>
+                      <span className="text-emerald-600">Rs.{safetyRefund.toFixed(2)}</span>
+                    </div>
+                    {safetyDue > 0 ? (
+                      <div className="flex justify-between text-[13px] font-black text-rose-600">
+                        <span>You pay extra</span>
+                        <span>Rs.{safetyDue.toFixed(2)}</span>
+                      </div>
+                    ) : null}
+                  </div>
+                </>
+              ) : (
+                <>
               <div className="grid grid-cols-2 gap-3">
                 <div className="rounded-[14px] bg-slate-50 px-4 py-3">
                   <p className="text-[10px] font-bold text-slate-400">Advance paid</p>
@@ -384,15 +511,17 @@ const RentalConfirmed = () => {
                 </div>
                 <div className="rounded-[14px] bg-slate-50 px-4 py-3">
                   <p className="text-[10px] font-bold text-slate-400">{isCompletedRentalRide ? 'Final total' : isEndRequestPending ? 'Frozen total for review' : 'Charge till now'}</p>
-                  <p className="mt-1 text-[16px] font-black text-slate-900">Rs.{finalTotal.toFixed(0)}</p>
+                  <p className="mt-1 text-[16px] font-black text-slate-900">Rs.{finalTotal.toFixed(2)}</p>
                 </div>
               </div>
               <div className="rounded-[14px] bg-slate-50 px-4 py-3">
                 <p className="text-[10px] font-bold text-slate-400">{isCompletedRentalRide ? 'Final payable balance' : isEndRequestPending ? 'Pending settlement after review' : 'Current remaining due'}</p>
                 <p className="mt-1 text-[16px] font-black text-slate-900">
-                  Rs.{Math.max(0, finalTotal - Number(activeRentalRide.advancePaid || activeRentalRide.payableNow || 0)).toFixed(0)}
+                  Rs.{Math.max(0, finalTotal - Number(activeRentalRide.advancePaid || activeRentalRide.payableNow || 0)).toFixed(2)}
                 </p>
               </div>
+                </>
+              )}
               <div className="rounded-[14px] bg-slate-50 px-4 py-3">
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -411,7 +540,7 @@ const RentalConfirmed = () => {
                   </div>
                   <div className="text-right">
                     <p className="text-[10px] font-bold text-slate-400">Live billed</p>
-                    <p className="mt-1 text-[16px] font-black text-slate-900">Rs.{liveCharge.toFixed(0)}</p>
+                    <p className="mt-1 text-[16px] font-black text-slate-900">Rs.{liveCharge.toFixed(2)}</p>
                   </div>
                 </div>
               </div>
@@ -435,7 +564,9 @@ const RentalConfirmed = () => {
             </div>
             <p className="text-[12px] font-bold text-slate-500 leading-relaxed">
               {isCompletedRentalRide
-                ? `Your rental ride has ended. Final total is Rs.${finalTotal.toFixed(0)} and the remaining amount is payable at drop-off.`
+                ? isSafetyOption
+                  ? `Your rental ride has ended. Final bill is Rs.${finalTotal.toFixed(2)}: Rs.${safetyDeducted.toFixed(2)} was deducted from your safety money and Rs.${safetyRefund.toFixed(2)} is refunded to your wallet${safetyDue > 0 ? `. Please pay the remaining Rs.${safetyDue.toFixed(2)}.` : '.'}`
+                  : `Your rental ride has ended. Final total is Rs.${finalTotal.toFixed(0)} and the remaining amount is payable at drop-off.`
                 : isEndRequestPending
                   ? `Your end-ride request has been sent to admin for review. The current elapsed time and charge are now frozen until admin confirms the closure.`
                   : `Your rental is active now. The live charge keeps updating based on elapsed time until you end the ride.`}
@@ -454,6 +585,21 @@ const RentalConfirmed = () => {
             </motion.button>
           ) : (
             <div className="pointer-events-auto w-full space-y-3">
+              {HUB_SIMULATOR_ENABLED ? (
+                <button
+                  type="button"
+                  onClick={() => setSimulatedAtHub((value) => !value)}
+                  className={`w-full rounded-[14px] border border-dashed px-4 py-2.5 text-[11px] font-black ${
+                    simulatedAtHub
+                      ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+                      : 'border-sky-300 bg-sky-50 text-sky-700'
+                  }`}
+                >
+                  {simulatedAtHub
+                    ? 'TEST MODE: you are at the hub (tap to move away)'
+                    : 'TEST MODE: tap to simulate reaching the hub'}
+                </button>
+              ) : null}
               {!isWithinHubRange && !locationError && (
                 <div className="bg-orange-50 border border-orange-100 rounded-[14px] px-4 py-2 text-center">
                   <p className="text-[11px] font-black text-orange-600">
@@ -472,7 +618,7 @@ const RentalConfirmed = () => {
                 whileTap={{ scale: 0.98 }}
                 onClick={handleEndRide}
                 disabled={endingRide || !isWithinHubRange}
-                className="w-full bg-slate-900 py-4 rounded-[18px] text-[15px] font-black text-white shadow-[0_8px_24px_rgba(15,23,42,0.18)] flex items-center justify-center gap-2 disabled:opacity-50 disabled:grayscale-[0.5]"
+                className="w-full py-4 rounded-[18px] text-[15px] font-black flex items-center justify-center gap-2 transition-colors bg-[linear-gradient(135deg,#F97316_0%,#EA580C_100%)] text-white shadow-[0_10px_24px_rgba(234,88,12,0.32)] disabled:bg-none disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
               >
                 <CheckCircle2 size={16} strokeWidth={2.5} /> {endingRide ? 'Sending end request...' : 'Request End Ride'}
               </motion.button>
@@ -520,7 +666,7 @@ const RentalConfirmed = () => {
             className="px-5 py-4 flex items-center gap-4"
             style={{ background: `linear-gradient(135deg, ${vehicle.gradientFrom} 0%, ${vehicle.gradientTo} 100%)` }}
           >
-            <img src={vehicle.image} alt={vehicle.name} className="h-16 w-20 object-contain drop-shadow-lg shrink-0" />
+            <img src={resolveAssetUrl(vehicle.image)} alt={vehicle.name} className="h-16 w-20 object-contain drop-shadow-lg shrink-0" />
             <div>
               <p className="text-[15px] font-black text-slate-900">{vehicle.name}</p>
               <p className="text-[11px] font-bold text-slate-500 mt-0.5">
@@ -548,7 +694,7 @@ const RentalConfirmed = () => {
             </div>
             <div className="border-t border-slate-50 pt-2.5 flex justify-between">
               <div>
-                <p className="text-[10px] font-bold text-slate-400">Rental cost (at pickup)</p>
+                <p className="text-[10px] font-bold text-slate-400">{state.paymentOption === 'safety_money' ? 'Rental cost' : 'Rental cost (at pickup)'}</p>
                 <p className="text-[15px] font-black text-slate-900">Rs.{totalCost}</p>
                 <p className="mt-0.5 text-[10px] font-bold text-slate-400">
                   {bookingPricingSummary.label} - Rs.{Number(bookingPricingSummary.basePrice || 0).toFixed(0)}
@@ -556,7 +702,7 @@ const RentalConfirmed = () => {
                 </p>
               </div>
               <div className="text-right">
-                <p className="text-[10px] font-bold text-slate-400">Advance paid</p>
+                <p className="text-[10px] font-bold text-slate-400">{state.paymentOption === 'safety_money' ? 'Paid (rental + safety money)' : 'Advance paid'}</p>
                 <p className="text-[15px] font-black text-emerald-600">Rs.{deposit}</p>
                 {paymentMethodLabel ? (
                   <p className="text-[10px] font-bold text-slate-400 mt-0.5">{paymentMethodLabel} via Razorpay</p>
@@ -577,34 +723,20 @@ const RentalConfirmed = () => {
               <Camera size={13} className="text-orange-500" strokeWidth={2.5} />
             </div>
             <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">
-              Condition Photo at Pickup
+              Vehicle Condition Photo
             </p>
           </div>
           <p className="text-[12px] font-bold text-slate-400">
-            Capture the vehicle condition before you ride. This protects you during return inspection.
+            You submitted this photo of the vehicle's condition with your booking. It protects you during return inspection.
           </p>
-          {conditionPhoto ? (
+          {state.conditionPhoto?.imageUrl ? (
             <div className="relative rounded-[14px] overflow-hidden">
-              <img src={URL.createObjectURL(conditionPhoto)} alt="condition" className="w-full h-40 object-cover" />
+              <img src={resolveAssetUrl(state.conditionPhoto.imageUrl)} alt="Vehicle condition" className="w-full h-40 object-cover" />
               <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
                 <CheckCircle2 size={28} className="text-white" strokeWidth={2} />
               </div>
             </div>
-          ) : (
-            <button
-              onClick={() => inputRef.current?.click()}
-              className="w-full flex items-center justify-center gap-2 py-3.5 rounded-[14px] border-2 border-dashed border-slate-200 text-[12px] font-black text-slate-500 active:bg-slate-50 transition-all"
-            >
-              <Upload size={14} strokeWidth={2.5} /> Upload Condition Photo
-            </button>
-          )}
-          <input
-            ref={inputRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={(e) => setConditionPhoto(e.target.files?.[0])}
-          />
+          ) : null}
         </motion.div>
 
         <motion.div
@@ -617,7 +749,9 @@ const RentalConfirmed = () => {
             <CheckCircle2 size={15} className="text-emerald-500" strokeWidth={2} />
           </div>
           <p className="text-[12px] font-bold text-slate-500 leading-relaxed">
-            Your booking advance of Rs.{deposit} has been received. The remaining rental cost is payable at pickup.
+            {state.paymentOption === 'safety_money'
+              ? `Your payment of Rs.${deposit} (rental + refundable safety money) has been received. At the end of the ride your final bill is deducted and the rest is refunded to your wallet.`
+              : `Your booking advance of Rs.${deposit} has been received. The remaining rental cost is payable at pickup.`}
           </p>
         </motion.div>
       </div>

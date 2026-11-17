@@ -7,6 +7,7 @@ import { createDefaultAppSettings } from '../../admin/data/defaultAppSettings.js
 import { createDefaultBusinessSettings } from '../../admin/data/defaultBusinessSettings.js';
 import { getReferralSettings, getReferralTranslationContent } from '../../admin/services/adminService.js';
 import { getPublicActivePaymentGateway } from '../../services/paymentGatewayService.js';
+import { getPublicCancellationPolicy } from '../../services/cancellationService.js';
 
 /**
  * Common controller for shared utilities like file uploads
@@ -69,6 +70,12 @@ export const getPaymentGatewayConfig = asyncHandler(async (_req, res) => {
         success: true,
         data,
     });
+});
+
+// Public: cancellation rules shown on the website's Cancellation & Refunds page.
+export const getPublicCancellationPolicyContent = asyncHandler(async (_req, res) => {
+    const data = await getPublicCancellationPolicy();
+    return res.json({ success: true, data });
 });
 
 export const getPublicSettingsBootstrap = asyncHandler(async (_req, res) => {

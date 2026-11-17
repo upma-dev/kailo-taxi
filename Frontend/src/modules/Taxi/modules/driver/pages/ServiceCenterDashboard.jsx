@@ -815,7 +815,7 @@ const CollapsibleSection = ({ title, icon: Icon, children, badge }) => {
             <Icon size={18} />
           </div>
           <div className="text-left">
-            <h4 className="font-['Outfit'] text-[15px] font-bold text-slate-900">{title}</h4>
+            <h4 className=" text-[15px] font-bold text-slate-900">{title}</h4>
             {badge && <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{badge}</span>}
           </div>
         </div>
@@ -2468,7 +2468,7 @@ const ServiceCenterDashboard = () => {
   return (
     <div
       className="min-h-screen bg-[linear-gradient(180deg,#eefbf5_0%,#f8fffb_34%,#ffffff_100%)] px-4 pb-36 pt-4"
-      style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}
+      style={{ fontFamily: "'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" }}
     >
       <main className="mx-auto max-w-3xl space-y-4">
         {activeTab === 'overview' ? (
@@ -2671,7 +2671,7 @@ const ServiceCenterDashboard = () => {
           <section className="rounded-[28px] border border-slate-200 bg-white p-4 sm:p-6 shadow-sm">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h2 className="font-['Outfit'] text-lg font-bold text-slate-950">
+                <h2 className=" text-lg font-bold text-slate-950">
                   {selectedFingerprintRecord
                     ? selectedFingerprintRecord.displayName || 'Fingerprint Detail'
                     : selectedBooking
@@ -2747,7 +2747,7 @@ const ServiceCenterDashboard = () => {
                              <ShieldCheck size={14} />
                              Fingerprint Detail
                            </div>
-                           <h3 className="mt-3 font-['Outfit'] text-2xl font-bold text-slate-950">
+                           <h3 className="mt-3 text-2xl font-bold text-slate-950">
                              {selectedFingerprintRecord.displayName || selectedFingerprintCode || 'Fingerprint'}
                            </h3>
                            <p className="mt-1 text-sm text-slate-500">
@@ -2859,7 +2859,7 @@ const ServiceCenterDashboard = () => {
                         <div className="p-6 bg-slate-50/50 border-b border-slate-100">
                           <div className="flex flex-wrap items-start justify-between gap-4">
                             <div className="space-y-1">
-                              <h3 className="font-['Outfit'] text-xl font-bold text-slate-900 leading-tight">
+                              <h3 className=" text-xl font-bold text-slate-900 leading-tight">
                                 {selectedBooking.bookingReference || 'Rental Booking'}
                               </h3>
                               <div className="flex flex-wrap items-center gap-2">
@@ -3482,7 +3482,7 @@ const ServiceCenterDashboard = () => {
 
                              <div className="flex-1 min-w-0">
                                <div className="flex items-center justify-between gap-2">
-                                 <h3 className="font-['Outfit'] text-[13px] sm:text-[15px] font-bold text-slate-900 truncate">
+                                 <h3 className=" text-[13px] sm:text-[15px] font-bold text-slate-900 truncate">
                                    {booking.bookingReference || 'Rental Booking'}
                                  </h3>
                                </div>

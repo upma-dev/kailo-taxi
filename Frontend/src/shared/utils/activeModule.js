@@ -3,8 +3,8 @@ export const NATIVE_LAST_ROUTE_KEY = 'native_last_route'
 // When the user was last on NATIVE_LAST_ROUTE_KEY (updated when the app goes to the background).
 export const NATIVE_LAST_ROUTE_AT_KEY = 'native_last_route_at'
 
-export const TAXI_ADMIN_HOME = '/taxi/admin/dashboard'
-export const TAXI_ADMIN_LOGIN = '/taxi/admin/login'
+export const TAXI_ADMIN_HOME = '/admin/dashboard'
+export const TAXI_ADMIN_LOGIN = '/admin/login'
 export const TAXI_USER_HOME = '/taxi/user'
 export const TAXI_DRIVER_HOME = '/taxi/driver/home'
 export const TAXI_OWNER_HOME = '/taxi/owner/dashboard'
@@ -40,7 +40,7 @@ export function getModuleFromPath(pathname = '') {
   const path = String(pathname || '').toLowerCase()
   if (path.startsWith('/taxi/driver') || path.startsWith('/driver')) return 'taxi_driver'
   if (path.startsWith('/taxi/owner') || path.startsWith('/owner')) return 'taxi_owner'
-  if (path.startsWith('/taxi/admin') || path.startsWith('/admin')) return 'admin'
+  if (path.startsWith('/admin') || path.startsWith('/admin')) return 'admin'
   if (path.startsWith('/taxi')) return 'taxi'
   return null
 }
@@ -110,7 +110,7 @@ const getCleanPath = (raw) => {
 const panelHomeForPath = (path) => {
   if (path.startsWith('/taxi/driver') || path.startsWith('/driver')) return TAXI_DRIVER_HOME
   if (path.startsWith('/taxi/owner') || path.startsWith('/owner')) return TAXI_OWNER_HOME
-  if (path.startsWith('/taxi/admin') || path.startsWith('/admin')) return TAXI_ADMIN_HOME
+  if (path.startsWith('/admin') || path.startsWith('/admin')) return TAXI_ADMIN_HOME
   if (path.startsWith('/taxi')) return TAXI_USER_HOME
   return ''
 }
@@ -147,7 +147,7 @@ export function resolveCurrentAppHomeRoute(candidatePath = '') {
         if (isRoleAuthenticated('owner')) return TAXI_OWNER_HOME
         return isAuthPath ? storedRoute : '/taxi/owner/login'
       }
-      if (storedRoute.startsWith('/taxi/admin') || storedRoute.startsWith('/admin')) {
+      if (storedRoute.startsWith('/admin') || storedRoute.startsWith('/admin')) {
         return isRoleAuthenticated('admin') ? TAXI_ADMIN_HOME : TAXI_ADMIN_LOGIN
       }
       if (storedRoute.startsWith('/taxi')) {

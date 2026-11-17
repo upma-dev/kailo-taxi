@@ -115,7 +115,7 @@ const WithdrawalRequestOwnerDetail = () => {
           module="Owner Wallet"
           page="Withdrawal Requests"
           title="Withdrawal Details"
-          backto="/taxi/admin/owners/wallet/withdrawals"
+          backto="/admin/owners/wallet/withdrawals"
         />
 
         <div className="mt-6">

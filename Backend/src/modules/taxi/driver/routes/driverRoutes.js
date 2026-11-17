@@ -1,6 +1,10 @@
 import { Router } from "express";
 import { asyncHandler } from "../../../../utils/asyncHandler.js";
 import { authenticate } from "../../middlewares/authMiddleware.js";
+import { getGoHome, saveGoHomeLocation, startGoHome, stopGoHome } from "../controllers/goHomeController.js";
+import { getReturnTrip, startReturnTrip, stopReturnTrip } from "../controllers/returnTripController.js";
+import { getMyReferralList } from "../../admin/controllers/referralReportController.js";
+import { driverBuySubscription, driverGetSubscriptions } from "../../admin/controllers/subscriptionManageController.js";
 import {
   addDriverEmergencyContact,
   completeOnboarding,
@@ -33,7 +37,6 @@ import {
   getDriverEarningsFilter,
   getPendingDriverDispatch,
   createBusDriverReservation,
-  updateBusDriverSchedules,
   getCurrentDriver,
   getBusDriverSeatLayout,
   listBusDriverBookings,
@@ -116,7 +119,7 @@ driverRouter.get(
 );
 driverRouter.patch(
   "/me",
-  authenticate(["driver", "owner"]),
+  authenticate(["driver", "owner", "bus_driver"]),
   asyncHandler(updateCurrentDriver),
 );
 driverRouter.get(
@@ -133,11 +136,6 @@ driverRouter.post(
   "/bus/reservations",
   authenticate(["bus_driver"]),
   asyncHandler(createBusDriverReservation),
-);
-driverRouter.patch(
-  "/bus/schedules",
-  authenticate(["bus_driver"]),
-  asyncHandler(updateBusDriverSchedules),
 );
 driverRouter.delete(
   "/me",
@@ -486,6 +484,16 @@ driverRouter.patch(
   authenticate(["driver"]),
   asyncHandler(updateDriverLocation),
 );
+driverRouter.get("/go-home", authenticate(["driver"]), asyncHandler(getGoHome));
+driverRouter.put("/go-home/home", authenticate(["driver"]), asyncHandler(saveGoHomeLocation));
+driverRouter.post("/go-home/start", authenticate(["driver"]), asyncHandler(startGoHome));
+driverRouter.post("/go-home/stop", authenticate(["driver"]), asyncHandler(stopGoHome));
+driverRouter.get("/return-trip", authenticate(["driver"]), asyncHandler(getReturnTrip));
+driverRouter.get("/referrals/me", authenticate(["driver"]), asyncHandler(getMyReferralList("driver")));
+driverRouter.get("/subscriptions", authenticate(["driver"]), asyncHandler(driverGetSubscriptions));
+driverRouter.post("/subscriptions/purchase", authenticate(["driver"]), asyncHandler(driverBuySubscription));
+driverRouter.post("/return-trip/start", authenticate(["driver"]), asyncHandler(startReturnTrip));
+driverRouter.post("/return-trip/stop", authenticate(["driver"]), asyncHandler(stopReturnTrip));
 driverRouter.get(
   "/earnings",
   authenticate(["driver", "owner"]),

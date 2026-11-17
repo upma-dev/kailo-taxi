@@ -43,7 +43,7 @@ const OwnerPasswordUpdate = () => {
       const response = await adminService.updateOwner(id, formData);
 
       if (response.success) {
-        navigate('/taxi/admin/owners');
+        navigate('/admin/owners');
         return;
       }
 
@@ -58,7 +58,7 @@ const OwnerPasswordUpdate = () => {
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-gray-950">
       <div className="p-6 lg:p-8">
-        <AdminPageHeader module="Owner Management" page="Owners" title="Update Owner Password" backto="/taxi/admin/owners" />
+        <AdminPageHeader module="Owner Management" page="Owners" title="Update Owner Password" backto="/admin/owners" />
 
         <div className="mt-6">
           <form

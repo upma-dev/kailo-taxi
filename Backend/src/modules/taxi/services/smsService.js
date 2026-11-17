@@ -203,13 +203,17 @@ export const sendOtpSms = async ({ phone, otp, purpose = 'otp' }) => {
 
   const digits = String(phone || '').replace(/\D/g, '');
   const msisdn = digits.startsWith('91') ? digits : `91${digits}`;
-  const apiKey = (env.sms?.indiaHub?.apiKey || process.env.SMS_INDIA_HUB_API_KEY || 'a1c4cde49bf4444fa858a7c631c7eaa6').trim();
+  // The API key must come from .env (SMS_INDIA_HUB_API_KEY); it is never kept in the code.
+  const apiKey = (env.sms?.indiaHub?.apiKey || process.env.SMS_INDIA_HUB_API_KEY || '').trim();
+  if (!apiKey) {
+    throw new Error('SMS_INDIA_HUB_API_KEY is not set');
+  }
   const senderId = (env.sms?.indiaHub?.senderId || process.env.SMS_INDIA_HUB_SENDER_ID || 'BGADEC').trim();
   const peId = (env.sms?.indiaHub?.peId || process.env.SMS_INDIA_HUB_PE_ID || '1001164203633432409').trim();
   const templateId = (env.sms?.indiaHub?.dltTemplateId || process.env.SMS_INDIA_HUB_DLT_TEMPLATE_ID || '1007282516644508833').trim();
   const message = `Welcome to the Eqosy powered by Appzeto.Your OTP for registration is ${otp}.BGADEC`;
 
-  console.log(`[SMS] Dispatching live SMS OTP ${otp} to ${msisdn} via SMS India Hub...`);
+  console.log(`[SMS] Sending OTP to ******${msisdn.slice(-4)} via SMS India Hub...`);
 
   // Primary: GET request on /api/mt/SendSMS (exact method as user sign in)
   const sendUrl = new URL('http://cloud.smsindiahub.in/api/mt/SendSMS');

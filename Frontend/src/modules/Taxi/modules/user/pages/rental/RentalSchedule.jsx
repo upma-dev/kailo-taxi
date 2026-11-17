@@ -213,7 +213,7 @@ const RentalSchedule = () => {
   const { vehicle, duration, selectedPackage, serviceLocation } = location.state || {};
 
   if (!vehicle) {
-    navigate('/rental');
+    navigate('/taxi/user/rental');
     return null;
   }
 
@@ -470,7 +470,7 @@ const RentalSchedule = () => {
           whileTap={{ scale: 0.98 }}
           disabled={!isValid}
           onClick={() =>
-            navigate('/rental/kyc', {
+            navigate('/taxi/user/rental/kyc', {
               state: {
                 vehicle,
                 duration,

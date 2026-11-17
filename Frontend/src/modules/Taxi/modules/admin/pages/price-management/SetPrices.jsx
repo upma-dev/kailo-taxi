@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import FarePreview from './FarePreview';
+import FarePreview, { computeFarePreview } from './FarePreview';
 import { 
   Plus, 
   Search, 
@@ -358,7 +358,7 @@ const SetPrices = ({ mode }) => {
           }
         }
 
-        navigate('/taxi/admin/pricing/set-price');
+        navigate('/admin/pricing/set-price');
         fetchInitialData();
         return;
       }
@@ -383,7 +383,7 @@ const SetPrices = ({ mode }) => {
       });
       const data = await res.json();
       if (data.success) {
-        navigate('/taxi/admin/pricing/set-price');
+        navigate('/admin/pricing/set-price');
         fetchInitialData();
       } else {
         alert(data.message || "Failed to save");
@@ -436,7 +436,7 @@ const SetPrices = ({ mode }) => {
                     <button className="flex items-center gap-2 px-6 py-2 bg-[#F37048] text-white rounded text-sm font-bold shadow-sm">
                       <Filter size={16} /> Filters
                     </button>
-                    <button onClick={() => navigate('/taxi/admin/pricing/set-price/create')} className="flex items-center gap-2 px-6 py-2 bg-[#44516F] text-white rounded text-sm font-bold shadow-sm">
+                    <button onClick={() => navigate('/admin/pricing/set-price/create')} className="flex items-center gap-2 px-6 py-2 bg-[#44516F] text-white rounded text-sm font-bold shadow-sm">
                       <Plus size={18} /> Add Set Price
                     </button>
                   </div>
@@ -449,23 +449,32 @@ const SetPrices = ({ mode }) => {
                         <th className="px-8 py-5">Zone</th>
                         <th className="px-8 py-5">Transport Type</th>
                         <th className="px-8 py-5">Vehicle Type</th>
+                        <th className="px-8 py-5">Ride fare (2 / 5 / 10 km)</th>
                         <th className="px-8 py-5">Status</th>
                         <th className="px-8 py-5 text-right pr-12">Action</th>
                      </tr>
                    </thead>
                    <tbody className="divide-y divide-gray-50">
                     {loading && prizes.length === 0 ? (
-                       <tr><td colSpan="5" className="py-24 text-center text-slate-300 font-bold uppercase tracking-widest text-xs animate-pulse">Syncing Price Matrix...</td></tr>
+                       <tr><td colSpan="6" className="py-24 text-center text-slate-300 font-bold uppercase tracking-widest text-xs animate-pulse">Syncing Price Matrix...</td></tr>
                     ) : filteredPrizes.length === 0 ? (
-                       <tr><td colSpan="5" className="py-24 text-center text-slate-400 italic">No price rules configured.</td></tr>
+                       <tr><td colSpan="6" className="py-24 text-center text-slate-400 italic">No price rules configured.</td></tr>
                     ) : (
                       filteredPrizes.map((prize) => (
                         <tr key={prize.id || prize._id} className="hover:bg-slate-50/50 transition-colors">
                           <td className="px-8 py-6 text-sm font-semibold text-slate-700">{prize.zone_name || 'India'}</td>
                           <td className="px-8 py-6 text-sm text-slate-600 font-medium">
-                            {prize.transport_type === 'both' ? 'All' : (prize.transport_type === 'taxi' ? 'Ride Hailing' : (prize.transport_type || 'All'))}
+                            {prize.transport_type === 'both' ? 'Ride + Parcel' : (prize.transport_type === 'taxi' ? 'Ride' : (prize.transport_type === 'delivery' ? 'Parcel' : (prize.transport_type || 'All')))}
                           </td>
                           <td className="px-8 py-6 text-sm text-slate-800 font-bold">{prize.vehicle_type_name || 'Premium Car'}</td>
+                          <td className="px-8 py-6 text-xs font-semibold text-slate-600">
+                            {/* Same maths as the live fare example in the price form: what a rider pays for a short, medium and longer trip. */}
+                            {(() => {
+                              // The short list rows carry no prices; the full rule (same id) has them.
+                              const rule = prizesFull.find((item) => String(item.id || item._id) === String(prize.id || prize._id)) || prize;
+                              return [2, 5, 10].map((km) => `Rs ${computeFarePreview(rule, { distanceKm: km, rideMinutes: km * 2.2, waitingMinutes: 0, surgeOn: false }).rideFare}`).join('  /  ');
+                            })()}
+                          </td>
                           <td className="px-8 py-6">
                              <StatusToggle active={Number(prize.active) === 1} onToggle={async () => {
                                try {
@@ -480,24 +489,24 @@ const SetPrices = ({ mode }) => {
                           </td>
                           <td className="px-8 py-6 text-right pr-12">
                              <div className="flex items-center justify-end gap-2">
-                                <button onClick={() => navigate(`/taxi/admin/pricing/set-price/edit/${prize.id || prize._id}`)} className="w-8 h-8 flex items-center justify-center bg-[#FFF7ED] text-[#F97316] rounded transition-colors hover:bg-orange-100"><Edit2 size={14} /></button>
+                                <button onClick={() => navigate(`/admin/pricing/set-price/edit/${prize.id || prize._id}`)} className="w-8 h-8 flex items-center justify-center bg-[#FFF7ED] text-[#F97316] rounded transition-colors hover:bg-orange-100"><Edit2 size={14} /></button>
                                  <button 
                                    title="set package prices"
-                                   onClick={() => navigate('/taxi/admin/pricing/package-pricing')}
+                                   onClick={() => navigate('/admin/pricing/package-pricing')}
                                    className="w-8 h-8 flex items-center justify-center bg-[#F0FDFA] text-[#14B8A6] rounded transition-colors hover:bg-emerald-100"
                                  >
                                     <Gift size={14} />
                                  </button>
                                  <button 
                                    title="Surge"
-                                   onClick={() => navigate(`/taxi/admin/pricing/set-price/surge/${prize.id || prize._id}`)}
+                                   onClick={() => navigate(`/admin/pricing/set-price/surge/${prize.id || prize._id}`)}
                                    className="w-8 h-8 flex items-center justify-center bg-[#FEF2F2] text-[#EF4444] rounded transition-colors hover:bg-red-100"
                                  >
                                     <Zap size={14} />
                                  </button>
                                  <button 
                                    title="driver incentive"
-                                   onClick={() => navigate(`/taxi/admin/pricing/set-price/incentive/${prize.id || prize._id}`)}
+                                   onClick={() => navigate(`/admin/pricing/set-price/incentive/${prize.id || prize._id}`)}
                                    className="w-8 h-8 flex items-center justify-center bg-[#EEF2FF] text-[#6366F1] rounded transition-colors hover:bg-indigo-100"
                                  >
                                     <Cone size={14} />
@@ -521,7 +530,7 @@ const SetPrices = ({ mode }) => {
             <div className="flex items-center justify-between border-b border-gray-100 pb-3 mb-8">
                <h1 className="text-sm font-bold text-[#1E293B] uppercase tracking-[0.15em]">{mode === 'edit' ? 'EDIT' : 'CREATE'}</h1>
                <div className="flex items-center gap-1.5 text-[11px] text-slate-400 font-medium">
-                  <span className="hover:text-slate-600 transition-colors cursor-pointer" onClick={() => navigate('/taxi/admin/pricing/set-price')}>Set Prices</span>
+                  <span className="hover:text-slate-600 transition-colors cursor-pointer" onClick={() => navigate('/admin/pricing/set-price')}>Set Prices</span>
                   <ChevronRight size={10} className="text-slate-300" />
                   <span className="text-slate-800 font-bold">{mode === 'edit' ? 'Edit' : 'Create'}</span>
                </div>
@@ -559,11 +568,17 @@ const SetPrices = ({ mode }) => {
                             <select required className={inputClass + " appearance-none cursor-pointer"} value={formData.transport_type} onChange={e => setFormData(p=>({...p, transport_type: e.target.value}))}>
                                <option value="">Select Transport Type</option>
                                {transportTypeOptions.map(t => (
-                                 <option key={t.id || t._id} value={t.name}>{t.display_name}</option>
+                                 <option key={t.id || t._id} value={t.name}>
+                                   {({ taxi: 'Ride', delivery: 'Parcel', both: 'Ride + Parcel (same price for both)', pooling: 'Car Pooling' })[String(t.name).toLowerCase()] || t.display_name}
+                                 </option>
                                ))}
                             </select>
                            <ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                         </div>
+                        <p className="mt-2 text-[11px] leading-snug text-slate-400">
+                          Ride bookings use the Ride price and parcel bookings use the Parcel price. A vehicle that does both (like a bike) needs one of each.
+                          &ldquo;Ride + Parcel&rdquo; gives one price for both.
+                        </p>
                      </div>
                      <div>
                         <label className={labelClass}>Vehicle Type <span className="text-rose-500">*</span></label>

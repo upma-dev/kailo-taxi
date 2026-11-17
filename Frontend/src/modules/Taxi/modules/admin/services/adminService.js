@@ -118,6 +118,10 @@ export const adminService = {
   updateOwnerPayout: (ownerId, data) => api.patch(`/admin/owners/${ownerId}/payout`, data),
 
   getReferralDashboard: () => api.get('/admin/referral/dashboard'),
+  // Everyone who joined with a referral code (kind: 'user' | 'driver'), with referrer and reward status.
+  listReferrals: (params = {}) => api.get('/admin/referrals/list', { params }),
+  // One user's / driver's referrals: who referred them and whom they referred.
+  getReferralPeople: (kind, id) => api.get(`/admin/referrals/people/${kind}/${id}`),
 
   /**
    * Subscription Management
@@ -129,6 +133,11 @@ export const adminService = {
   getUserSubscriptionPlans: () => api.get('/admin/user-subscriptions/plans/list'),
   createUserSubscriptionPlan: (planData) => api.post('/admin/user-subscriptions/plans/create', planData),
   getUserSubscriptionsByUserId: (id) => api.get(`/admin/users/${id}/subscriptions`),
+  // Edit / switch on-off / delete a user or driver plan.
+  updateSubscriptionPlan: (id, data) => api.patch(`/admin/subscription-plans/${id}`, data),
+  deleteSubscriptionPlan: (id) => api.delete(`/admin/subscription-plans/${id}`),
+  // A driver's plan history (Driver details -> Subscription).
+  getDriverSubscriptionsById: (id) => api.get(`/admin/drivers/${id}/subscriptions`),
   
   /**
    * Common / Configuration Data
@@ -241,6 +250,7 @@ export const adminService = {
   getPromotionsBootstrap: () => api.get('/admin/promotions/bootstrap'),
   getNotifications: () => api.get('/admin/notifications'),
   sendNotification: (data) => api.post('/admin/notifications/send', data),
+  updateNotification: (id, data) => api.patch(`/admin/notifications/${id}`, data),
   deleteNotification: (id) => api.delete(`/admin/notifications/${id}`),
   getBanners: () => api.get('/admin/banners'),
 
@@ -299,6 +309,7 @@ export const adminService = {
    * Languages Management (Master)
    */
   getLanguages: (params) => api.get('/admin/languages', { params }),
+  getAvailableLanguages: () => api.get('/admin/languages/available'),
   createLanguage: (data) => api.post('/admin/languages', data),
   getLanguage: (id) => api.get(`/admin/languages/${id}`),
   updateLanguage: (id, data) => api.patch(`/admin/languages/${id}`, data),
@@ -366,14 +377,4 @@ export const adminService = {
   getMailSettings: () => api.get('/admin/integration-settings/mail'),
   updateMailSettings: (data) => api.patch('/admin/integration-settings/mail', data),
 
-  /**
-   * Onboarding Screens Management
-   */
-  getOnboardingScreens: (role = 'user') => {
-    const path = role === 'user' ? '/on-boarding' : `/on-boarding-${role}`;
-    return api.get(path);
-  },
-  createOnboardingScreen: (payload) => api.post('/on-boarding', payload),
-  updateOnboardingScreen: (id, payload) => api.patch(`/on-boarding/${id}`, payload),
-  deleteOnboardingScreen: (id) => api.delete(`/on-boarding/${id}`),
 };

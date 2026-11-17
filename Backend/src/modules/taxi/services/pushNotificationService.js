@@ -20,7 +20,11 @@ const chunk = (items, size) => {
   return groups;
 };
 
-const collectAudienceTargets = async ({ sendTo, serviceLocationId }) => {
+const collectAudienceTargets = async ({ sendTo, serviceLocationId: rawServiceLocationId }) => {
+  // "All zones" is stored as the text 'all' (or nothing). That is a broadcast, not an id to filter on;
+  // using it in a query would fail with an invalid ObjectId.
+  const serviceLocationId =
+    !rawServiceLocationId || String(rawServiceLocationId).toLowerCase() === 'all' ? null : rawServiceLocationId;
   const includeUsers = sendTo === 'all' || sendTo === 'users';
   const includeDrivers = sendTo === 'all' || sendTo === 'drivers';
   const targets = [];

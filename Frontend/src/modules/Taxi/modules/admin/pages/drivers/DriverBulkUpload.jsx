@@ -121,7 +121,7 @@ const DriverBulkUpload = () => {
           <h1 className="text-xl font-semibold text-gray-900">Bulk Upload</h1>
           <button
             type="button"
-            onClick={() => navigate('/taxi/admin/drivers')}
+            onClick={() => navigate('/admin/drivers')}
             className="flex items-center gap-2 px-4 py-2 text-sm text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
           >
             <ArrowLeft size={16} /> Back

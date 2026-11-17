@@ -12,6 +12,7 @@ import {
   Luggage,
   Plus,
   Save,
+  ShieldCheck,
   Trash2,
   Users,
 } from 'lucide-react';
@@ -229,6 +230,11 @@ const buildDefaultForm = () => {
       label: 'Advance booking payment',
       notes: '',
     },
+    safetyMoney: {
+      enabled: false,
+      amount: 0,
+      notes: '',
+    },
     blueprint: null,
     pricing: normalizePricing(),
     active: true,
@@ -359,6 +365,11 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
                 label: selected.advancePayment?.label || 'Advance booking payment',
                 notes: selected.advancePayment?.notes || '',
               },
+              safetyMoney: {
+                enabled: Boolean(selected.safetyMoney?.enabled),
+                amount: Number(selected.safetyMoney?.amount ?? 0),
+                notes: selected.safetyMoney?.notes || '',
+              },
               blueprint: selected.blueprint?.lowerDeck?.length ? clone(selected.blueprint) : null,
               pricing: normalizePricing(selected.pricing),
               active: selected.active !== false,
@@ -399,6 +410,16 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
       advancePayment: {
         ...current.advancePayment,
         paymentMode: 'fixed',
+        [field]: value,
+      },
+    }));
+  };
+
+  const updateSafetyMoney = (field, value) => {
+    setFormData((current) => ({
+      ...current,
+      safetyMoney: {
+        ...current.safetyMoney,
         [field]: value,
       },
     }));
@@ -585,7 +606,7 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
       }
 
       toast.success(id ? 'Rental vehicle updated' : 'Rental vehicle created');
-      navigate('/taxi/admin/pricing/rental-vehicles');
+      navigate('/admin/pricing/rental-vehicles');
     } catch (error) {
       setErrorMessage(error?.response?.data?.message || error.message || 'Could not save rental vehicle.');
     } finally {
@@ -677,7 +698,7 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
             </div>
             <button
               type="button"
-              onClick={() => navigate('/taxi/admin/pricing/rental-vehicles/create')}
+              onClick={() => navigate('/admin/pricing/rental-vehicles/create')}
               className="inline-flex items-center gap-2 rounded-xl bg-[#2e3c78] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#24305f]"
             >
               <Plus size={18} />
@@ -770,14 +791,14 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
                 <div className="flex items-center justify-end gap-2">
                   <button
                     type="button"
-                    onClick={() => navigate(`/taxi/admin/pricing/rental-vehicles/view/${item.id || item._id}`)}
+                    onClick={() => navigate(`/admin/pricing/rental-vehicles/view/${item.id || item._id}`)}
                     className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
                   >
                     View details
                   </button>
                   <button
                     type="button"
-                    onClick={() => navigate(`/taxi/admin/pricing/rental-vehicles/edit/${item.id || item._id}`)}
+                    onClick={() => navigate(`/admin/pricing/rental-vehicles/edit/${item.id || item._id}`)}
                     className="rounded-xl p-2 text-slate-400 transition hover:bg-blue-50 hover:text-blue-600"
                     title="Edit"
                   >
@@ -818,7 +839,7 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
           <div className="flex items-center gap-3">
             <button
               type="button"
-              onClick={() => navigate('/taxi/admin/pricing/rental-vehicles')}
+              onClick={() => navigate('/admin/pricing/rental-vehicles')}
               className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
             >
               <ArrowLeft size={16} />
@@ -827,7 +848,7 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
             {id ? (
               <button
                 type="button"
-                onClick={() => navigate(`/taxi/admin/pricing/rental-vehicles/edit/${id}`)}
+                onClick={() => navigate(`/admin/pricing/rental-vehicles/edit/${id}`)}
                 className="inline-flex items-center gap-2 rounded-xl bg-[#2e3c78] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#24305f]"
               >
                 <Edit2 size={16} />
@@ -964,7 +985,7 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
         </div>
         <button
           type="button"
-          onClick={() => navigate('/taxi/admin/pricing/rental-vehicles')}
+          onClick={() => navigate('/admin/pricing/rental-vehicles')}
           className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
         >
           <ArrowLeft size={16} />
@@ -1342,6 +1363,57 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
                 </div>
               ) : null}
             </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck size={16} className="text-slate-400" />
+                    <label className="text-sm font-bold text-slate-900">Safety Money (refundable)</label>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Gives the rider a second option at booking: pay this refundable deposit instead of the advance. When the ride ends the final bill is deducted from it and the balance is refunded to the rider's wallet.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => updateSafetyMoney('enabled', !formData.safetyMoney?.enabled)}
+                  className={`relative h-7 w-14 rounded-full transition-all ${formData.safetyMoney?.enabled ? 'bg-emerald-500' : 'bg-slate-300'}`}
+                  aria-pressed={formData.safetyMoney?.enabled}
+                >
+                  <span className={`absolute top-1 h-5 w-5 rounded-full bg-white transition-all ${formData.safetyMoney?.enabled ? 'left-8' : 'left-1'}`} />
+                </button>
+              </div>
+
+              {formData.safetyMoney?.enabled ? (
+                <div className="mt-4 space-y-4 rounded-2xl border border-slate-100 bg-slate-50/80 p-4">
+                  <div>
+                    <label className={labelClass}>Safety Money Amount</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={formData.safetyMoney?.amount ?? 0}
+                      onChange={(event) => updateSafetyMoney('amount', Number(event.target.value || 0))}
+                      className={inputClass}
+                      placeholder="500"
+                    />
+                    <p className="mt-2 text-xs text-slate-500">
+                      Keep it higher than the usual bill so the deposit covers the whole ride (the rider pays any extra at the end).
+                    </p>
+                  </div>
+                  <div>
+                    <label className={labelClass}>Admin Note</label>
+                    <textarea
+                      rows="2"
+                      value={formData.safetyMoney?.notes || ''}
+                      onChange={(event) => updateSafetyMoney('notes', event.target.value)}
+                      className={inputClass}
+                      placeholder="Optional note about the safety money for this vehicle."
+                    />
+                  </div>
+                </div>
+              ) : null}
+            </div>
           </div>
 
           <div className="lg:col-span-2">
@@ -1526,7 +1598,7 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
             </button>
             <button
               type="button"
-              onClick={() => navigate('/taxi/admin/pricing/rental-vehicles')}
+              onClick={() => navigate('/admin/pricing/rental-vehicles')}
               className="text-sm font-medium text-slate-500 transition hover:text-slate-700"
             >
               Cancel

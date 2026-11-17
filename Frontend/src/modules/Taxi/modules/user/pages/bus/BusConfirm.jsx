@@ -70,7 +70,7 @@ const BusConfirm = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 max-w-lg mx-auto font-sans pb-32">
+    <div className="min-h-screen bg-slate-50 max-w-lg mx-auto font-booking pb-32">
       <div className="bg-white px-5 pt-10 pb-4 sticky top-0 z-20 border-b border-slate-100 shadow-sm">
         <div className="flex items-center justify-between">
           <h1 className="text-lg font-bold text-slate-900">E-Ticket</h1>
@@ -85,7 +85,7 @@ const BusConfirm = () => {
           initial={{ scale: 0, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ type: 'spring', damping: 20 }}
-          className="w-16 h-16 bg-slate-900 rounded-full flex items-center justify-center shadow-lg mb-6"
+          className="w-16 h-16 bg-[var(--app-primary,#0F766E)] rounded-full flex items-center justify-center shadow-lg mb-6"
         >
           <CheckCircle2 size={32} className="text-white" />
         </motion.div>
@@ -106,20 +106,20 @@ const BusConfirm = () => {
           transition={{ delay: 0.2 }}
           className="w-full bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden"
         >
-          <div className="p-6 bg-slate-900 text-white relative">
+          <div className="p-6 bg-gradient-to-br from-[var(--app-primary,#0F766E)] to-[#0B5F58] text-white relative">
             <div className="flex justify-between items-center mb-8">
               <div>
-                <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider mb-1">PNR Number</p>
+                <p className="text-[10px] font-bold uppercase text-white/75 tracking-wider mb-1">PNR Number</p>
                 <p className="text-lg font-bold tracking-widest">{booking.bookingCode}</p>
               </div>
                 <div className="text-right">
-                  <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider mb-1">Seat(s)</p>
+                  <p className="text-[10px] font-bold uppercase text-white/75 tracking-wider mb-1">Seat(s)</p>
                   <p className="text-lg font-bold">{(booking.seatLabels || booking.seatIds || []).join(', ')}</p>
                 </div>
               </div>
 
               <h3 className="text-xl font-bold mb-1">{booking.bus?.operator}</h3>
-            <p className="text-xs font-medium text-slate-400">
+            <p className="text-xs font-medium text-white/75">
               {booking.bus?.type}
               {booking.bus?.registrationNumber ? ` • ${formatBusRegistrationNumber(booking.bus.registrationNumber)}` : ''}
             </p>
@@ -146,9 +146,9 @@ const BusConfirm = () => {
               <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
                 <div className="flex items-center gap-2 text-slate-500">
                   <BusFront size={15} />
-                  <p className="text-[10px] font-black uppercase tracking-[0.18em]">Bus number</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wider">Bus number</p>
                 </div>
-                <p className="mt-2 text-sm font-black text-slate-900">
+                <p className="mt-2 text-sm font-bold text-slate-900">
                   {booking.bus?.registrationNumber
                     ? formatBusRegistrationNumber(booking.bus.registrationNumber)
                     : 'Will be shared soon'}
@@ -157,25 +157,25 @@ const BusConfirm = () => {
               <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
                 <div className="flex items-center gap-2 text-slate-500">
                   <Phone size={15} />
-                  <p className="text-[10px] font-black uppercase tracking-[0.18em]">Driver contact</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wider">Driver contact</p>
                 </div>
-                <p className="mt-2 text-sm font-black text-slate-900">{booking.bus?.driverPhone || booking.bus?.driverName || 'Assigned before departure'}</p>
+                <p className="mt-2 text-sm font-bold text-slate-900">{booking.bus?.driverPhone || booking.bus?.driverName || 'Assigned before departure'}</p>
               </div>
             </div>
 
             <div className="rounded-2xl border border-slate-100 bg-slate-50 p-5">
               <div className="flex items-center gap-2 text-slate-500">
                 <Route size={15} />
-                <p className="text-[10px] font-black uppercase tracking-[0.18em]">Pickup & drop</p>
+                <p className="text-[10px] font-bold uppercase tracking-wider">Pickup & drop</p>
               </div>
               <div className="mt-3 space-y-3">
                 <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-600">Pickup</p>
-                  <p className="mt-1 text-sm font-black text-slate-900">{booking.bus?.pickupLocation || booking.bus?.fromCity || fromCity}</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600">Pickup</p>
+                  <p className="mt-1 text-sm font-bold text-slate-900">{booking.bus?.pickupLocation || booking.bus?.fromCity || fromCity}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-rose-600">Drop</p>
-                  <p className="mt-1 text-sm font-black text-slate-900">{booking.bus?.dropLocation || booking.bus?.toCity || toCity}</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-rose-600">Drop</p>
+                  <p className="mt-1 text-sm font-bold text-slate-900">{booking.bus?.dropLocation || booking.bus?.toCity || toCity}</p>
                 </div>
               </div>
             </div>
@@ -208,7 +208,7 @@ const BusConfirm = () => {
         <motion.button
           whileTap={{ scale: 0.98 }}
           onClick={() => navigate(`${routePrefix}` || '/')}
-          className="flex-[2] bg-slate-900 text-white py-4 rounded-2xl text-sm font-bold flex items-center justify-center gap-2 shadow-lg"
+          className="flex-[2] bg-[var(--app-primary,#0F766E)] text-white py-4 rounded-2xl text-sm font-bold flex items-center justify-center gap-2 shadow-lg"
         >
           <Home size={18} /> Home
         </motion.button>

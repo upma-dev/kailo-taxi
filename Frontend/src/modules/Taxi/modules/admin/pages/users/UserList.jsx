@@ -105,7 +105,7 @@ const UserList = () => {
     }
   };
 
-  const handleAddUser = () => { navigate('/taxi/admin/users/create'); };
+  const handleAddUser = () => { navigate('/admin/users/create'); };
   const handleEditUser = (user) => { setEditingUser(user); setIsModalOpen(true); };
 
   const handleDeleteUser = async (userId) => {
@@ -263,7 +263,7 @@ const UserList = () => {
                       <div>
                         <button
                           type="button"
-                          onClick={() => navigate(`/taxi/admin/users/${user.id}`)}
+                          onClick={() => navigate(`/admin/users/${user.id}`)}
                           className="text-left text-sm font-medium text-gray-900 hover:text-indigo-600 hover:underline transition-colors"
                         >
                           {user.name}
@@ -332,7 +332,7 @@ const UserList = () => {
               style={{ top: menuPosition.top, left: menuPosition.left }}
               onClick={(e) => e.stopPropagation()}
             >
-              <button onClick={() => navigate(`/taxi/admin/users/${activeMenu}`)} className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2">
+              <button onClick={() => navigate(`/admin/users/${activeMenu}`)} className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2">
                 <UserCheck size={13} className="text-emerald-500" /> View Profile
               </button>
               {canWrite && (

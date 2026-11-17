@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Car, ArrowLeft, X, Banknote, CreditCard, ChevronDown, Clock3, LoaderCircle, Eye, TicketPercent, CheckCircle2, AlertTriangle, Calendar, User, Clock, Users, Package, Navigation } from 'lucide-react';
 import { GoogleMap, MarkerF, OverlayView, PolylineF } from '@react-google-maps/api';
+import { fallbackVehicleImage } from '../../components/useVehicleTiles';
 import api from '../../../../shared/api/axiosInstance';
 import { BACKEND_ORIGIN } from '../../../../shared/api/runtimeConfig';
 import { HAS_VALID_GOOGLE_MAPS_KEY, useAppGoogleMapsLoader } from '../../../admin/utils/googleMaps';
@@ -461,10 +462,7 @@ const getVehicleMapIcon = (type) => {
     type?.map_icon ||
     type?.mapIcon ||
     type?.icon ||
-    type?.image ||
     type?.vehicleIconUrl ||
-    type?.preview_image ||
-    type?.previewImage ||
     ''
   ).trim();
   if (customIcon) {
@@ -517,18 +515,10 @@ const getVehicleMapIcon = (type) => {
 };
 
 const getVehiclePreviewImage = (type) => {
-  const previewImage = String(
-    type?.image ||
-    type?.preview_image ||
-    type?.previewImage ||
-    type?.map_icon ||
-    type?.icon ||
-    type?.vehicleIconUrl ||
-    ''
-  ).trim();
-  // Only the image the admin uploaded for this vehicle type is shown in the ride list. No bundled
-  // stock pictures: when the admin has not set one, a plain icon is drawn instead (see VehicleThumb).
-  return previewImage ? resolveAssetUrl(previewImage) : '';
+  // The vehicle's Preview Image is what riders see in the list. The map icon is for the map only, so it is
+  // not used here; without a Preview Image the built-in picture for that kind of vehicle is shown.
+  const previewImage = String(type?.image || type?.preview_image || type?.previewImage || '').trim();
+  return previewImage ? resolveAssetUrl(previewImage) : fallbackVehicleImage(type);
 };
 
 // The admin's vehicle image, or a neutral icon when none was uploaded or it fails to load.
@@ -736,7 +726,10 @@ const findBestPricingRule = ({ rules, vehicleTypeId, serviceLocationId, transpor
   }));
 
   if (!candidates.length) {
-    const genericCandidates = sortPricingRules((Array.isArray(rules) ? rules : []).filter((rule) => isActiveRidePricingRule(rule)));
+    // Any other ride price will do as a last resort, but never a Parcel price.
+    const genericCandidates = sortPricingRules((Array.isArray(rules) ? rules : []).filter((rule) => (
+      isActiveRidePricingRule(rule) && String(rule?.transport_type || 'taxi').trim().toLowerCase() !== 'delivery'
+    )));
     return genericCandidates[0] || null;
   }
 
@@ -1987,7 +1980,7 @@ const SelectVehicle = () => {
         vehicle: selectedVehicle,
         vehicleTypeId: selectedVehicle.vehicleTypeId,
         vehicleIconType: selectedVehicle.iconType,
-        vehicleIconUrl: selectedVehicle.vehicleIconUrl || selectedVehicle.icon,
+        vehicleIconUrl: selectedVehicle.vehicleIconUrl,
         paymentMethod,
         fare: finalFare,
         baseFare,
@@ -2076,7 +2069,7 @@ Press Cancel to go back and choose a nearer drop, or OK to book anyway.`,
   };
 
   return (
-    <div className="h-[100dvh] bg-slate-50 max-w-lg mx-auto relative font-['Plus_Jakarta_Sans'] overflow-hidden">
+    <div className="h-[100dvh] bg-slate-50 max-w-lg mx-auto relative overflow-hidden">
       <div className="absolute inset-0 w-full bg-gray-200">
         <VehicleMapPreview
           center={pickupPosition}
@@ -2234,7 +2227,7 @@ Press Cancel to go back and choose a nearer drop, or OK to book anyway.`,
                     isSelected
                       ? 'border-slate-900 bg-slate-100/80 shadow-[0_6px_20px_rgba(15,23,42,0.12)] ring-1 ring-slate-900/10'
                       : 'border-slate-200/60 bg-white hover:border-slate-300'
-                  } ${!canSelectVehicle ? 'blur-[1.5px] grayscale opacity-70 pointer-events-none' : ''}`}
+                  } ${!canSelectVehicle ? 'opacity-60 pointer-events-none' : ''}`}
                 >
                   <div
                     role={canSelectVehicle ? 'button' : undefined}
@@ -2302,6 +2295,12 @@ Press Cancel to go back and choose a nearer drop, or OK to book anyway.`,
                             )}
                           </div>
 
+                          {isUnavailable && rideMode !== 'schedule' ? (
+                            <p className="mt-1 flex items-center gap-1 text-[11px] font-extrabold text-red-500">
+                              <AlertTriangle size={11} strokeWidth={2.5} />
+                              Vehicle not available near you right now
+                            </p>
+                          ) : (
                           <div className="mt-1 flex items-center gap-2 text-[11px] font-bold flex-wrap">
                             <span className="text-emerald-600 font-extrabold flex items-center gap-1">
                               <Clock size={11} strokeWidth={2.5} />
@@ -2320,7 +2319,8 @@ Press Cancel to go back and choose a nearer drop, or OK to book anyway.`,
                                 </span>
                               </>
                             )}
-                          </div>
+                            </div>
+                          )}
 
                           <p className="mt-0.5 truncate text-[11px] font-medium text-slate-400">
                             {v.sublabel}
@@ -2864,7 +2864,7 @@ Press Cancel to go back and choose a nearer drop, or OK to book anyway.`,
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={{ type: 'spring', damping: 26, stiffness: 320 }}
-              className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white rounded-t-[32px] px-6 pt-4 pb-8 z-[101] font-['Plus_Jakarta_Sans']"
+              className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white rounded-t-[32px] px-6 pt-4 pb-8 z-[101]"
             >
               {/* Drag indicator */}
               <div className="w-12 h-1 bg-slate-200 rounded-full mx-auto mb-6" />

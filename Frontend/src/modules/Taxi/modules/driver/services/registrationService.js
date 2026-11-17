@@ -477,6 +477,8 @@ export const updateDriverDocument = (documentKey, document) =>
     withDriverAuth(),
   );
 
+export const setDriverOffline = () => api.patch("/drivers/offline", {}, withDriverAuth());
+
 export const getDriverIncentives = () =>
   api.get("/drivers/incentives", withDriverAuth());
 
@@ -485,3 +487,29 @@ export const claimDriverIncentiveReward = (payload) =>
 
 export const createDriverSupportTicket = (payload) =>
   api.post("/drivers/support/tickets", payload, withDriverAuth());
+
+// ---- Go Home mode ----
+export const getGoHomeState = () => api.get("/drivers/go-home", withDriverAuth());
+
+export const saveGoHomeLocation = (payload) =>
+  api.put("/drivers/go-home/home", payload, withDriverAuth());
+
+export const startGoHome = () => api.post("/drivers/go-home/start", {}, withDriverAuth());
+
+export const stopGoHome = () => api.post("/drivers/go-home/stop", {}, withDriverAuth());
+
+// ---- Outstation Return Trip ----
+export const getReturnTripState = () => api.get("/drivers/return-trip", withDriverAuth());
+
+export const startReturnTrip = () => api.post("/drivers/return-trip/start", {}, withDriverAuth());
+
+export const stopReturnTrip = () => api.post("/drivers/return-trip/stop", {}, withDriverAuth());
+
+// ---- Referrals: everyone who joined with my code, with reward status ----
+export const getMyDriverReferrals = () => api.get("/drivers/referrals/me", withDriverAuth());
+
+// ---- Driver subscription plans ----
+export const getDriverSubscriptions = () => api.get("/drivers/subscriptions", withDriverAuth());
+
+export const buyDriverSubscription = (planId) =>
+  api.post("/drivers/subscriptions/purchase", { planId }, withDriverAuth());

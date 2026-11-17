@@ -3,6 +3,8 @@ import { motion } from 'framer-motion';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Check, Globe, ChevronRight } from 'lucide-react';
 import { useSettings } from '../../../../shared/context/SettingsContext';
+import { LANGUAGES } from '../../../../../../shared/language/languages.js';
+import { getStoredLanguage, setLanguage } from '../../../../../../shared/language/googleTranslate.js';
 import { getLocalDriverToken, getStoredDriverRole } from '../../services/registrationService';
 
 const LanguageSelect = () => {
@@ -10,30 +12,28 @@ const LanguageSelect = () => {
     const location = useLocation();
     const { settings } = useSettings();
     const appName = settings.general?.app_name || 'App';
-    const appLogo = settings.general?.partner_logo || '/kailo-partner-logo.png';
-    const [selectedLang, setSelectedLang] = useState(() => localStorage.getItem('driver_lang') || 'english');
+    const appLogo = settings.general?.logo || settings.customization?.logo || settings.general?.favicon || '';
+    const [selectedLang, setSelectedLang] = useState(() => getStoredLanguage());
     const isAuthenticatedDriver = Boolean(getLocalDriverToken()) && !location.state?.registrationFlow;
     const authenticatedHome =
         String(getStoredDriverRole() || 'driver').toLowerCase() === 'owner'
             ? '/taxi/driver/profile'
             : '/taxi/driver/home';
 
-    const languages = [
-        { id: 'english', label: 'English', sub: 'Standard Experience', native: 'English' },
-        { id: 'hindi', label: 'Hindi', sub: 'मानक अनुभव', native: 'हिन्दी' },
-        { id: 'marathi', label: 'Marathi', sub: 'मानक अनुभव', native: 'मराठी' },
-        { id: 'gujarati', label: 'Gujarati', sub: 'પ્રમાણભૂત અનુભવ', native: 'ગુજરાતી' }
-    ];
+    // Same language list and engine as the rest of the app, so the choice translates every screen.
+    const languages = LANGUAGES.map((l) => ({ id: l.code, label: l.label, native: l.native }));
 
-    const handleConfirm = () => {
-        localStorage.setItem('driver_lang', selectedLang);
+    const handleConfirm = async () => {
+        const picked = LANGUAGES.find((l) => l.code === selectedLang);
+        localStorage.setItem('driver_lang', String(picked?.label || 'English').toLowerCase());
+        await setLanguage(selectedLang);
         navigate(isAuthenticatedDriver ? authenticatedHome : '/taxi/driver/reg-phone', { replace: true });
     };
 
     return (
         <div 
             className="min-h-screen bg-[linear-gradient(180deg,#f6efe4_0%,#fcfaf6_28%,#ffffff_100%)] select-none overflow-x-hidden flex flex-col p-5 pt-8 pb-32"
-            style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}
+            style={{ fontFamily: "'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" }}
         >
             {/* Branding */}
             <div className="mb-6 flex flex-col items-center text-center space-y-4">
@@ -45,7 +45,7 @@ const LanguageSelect = () => {
                     </div>
                 )}
                 <div className="space-y-1">
-                    <h1 className="font-['Outfit'] text-[32px] font-black leading-[1.1] tracking-[-0.04em] text-slate-900">
+                    <h1 className=" text-[32px] font-black leading-[1.1] tracking-[-0.04em] text-slate-900">
                         Select <span className="text-slate-400">Language</span>
                     </h1>
                     <p className="text-[14px] font-bold text-slate-500 opacity-80 max-w-[32ch] mx-auto leading-relaxed">Choose your preferred communication language to get started.</p>
@@ -74,8 +74,8 @@ const LanguageSelect = () => {
                                 <Globe size={20} strokeWidth={2.5} />
                             </div>
                             <div className="leading-tight">
-                                <h4 className={`text-base font-black tracking-tight transition-colors ${selectedLang === lang.id ? 'text-white' : 'text-slate-900'}`}>{lang.label}</h4>
-                                <p className={`text-[11px] font-black uppercase tracking-widest mt-0.5 opacity-60 ${selectedLang === lang.id ? 'text-white' : 'text-slate-400'}`}>{lang.native}</p>
+                                <h4 translate="no" className={`text-base font-black tracking-tight transition-colors ${selectedLang === lang.id ? 'text-white' : 'text-slate-900'}`}>{lang.label}</h4>
+                                <p translate="no" className={`text-[11px] font-black uppercase tracking-widest mt-0.5 opacity-60 ${selectedLang === lang.id ? 'text-white' : 'text-slate-400'}`}>{lang.native}</p>
                             </div>
                         </div>
 

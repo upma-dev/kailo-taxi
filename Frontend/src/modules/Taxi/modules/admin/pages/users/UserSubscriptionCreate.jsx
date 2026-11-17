@@ -55,7 +55,7 @@ const UserSubscriptionCreate = () => {
       };
       const response = await adminService.createUserSubscriptionPlan(payload);
       toast.success(response?.message || 'Customer subscription created');
-      navigate('/taxi/admin/users/subscriptions');
+      navigate('/admin/users/subscriptions');
     } catch (error) {
       toast.error(error?.message || 'Failed to create subscription');
     } finally {
@@ -70,7 +70,7 @@ const UserSubscriptionCreate = () => {
           <div className="mb-2 flex items-center gap-1.5 text-xs text-gray-400">
             <span>Users</span>
             <ChevronRight size={12} />
-            <Link to="/taxi/admin/users/subscriptions" className="hover:text-gray-700">Subscription Management</Link>
+            <Link to="/admin/users/subscriptions" className="hover:text-gray-700">Subscription Management</Link>
             <ChevronRight size={12} />
             <span className="text-gray-700">Create</span>
           </div>
@@ -78,7 +78,7 @@ const UserSubscriptionCreate = () => {
         </div>
         <button
           type="button"
-          onClick={() => navigate('/taxi/admin/users/subscriptions')}
+          onClick={() => navigate('/admin/users/subscriptions')}
           className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700"
         >
           <ArrowLeft size={16} />

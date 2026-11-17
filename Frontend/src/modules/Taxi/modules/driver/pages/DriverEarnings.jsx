@@ -3,14 +3,15 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft,
+  Banknote,
   Calendar,
   ChevronRight,
+  CreditCard,
   Clock,
   Filter,
   IndianRupee,
   MapPin,
   RefreshCw,
-  TrendingUp,
   Wallet,
 } from 'lucide-react';
 import DriverBottomNav from '../../shared/components/DriverBottomNav';
@@ -54,6 +55,8 @@ const DriverEarnings = () => {
       cashEarnings: 0,
     },
     trips: [],
+    fromDate: null,
+    toDate: null,
   });
 
   const fetchEarnings = useCallback(async () => {
@@ -90,6 +93,8 @@ const DriverEarnings = () => {
           cashEarnings: 0,
         },
         trips: Array.isArray(data.trips) ? data.trips : [],
+        fromDate: data.fromDate || null,
+        toDate: data.toDate || null,
       });
     } catch (err) {
       setError(err?.response?.data?.message || err?.message || 'Failed to fetch earnings');
@@ -128,47 +133,47 @@ const DriverEarnings = () => {
   return (
     <div className="min-h-screen bg-[#F8FAFC] pb-28 text-slate-900">
       {/* Header */}
-      <header className="sticky top-0 z-30 bg-slate-900 px-4 py-4 text-white shadow-lg">
+      <header className="sticky top-0 z-30 border-b border-gray-100 bg-white px-4 py-4">
         <div className="mx-auto flex max-w-md items-center justify-between">
           <button
             type="button"
             onClick={() => navigate(-1)}
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition-all"
+            className="flex h-10 w-10 items-center justify-center rounded-2xl border border-gray-100 bg-white shadow-sm"
             aria-label="Back"
           >
             <ArrowLeft size={18} />
           </button>
           <div className="text-center">
-            <h1 className="text-base font-black uppercase tracking-wider text-white">
+            <h1 className="text-lg font-bold text-gray-900">
               {isOwnerPortal ? 'Fleet Earnings' : 'My Earnings'}
             </h1>
-            <p className="text-[11px] font-bold text-slate-400">
-              {isOwnerPortal ? 'Filter & track fleet ride income' : 'Filter & track ride income'}
+            <p className="text-[11px] font-medium uppercase tracking-widest text-gray-400">
+              {isOwnerPortal ? 'Fleet ride income' : 'Ride income'}
             </p>
           </div>
           <button
             type="button"
             onClick={fetchEarnings}
             disabled={loading}
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition-all"
+            className="flex h-10 w-10 items-center justify-center rounded-2xl border border-gray-100 bg-white shadow-sm"
             aria-label="Refresh"
           >
-            <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
+            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
           </button>
         </div>
 
         {/* Filter Pills */}
         <div className="mx-auto mt-4 max-w-md">
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+          <div className="no-scrollbar flex items-center gap-2 overflow-x-auto pb-1">
             {FILTER_OPTIONS.map((opt) => (
               <button
                 key={opt.id}
                 type="button"
                 onClick={() => setPeriod(opt.id)}
-                className={`shrink-0 rounded-xl px-3.5 py-1.5 text-xs font-black transition-all ${
+                className={`shrink-0 rounded-full px-4 py-2 text-xs font-semibold transition-all ${
                   period === opt.id
-                    ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20 scale-105'
-                    : 'bg-white/10 text-slate-300 hover:bg-white/15'
+                    ? 'bg-black text-white'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                 }`}
               >
                 {opt.label}
@@ -186,14 +191,14 @@ const DriverEarnings = () => {
               exit={{ height: 0, opacity: 0 }}
               className="mx-auto mt-3 max-w-md overflow-hidden"
             >
-              <div className="flex items-center gap-2 rounded-2xl bg-white/10 p-2.5 backdrop-blur-md">
-                <Calendar size={16} className="text-emerald-400 shrink-0 ml-1" />
-                <span className="text-xs font-bold text-slate-300 shrink-0">Select Date:</span>
+              <div className="flex items-center gap-2 rounded-2xl border border-gray-100 bg-gray-50 p-2.5">
+                <Calendar size={16} className="ml-1 shrink-0 text-gray-500" />
+                <span className="shrink-0 text-xs font-semibold text-gray-500">Select date</span>
                 <input
                   type="date"
                   value={customDate}
                   onChange={(e) => setCustomDate(e.target.value)}
-                  className="w-full rounded-xl bg-white px-3 py-1.5 text-xs font-black text-slate-900 border-0 focus:outline-none"
+                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-900 focus:outline-none"
                 />
               </div>
             </motion.div>
@@ -206,23 +211,23 @@ const DriverEarnings = () => {
               exit={{ height: 0, opacity: 0 }}
               className="mx-auto mt-3 max-w-md overflow-hidden"
             >
-              <div className="grid grid-cols-2 gap-2 rounded-2xl bg-white/10 p-2.5 backdrop-blur-md">
+              <div className="grid grid-cols-2 gap-2 rounded-2xl border border-gray-100 bg-gray-50 p-2.5">
                 <div>
-                  <label className="block text-[10px] font-black uppercase text-slate-400 mb-1">From Date</label>
+                  <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-gray-400">From</label>
                   <input
                     type="date"
                     value={startDate}
                     onChange={(e) => setStartDate(e.target.value)}
-                    className="w-full rounded-xl bg-white px-2.5 py-1.5 text-xs font-black text-slate-900 border-0 focus:outline-none"
+                    className="w-full rounded-xl border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-900 focus:outline-none"
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-black uppercase text-slate-400 mb-1">To Date</label>
+                  <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-gray-400">To</label>
                   <input
                     type="date"
                     value={endDate}
                     onChange={(e) => setEndDate(e.target.value)}
-                    className="w-full rounded-xl bg-white px-2.5 py-1.5 text-xs font-black text-slate-900 border-0 focus:outline-none"
+                    className="w-full rounded-xl border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-900 focus:outline-none"
                   />
                 </div>
               </div>
@@ -239,64 +244,67 @@ const DriverEarnings = () => {
           </div>
         )}
 
-        {/* Big Earnings Summary Card */}
-        <div className="relative overflow-hidden rounded-[28px] bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-950 p-6 text-white shadow-xl border border-slate-700/50">
-          <div className="absolute right-0 top-0 h-32 w-32 -mr-10 -mt-10 rounded-full bg-emerald-500/10 blur-2xl pointer-events-none" />
-          
-          <div className="flex items-center justify-between">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/20 px-3 py-1 text-[11px] font-black text-emerald-300 border border-emerald-500/30">
-              <TrendingUp size={12} />
-              Net Earnings Summary
-            </span>
-            <span className="text-xs font-bold text-slate-400">
-              {earningsData.summary.totalTrips} {earningsData.summary.totalTrips === 1 ? 'Trip' : 'Trips'}
-            </span>
-          </div>
+        {/* Earnings Summary Card */}
+        {(() => {
+          const summary = earningsData.summary;
+          const onlineAmount = Math.max(0, Number(summary.onlineEarnings || 0));
+          const cashAmount = Math.max(0, Number(summary.cashEarnings || 0));
+          const splitTotal = onlineAmount + cashAmount;
+          const onlinePercent = splitTotal > 0 ? Math.round((onlineAmount / splitTotal) * 100) : 0;
+          const rangeFrom = formatDateDisplay(earningsData.fromDate);
+          const rangeTo = formatDateDisplay(earningsData.toDate);
+          const rangeText = rangeFrom && rangeTo ? (rangeFrom === rangeTo ? rangeFrom : `${rangeFrom} - ${rangeTo}`) : '';
 
-          <div className="mt-4">
-            <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">Total Net Income</p>
-            <h2 className="mt-1 text-3xl font-black tracking-tight text-white">
-              {money(earningsData.summary.totalNetEarnings)}
-            </h2>
-          </div>
-
-          <div className="mt-5 grid grid-cols-2 gap-3 border-t border-white/10 pt-4">
-            <div className="rounded-2xl bg-white/5 p-3">
-              <p className="text-[10px] font-black uppercase text-slate-400">Gross Fare</p>
-              <p className="mt-0.5 text-sm font-black text-emerald-400">{money(earningsData.summary.totalGrossFare)}</p>
-            </div>
-            <div className="rounded-2xl bg-white/5 p-3">
-              <p className="text-[10px] font-black uppercase text-slate-400">Commission</p>
-              <p className="mt-0.5 text-sm font-black text-rose-400">-{money(earningsData.summary.totalCommission)}</p>
-            </div>
-
-            {/* Total Tips Received Section with Online vs Cash Breakdown */}
-            <div className="col-span-2 rounded-2xl bg-white/5 p-3.5 border border-white/10">
-              <div className="flex items-center justify-between">
+          return (
+            <section className="rounded-3xl border border-gray-100 bg-white p-4 shadow-[0_8px_30px_rgba(15,23,42,0.06)]">
+              <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Total Tips Received</p>
-                  <p className="mt-0.5 text-base font-black text-amber-300">+{money(earningsData.summary.totalTips)}</p>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Net income{rangeText ? ` · ${rangeText}` : ''}</p>
+                  <h2 className="mt-0.5 text-3xl font-bold tracking-tight text-gray-900">{money(summary.totalNetEarnings)}</h2>
                 </div>
-                <div className="flex items-center gap-1.5 flex-wrap justify-end">
-                  <span className="inline-flex items-center gap-1 rounded-xl bg-emerald-500/20 px-2.5 py-1 text-[10px] font-black text-emerald-300 border border-emerald-500/30">
-                    💳 Online: {money(earningsData.summary.onlineTips)}
+                <span className="mt-0.5 shrink-0 rounded-full bg-gray-100 px-3 py-1 text-[11px] font-semibold text-gray-600">
+                  {summary.totalTrips} {summary.totalTrips === 1 ? 'trip' : 'trips'}
+                </span>
+              </div>
+
+              {/* Online vs cash split */}
+              <div className="mt-3 flex h-1.5 overflow-hidden rounded-full bg-gray-100">
+                <div className="h-full bg-emerald-500 transition-all" style={{ width: `${onlinePercent}%` }} />
+                <div className="h-full bg-amber-400 transition-all" style={{ width: `${splitTotal > 0 ? 100 - onlinePercent : 0}%` }} />
+              </div>
+
+              <div className="mt-2 divide-y divide-gray-100 text-sm">
+                <div className="flex items-center justify-between py-2">
+                  <span className="text-gray-500">Gross fare</span>
+                  <span className="font-semibold text-gray-900">{money(summary.totalGrossFare)}</span>
+                </div>
+                <div className="flex items-center justify-between py-2">
+                  <span className="text-gray-500">Commission</span>
+                  <span className={`font-semibold ${Number(summary.totalCommission) > 0 ? 'text-rose-600' : 'text-gray-900'}`}>
+                    {Number(summary.totalCommission) > 0 ? '-' : ''}{money(summary.totalCommission)}
                   </span>
-                  <span className="inline-flex items-center gap-1 rounded-xl bg-amber-500/20 px-2.5 py-1 text-[10px] font-black text-amber-300 border border-amber-500/30">
-                    💵 Cash: {money(earningsData.summary.cashTips)}
-                  </span>
+                </div>
+                <div className="flex items-center justify-between py-2">
+                  <span className="flex items-center gap-2 text-gray-500"><span className="h-2 w-2 rounded-full bg-emerald-500" />Online payout</span>
+                  <span className="font-semibold text-emerald-600">{money(summary.onlineEarnings)}</span>
+                </div>
+                <div className="flex items-center justify-between py-2">
+                  <span className="flex items-center gap-2 text-gray-500"><span className="h-2 w-2 rounded-full bg-amber-400" />Cash collected</span>
+                  <span className="font-semibold text-amber-600">{money(summary.cashEarnings)}</span>
+                </div>
+                <div className="flex items-center justify-between py-2">
+                  <div>
+                    <span className="text-gray-500">Tips</span>
+                    <p className="text-[10px] font-medium text-gray-400">
+                      Online {money(summary.onlineTips)} &middot; Cash {money(summary.cashTips)} (by hand)
+                    </p>
+                  </div>
+                  <span className="font-semibold text-amber-700">+{money(summary.totalTips)}</span>
                 </div>
               </div>
-              <p className="mt-2 text-[10px] font-medium text-slate-400 border-t border-white/5 pt-1.5">
-                Note: Cash tips are collected directly by hand and tracked in your profile, but not added to online wallet payout.
-              </p>
-            </div>
-
-            <div className="col-span-2 rounded-2xl bg-white/5 p-3">
-              <p className="text-[10px] font-black uppercase text-slate-400">Online Payout</p>
-              <p className="mt-0.5 text-sm font-black text-blue-300">{money(earningsData.summary.onlineEarnings)}</p>
-            </div>
-          </div>
-        </div>
+            </section>
+          );
+        })()}
 
         {/* Tip Filter Scroller Bar */}
         <div className="flex items-center gap-2 overflow-x-auto py-1 no-scrollbar">
@@ -305,8 +313,8 @@ const DriverEarnings = () => {
             onClick={() => setTipFilter('all')}
             className={`shrink-0 rounded-2xl px-3.5 py-2 text-[11px] font-black transition-all ${
               tipFilter === 'all'
-                ? 'bg-slate-900 text-white shadow-md'
-                : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                ? 'bg-black text-white'
+                : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
             }`}
           >
             All Trips ({earningsData.trips.length})
@@ -320,7 +328,7 @@ const DriverEarnings = () => {
                 : 'bg-white border border-emerald-200 text-emerald-700 hover:bg-emerald-50'
             }`}
           >
-            <span>💳 Online Tip</span>
+            <span className="inline-flex items-center gap-1"><CreditCard size={12} /> Online tip</span>
             <span className="rounded-full bg-emerald-100/30 px-1.5 py-0.5 text-[9px]">
               {onlineTipTripsCount}
             </span>
@@ -334,7 +342,7 @@ const DriverEarnings = () => {
                 : 'bg-white border border-amber-200 text-amber-700 hover:bg-amber-50'
             }`}
           >
-            <span>💵 Cash Tip</span>
+            <span className="inline-flex items-center gap-1"><Banknote size={12} /> Cash tip</span>
             <span className="rounded-full bg-amber-100/30 px-1.5 py-0.5 text-[9px]">
               {cashTipTripsCount}
             </span>

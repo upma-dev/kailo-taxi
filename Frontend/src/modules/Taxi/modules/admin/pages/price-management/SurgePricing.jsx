@@ -91,7 +91,7 @@ const SurgePricing = () => {
       {/* Header Block from Design System */}
       <div className="mb-8">
         <div className="flex items-center gap-1.5 text-xs text-gray-400 mb-2">
-           <span className="cursor-pointer hover:text-indigo-600 transition-colors" onClick={() => navigate('/taxi/admin/pricing/set-price')}>Surge</span>
+           <span className="cursor-pointer hover:text-indigo-600 transition-colors" onClick={() => navigate('/admin/pricing/set-price')}>Surge</span>
            <ChevronRight size={12} />
            <span className="text-gray-700 font-semibold tracking-tight uppercase">Surge Control</span>
         </div>

@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Camera, User, Phone, Mail, Check, CheckCircle2, Loader2, Car, Layers } from 'lucide-react';
+import { ArrowLeft, Camera, User, Phone, Mail, Check, CheckCircle2, Loader2, Car, Layers, MapPin } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useImageUpload } from '../../../../shared/hooks/useImageUpload';
-import { getCurrentDriver, updateDriverProfile } from '../../services/registrationService';
+import { getCurrentDriver, getDriverVehicleTypes, updateDriverProfile } from '../../services/registrationService';
 import toast from 'react-hot-toast';
-import { FOUR_WHEELER_ONLY_CATEGORIES, isTwoWheelerVehicle } from '../../utils/vehicleServices';
+import { filterServiceCategoriesForVehicle, isTwoWheelerVehicle } from '../../utils/vehicleServices';
 
 const Motion = motion;
 const NAME_REGEX = /^[A-Za-z]+(?:[ .'-][A-Za-z]+)*$/;
@@ -37,6 +37,8 @@ const EditProfile = () => {
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
     const [driver, setDriver] = useState(null);
+    // The driver's vehicle type from the catalog: it says which services (Outstation, Pooling) the admin offers.
+    const [vehicleType, setVehicleType] = useState(null);
     const [formData, setFormData] = useState({
         name: '',
         phone: '',
@@ -70,6 +72,7 @@ const EditProfile = () => {
                     name: data.name || '',
                     phone: data.phone || '',
                     email: data.email || '',
+                    savedAddress: data.savedAddress || '',
                     transportType: String(data.registerFor || data.transport_type || 'taxi').toLowerCase() === 'both' ? 'all' : (data.registerFor || data.transport_type || 'taxi'),
                     serviceCategories: rawCategories,
                 });
@@ -82,6 +85,24 @@ const EditProfile = () => {
         };
         fetchProfile();
     }, []);
+
+
+    useEffect(() => {
+        const vehicleTypeId = String(driver?.vehicleTypeId?._id || driver?.vehicleTypeId || '').trim();
+        if (!vehicleTypeId) return undefined;
+        let active = true;
+        getDriverVehicleTypes()
+            .then((response) => {
+                const payload = response?.data?.data || response?.data || response || {};
+                const list = payload.vehicle_types || payload.results || payload.paginator?.data || (Array.isArray(payload) ? payload : []);
+                const match = (Array.isArray(list) ? list : []).find((type) => String(type?._id || type?.id) === vehicleTypeId);
+                if (active) setVehicleType(match || null);
+            })
+            .catch(() => {
+                // Without the catalog only the bike rule applies (see filterServiceCategoriesForVehicle).
+            });
+        return () => { active = false; };
+    }, [driver?.vehicleTypeId]);
 
     const toggleCategory = (catValue) => {
         setFormData((prev) => {
@@ -120,6 +141,7 @@ const EditProfile = () => {
             const payload = {
                 name: trimmedName,
                 email,
+                savedAddress: String(formData.savedAddress || '').trim(),
                 registerFor: formData.transportType,
                 transport_type: formData.transportType,
                 serviceCategories: formData.serviceCategories,
@@ -242,6 +264,21 @@ const EditProfile = () => {
                         </div>
                     ))}
 
+                    {/* Saved Address */}
+                    <div className="bg-white p-4 py-5 rounded-2xl border border-slate-100 shadow-sm space-y-2 focus-within:border-slate-900 focus-within:ring-4 focus-within:ring-slate-900/5">
+                        <div className="flex items-center gap-2 text-slate-400">
+                            <MapPin size={16} />
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">Saved Address</span>
+                        </div>
+                        <textarea
+                            rows={2}
+                            value={formData.savedAddress || ''}
+                            onChange={(e) => setFormData(prev => ({ ...prev, savedAddress: e.target.value }))}
+                            placeholder="Enter your home / base address"
+                            className="w-full resize-none text-[15px] font-semibold text-slate-900 bg-transparent border-none p-0 focus:ring-0 tracking-tight"
+                        />
+                    </div>
+
                     {/* Transport Type Select */}
                     <div className="bg-white p-4 py-5 rounded-2xl border border-slate-100 shadow-sm space-y-2 focus-within:border-slate-900">
                         <div className="flex items-center gap-2 text-slate-400">
@@ -254,8 +291,7 @@ const EditProfile = () => {
                             className="w-full text-[15px] font-semibold text-slate-900 bg-transparent border-none p-0 focus:ring-0 tracking-tight cursor-pointer"
                         >
                             {transportTypeOptions
-                                .filter((opt) => !isTwoWheelerVehicle(driver || {})
-                                    || !FOUR_WHEELER_ONLY_CATEGORIES.includes(opt.value)
+                                .filter((opt) => filterServiceCategoriesForVehicle([opt.value], vehicleType || driver || {}).length > 0
                                     || opt.value === formData.transportType)
                                 .map((opt) => (
                                 <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -271,8 +307,7 @@ const EditProfile = () => {
                         </div>
                         <div className="flex flex-wrap gap-2 pt-1">
                             {serviceCategoryOptions
-                                .filter((opt) => !isTwoWheelerVehicle(driver || {})
-                                    || !FOUR_WHEELER_ONLY_CATEGORIES.includes(opt.value)
+                                .filter((opt) => filterServiceCategoriesForVehicle([opt.value], vehicleType || driver || {}).length > 0
                                     || formData.serviceCategories.includes(opt.value))
                                 .map((opt) => {
                                 const isSelected = formData.serviceCategories.includes(opt.value);
@@ -295,7 +330,7 @@ const EditProfile = () => {
                         <p className="text-[10px] text-slate-400 font-medium pt-1">
                             {isTwoWheelerVehicle(driver || {})
                                 ? 'Outstation and Pooling are available for 4-wheelers only.'
-                                : 'Tap categories to enable/disable future service requests'}
+                                : 'Tap categories to enable/disable future service requests. Outstation and Pooling show only if your vehicle type offers them.'}
                         </p>
                     </div>
                 </div>

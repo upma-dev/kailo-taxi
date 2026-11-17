@@ -384,7 +384,7 @@ const ServiceStores = ({ mode: initialMode = 'list' }) => {
         : await adminService.createServiceStore(payload);
 
       if (response?.data?.success || response?.success) {
-        navigate('/taxi/admin/pricing/service-stores');
+        navigate('/admin/pricing/service-stores');
         resetFormState();
         fetchData();
       } else {
@@ -440,7 +440,7 @@ const ServiceStores = ({ mode: initialMode = 'list' }) => {
                 </div>
                 <button
                   type="button"
-                  onClick={() => navigate('/taxi/admin/pricing/service-stores/add')}
+                  onClick={() => navigate('/admin/pricing/service-stores/add')}
                   className="flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-indigo-700"
                 >
                   <Plus size={16} /> Add Store
@@ -562,7 +562,7 @@ const ServiceStores = ({ mode: initialMode = 'list' }) => {
                               <button
                                 type="button"
                                 onClick={() =>
-                                  navigate(`/taxi/admin/pricing/service-stores/edit/${store._id || store.id}`)
+                                  navigate(`/admin/pricing/service-stores/edit/${store._id || store.id}`)
                                 }
                                 className="rounded-lg p-2 text-gray-400 transition-colors hover:bg-indigo-50 hover:text-indigo-600"
                               >
@@ -617,7 +617,7 @@ const ServiceStores = ({ mode: initialMode = 'list' }) => {
                 </h1>
                 <button
                   type="button"
-                  onClick={() => navigate('/taxi/admin/pricing/service-stores')}
+                  onClick={() => navigate('/admin/pricing/service-stores')}
                   className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-600 shadow-sm transition-colors hover:bg-gray-50"
                 >
                   <ArrowLeft size={14} /> Back

@@ -167,7 +167,7 @@ const WithdrawalRequestOwners = () => {
                           <td className="px-3 py-5">
                             <button
                               type="button"
-                              onClick={() => navigate(`/taxi/admin/owners/wallet/withdrawals/${ownerId}`)}
+                              onClick={() => navigate(`/admin/owners/wallet/withdrawals/${ownerId}`)}
                               className="inline-flex h-9 w-10 items-center justify-center rounded bg-teal-50 text-teal-500 transition-colors hover:bg-teal-100"
                               title="View withdrawal request"
                             >

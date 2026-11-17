@@ -133,7 +133,7 @@ const AdminCreate = () => {
             : rawAdmin;
           if (!existingAdmin || !existingAdmin._id && !existingAdmin.id) {
             toast.error('Admin account not found.');
-            navigate('/taxi/admin/management/admins');
+            navigate('/admin/management/admins');
             return;
           }
 
@@ -357,7 +357,7 @@ const AdminCreate = () => {
         await adminService.createAdminAccount(payload);
         toast.success(isSuperTarget ? 'Taxi super admin created.' : 'Subadmin created.');
       }
-      navigate('/taxi/admin/management/admins');
+      navigate('/admin/management/admins');
     } catch (error) {
       const message = error?.response?.data?.message || error?.message || 'Unable to save admin account.';
       failSubmit(message);
@@ -397,7 +397,7 @@ const AdminCreate = () => {
 
           <button
             type="button"
-            onClick={() => navigate('/taxi/admin/management/admins')}
+            onClick={() => navigate('/admin/management/admins')}
             className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-700 transition-all hover:bg-slate-50"
           >
             <ArrowLeft size={16} />
@@ -723,7 +723,7 @@ const AdminCreate = () => {
               ) : null}
               <button
                 type="button"
-                onClick={() => navigate('/taxi/admin/management/admins')}
+                onClick={() => navigate('/admin/management/admins')}
                 className="rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-black text-slate-700 transition-all hover:bg-slate-50"
               >
                 Cancel

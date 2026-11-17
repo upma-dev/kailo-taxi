@@ -1,6 +1,6 @@
 import { PageContent } from '../models/PageContent.js';
 import { ApiError } from '../../../../utils/ApiError.js';
-import { DEFAULT_LANDING } from '../data/defaultLanding.js';
+import { BIKE_AUTO_SLIDES, DEFAULT_LANDING, NEW_SLIDES } from '../data/defaultLanding.js';
 
 export const LEGAL_PAGE_KEYS = [
   'terms',
@@ -174,12 +174,56 @@ const mergeLanding = (saved) => {
   const base = JSON.parse(JSON.stringify(DEFAULT_LANDING));
   if (!saved || typeof saved !== 'object') return base;
   const out = { ...base };
+  // Content saved before the redesign used a different shape for these sections, so defaults win until re-saved.
+  const savedVersion = Number(saved.layoutVersion || 0);
+  const stale = savedVersion < 2;
   for (const [section, value] of Object.entries(saved)) {
+    if (stale && ['header', 'about', 'footer'].includes(section)) continue;
+    // Version 5 rewrote the wording of these sections; older saved copies are replaced by the new defaults.
+    if (savedVersion < 9 && ['services', 'howItWorks'].includes(section)) continue;
+    // Version 10 added airport, hotel and bus booking to the About text and cards.
+    if (savedVersion < 10 && section === 'about') continue;
+    // Version 12 replaced the single FAQ list with three folders (Rider, Driver, Fleet owner).
+    if (savedVersion < 12 && section === 'faq') continue;
     const baseValue = base[section];
     const isObj = (v) => v && typeof v === 'object' && !Array.isArray(v);
     if (isObj(value) && isObj(baseValue)) out[section] = { ...baseValue, ...value };
     else if (value !== undefined && value !== null) out[section] = value;
   }
+  // Hero slides saved before version 4 get the flight, hotel and movers slides added or refreshed once (admin can delete them afterwards).
+  if (savedVersion < 9 && Array.isArray(out.hero?.slides)) {
+    const fresh = new Map(NEW_SLIDES.map((x) => [x.key, x]));
+    const kept = out.hero.slides.map((x) => (fresh.has(x?.key) ? { ...fresh.get(x.key), ...(x.image ? { image: x.image } : {}) } : x));
+    const have = new Set(kept.map((x) => x?.key));
+    out.hero = { ...out.hero, slides: [...kept, ...NEW_SLIDES.filter((x) => !have.has(x.key))] };
+  }
+  // Version 10: the hero subtitle mentions every booking type, and the "Bike & Auto" slide becomes two slides with their own pictures.
+  if (savedVersion < 10 && out.hero) {
+    const slides = Array.isArray(out.hero.slides) ? out.hero.slides : [];
+    const [bike, auto] = BIKE_AUTO_SLIDES;
+    const next = [];
+    for (const s of slides) {
+      if (s?.key === 'bike') {
+        next.push({ ...bike, ...(s.image ? { image: s.image } : {}), ...(s.background ? { background: s.background } : {}) });
+        if (!slides.some((x) => x?.key === 'auto')) next.push({ ...auto });
+      } else next.push(s);
+    }
+    if (!next.some((x) => x?.key === 'bike')) next.splice(Math.min(1, next.length), 0, { ...bike }, { ...auto });
+    out.hero = { ...out.hero, subtitle: base.hero.subtitle, slides: next };
+  }
+  // Version 11: bus, hotel and flight slides say that booking and a ride are both available in the app.
+  if (savedVersion < 11 && Array.isArray(out.hero?.slides)) {
+    const fresh = new Map([...NEW_SLIDES, ...base.hero.slides.filter((x) => x.key === 'bus')].map((x) => [x.key, x]));
+    out.hero = {
+      ...out.hero,
+      slides: out.hero.slides.map((x) => {
+        const f = fresh.get(x?.key);
+        if (!f) return x;
+        return { ...f, ...(x.image ? { image: x.image } : {}), ...(x.image2 ? { image2: x.image2 } : {}), ...(x.video ? { video: x.video } : {}), ...(x.background ? { background: x.background } : {}) };
+      }),
+    };
+  }
+  out.layoutVersion = base.layoutVersion;
   return out;
 };
 

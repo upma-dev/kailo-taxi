@@ -226,7 +226,7 @@ const ParcelType = () => {
       selectedVehicles,
       selectedVehicleId: selectedVehicle?._id || selectedVehicle?.id || '',
       selectedVehicleIds,
-      vehicleIconUrl: selectedVehicle?.map_icon || selectedVehicle?.icon || selectedVehicle?.image || selectedVehicle?.vehicleIconUrl || '',
+      vehicleIconUrl: selectedVehicle?.map_icon || selectedVehicle?.icon || selectedVehicle?.vehicleIconUrl || '',
       vehicleIconType: selectedVehicle?.icon_types || selectedVehicle?.iconType || (isHeavyCategory ? 'truck' : 'bike'),
       category: category.id,
       deliveryCategory: category.id,

@@ -193,7 +193,7 @@ const BusBookingDetail = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 max-w-lg mx-auto font-sans pb-32">
+    <div className="min-h-screen bg-slate-50 max-w-lg mx-auto font-booking pb-32">
       {/* Header */}
       <div className="bg-white px-5 pt-10 pb-4 sticky top-0 z-20 border-b border-slate-100 shadow-sm">
         <div className="flex items-center gap-4">
@@ -236,11 +236,11 @@ const BusBookingDetail = () => {
               <div className="px-6 py-4 bg-slate-900 text-white flex justify-between items-center">
                 <div>
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">PNR Number</p>
-                  <p className="text-sm font-black tracking-widest">{booking.bookingCode}</p>
+                  <p className="text-sm font-bold tracking-widest">{booking.bookingCode}</p>
                 </div>
                 <div className="text-right">
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Status</p>
-                  <div className="px-3 py-1 rounded-full bg-white/10 text-white border border-white/20 text-[10px] font-black uppercase tracking-wider">
+                  <div className="px-3 py-1 rounded-full bg-white/10 text-white border border-white/20 text-[10px] font-bold uppercase tracking-wider">
                     {booking.status}
                   </div>
                 </div>
@@ -250,18 +250,18 @@ const BusBookingDetail = () => {
                 {/* Route Header */}
                 <div className="flex items-center justify-between gap-4">
                   <div className="flex-1">
-                    <p className="text-xl font-black text-slate-900 truncate">{booking.bus?.fromCity || 'From'}</p>
+                    <p className="text-xl font-bold text-slate-900 truncate">{booking.bus?.fromCity || 'From'}</p>
                     <p className="text-xs font-bold text-slate-400 uppercase mt-0.5">{booking.bus?.departure || '--:--'}</p>
                   </div>
                   <div className="flex flex-col items-center flex-1 px-2">
-                    <span className="text-[10px] font-black text-slate-400 bg-slate-50 px-2 py-0.5 rounded-full border border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-400 bg-slate-50 px-2 py-0.5 rounded-full border border-slate-100">
                       {formatDurationCompact(booking.bus?.duration)}
                     </span>
                     <div className="w-full h-[1px] border-t border-dashed border-slate-200 my-3" />
                     <BusFront size={18} className="text-slate-300" />
                   </div>
                   <div className="flex-1 text-right">
-                    <p className="text-xl font-black text-slate-900 truncate">{booking.bus?.toCity || 'To'}</p>
+                    <p className="text-xl font-bold text-slate-900 truncate">{booking.bus?.toCity || 'To'}</p>
                     <p className="text-xs font-bold text-slate-400 uppercase mt-0.5">{booking.bus?.arrival || '--:--'}</p>
                   </div>
                 </div>
@@ -270,11 +270,11 @@ const BusBookingDetail = () => {
                 <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
                   <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-2">Bus & Operator</p>
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-slate-900 flex items-center justify-center text-white font-black">
+                    <div className="w-10 h-10 rounded-full bg-slate-900 flex items-center justify-center text-white font-bold">
                       {String(booking.bus?.operator || 'B').charAt(0)}
                     </div>
                     <div>
-                      <p className="text-sm font-black text-slate-900">{booking.bus?.operator || 'Bus Service'}</p>
+                      <p className="text-sm font-bold text-slate-900">{booking.bus?.operator || 'Bus Service'}</p>
                       <p className="text-[11px] text-slate-500">{booking.bus?.type || 'Standard Service'}</p>
                     </div>
                   </div>
@@ -287,14 +287,14 @@ const BusBookingDetail = () => {
                       <CalendarDays size={14} />
                       <p className="text-[9px] font-bold uppercase tracking-widest">Travel Date</p>
                     </div>
-                    <p className="text-sm font-black text-slate-900">{booking.travelDate || 'NA'}</p>
+                    <p className="text-sm font-bold text-slate-900">{booking.travelDate || 'NA'}</p>
                   </div>
                   <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
                     <div className="flex items-center gap-2 text-slate-400 mb-2">
                       <Ticket size={14} />
                       <p className="text-[9px] font-bold uppercase tracking-widest">Seat Count</p>
                     </div>
-                    <p className="text-sm font-black text-slate-900">{activeSeatIds.length} Seats</p>
+                    <p className="text-sm font-bold text-slate-900">{activeSeatIds.length} Seats</p>
                   </div>
                 </div>
 
@@ -305,14 +305,14 @@ const BusBookingDetail = () => {
                       <BusFront size={14} />
                       <p className="text-[9px] font-bold uppercase tracking-widest">Bus Number</p>
                     </div>
-                    <p className="text-sm font-black text-slate-900">{booking.bus?.registrationNumber || 'Pending'}</p>
+                    <p className="text-sm font-bold text-slate-900">{booking.bus?.registrationNumber || 'Pending'}</p>
                   </div>
                   <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
                     <div className="flex items-center gap-2 text-slate-400 mb-2">
                       <Phone size={14} />
                       <p className="text-[9px] font-bold uppercase tracking-widest">Contact</p>
                     </div>
-                    <p className="text-sm font-black text-slate-900">{booking.bus?.driverPhone || 'Assigned soon'}</p>
+                    <p className="text-sm font-bold text-slate-900">{booking.bus?.driverPhone || 'Assigned soon'}</p>
                   </div>
                 </div>
 
@@ -327,12 +327,12 @@ const BusBookingDetail = () => {
                       <div className="absolute left-0 top-1.5 w-2 h-2 rounded-full bg-emerald-500" />
                       <div className="absolute left-[3px] top-4 w-0.5 h-6 bg-slate-200" />
                       <p className="text-[9px] font-bold text-emerald-600 uppercase mb-0.5">Pickup</p>
-                      <p className="text-sm font-black text-slate-900">{booking.bus?.pickupLocation || booking.bus?.fromCity}</p>
+                      <p className="text-sm font-bold text-slate-900">{booking.bus?.pickupLocation || booking.bus?.fromCity}</p>
                     </div>
                     <div className="relative pl-6">
                       <div className="absolute left-0 top-1.5 w-2 h-2 rounded-full bg-rose-500" />
                       <p className="text-[9px] font-bold text-rose-600 uppercase mb-0.5">Dropoff</p>
-                      <p className="text-sm font-black text-slate-900">{booking.bus?.dropLocation || booking.bus?.toCity}</p>
+                      <p className="text-sm font-bold text-slate-900">{booking.bus?.dropLocation || booking.bus?.toCity}</p>
                     </div>
                   </div>
                 </div>
@@ -343,7 +343,7 @@ const BusBookingDetail = () => {
             <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm p-6">
               <div className="flex items-center gap-3 mb-6">
                 <Ticket size={20} className="text-slate-900" />
-                <h2 className="text-lg font-black text-slate-900">Manage Seats</h2>
+                <h2 className="text-lg font-bold text-slate-900">Manage Seats</h2>
               </div>
 
               <div className="space-y-3">
@@ -357,7 +357,7 @@ const BusBookingDetail = () => {
                     } ${!canCancel ? 'opacity-70 cursor-not-allowed' : ''}`}
                   >
                     <div>
-                      <p className="text-sm font-black">{activeSeatLabels[index] || seatId}</p>
+                      <p className="text-sm font-bold">{activeSeatLabels[index] || seatId}</p>
                       <p className={`text-[10px] font-bold ${selectedSeatIds.includes(seatId) ? 'text-slate-400' : 'text-slate-500'}`}>
                         Active Seat • {formatMoney(booking.perSeatAmount, booking.currency)}
                       </p>
@@ -385,11 +385,11 @@ const BusBookingDetail = () => {
                     {booking.cancelledSeats.map((seat) => (
                       <div key={seat.seatId} className="p-4 rounded-2xl border border-slate-50 bg-slate-50/50 flex justify-between items-center">
                         <div>
-                          <p className="text-sm font-black text-slate-400">{seat.seatLabel || seat.seatId}</p>
+                          <p className="text-sm font-bold text-slate-400">{seat.seatLabel || seat.seatId}</p>
                           <p className="text-[10px] text-slate-400">Cancelled {formatDateTime(seat.cancelledAt)}</p>
                         </div>
                         <div className="text-right">
-                          <p className="text-sm font-black text-slate-400">{formatMoney(seat.refundAmount, booking.currency)}</p>
+                          <p className="text-sm font-bold text-slate-400">{formatMoney(seat.refundAmount, booking.currency)}</p>
                           <p className="text-[9px] font-bold uppercase text-slate-400">Refunded</p>
                         </div>
                       </div>
@@ -405,28 +405,28 @@ const BusBookingDetail = () => {
                   animate={{ height: 'auto', opacity: 1 }}
                   className="mt-6 p-5 bg-slate-50 rounded-2xl border border-slate-100"
                 >
-                  <div className="flex items-center gap-2 mb-4 text-slate-900 font-black text-xs uppercase tracking-wider">
+                  <div className="flex items-center gap-2 mb-4 text-slate-900 font-bold text-xs uppercase tracking-wider">
                     <ReceiptText size={14} />
                     Refund Preview
                   </div>
                   <div className="grid grid-cols-3 gap-4 text-center">
                     <div>
                       <p className="text-[9px] font-bold text-slate-400 uppercase mb-1">Total</p>
-                      <p className="text-sm font-black text-slate-900">{formatMoney(selectionQuote.subtotal, booking.currency)}</p>
+                      <p className="text-sm font-bold text-slate-900">{formatMoney(selectionQuote.subtotal, booking.currency)}</p>
                     </div>
                     <div>
                       <p className="text-[9px] font-bold text-emerald-600 uppercase mb-1">Refund</p>
-                      <p className="text-sm font-black text-emerald-600">{formatMoney(selectionQuote.refundAmount, booking.currency)}</p>
+                      <p className="text-sm font-bold text-emerald-600">{formatMoney(selectionQuote.refundAmount, booking.currency)}</p>
                     </div>
                     <div>
                       <p className="text-[9px] font-bold text-rose-600 uppercase mb-1">Fee</p>
-                      <p className="text-sm font-black text-rose-600">{formatMoney(selectionQuote.chargeAmount, booking.currency)}</p>
+                      <p className="text-sm font-bold text-rose-600">{formatMoney(selectionQuote.chargeAmount, booking.currency)}</p>
                     </div>
                   </div>
                   <button
                     onClick={handleCancelSeats}
                     disabled={cancelling}
-                    className="w-full mt-5 py-4 bg-rose-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest shadow-lg shadow-rose-100 active:scale-[0.98] transition-transform"
+                    className="w-full mt-5 py-4 bg-rose-600 text-white rounded-2xl text-xs font-bold uppercase tracking-widest shadow-lg shadow-rose-100 active:scale-[0.98] transition-transform"
                   >
                     {cancelling ? 'Processing...' : `Confirm Cancellation`}
                   </button>
@@ -439,12 +439,12 @@ const BusBookingDetail = () => {
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
                   <Star size={20} className="text-slate-900" />
-                  <h2 className="text-lg font-black text-slate-900">Your Review</h2>
+                  <h2 className="text-lg font-bold text-slate-900">Your Review</h2>
                 </div>
                 {booking.review?.averageRating && (
                   <div className="flex items-center gap-1 bg-amber-50 px-2 py-1 rounded-full text-amber-600">
                     <Star size={12} fill="currentColor" />
-                    <span className="text-xs font-black">{Number(booking.review.averageRating).toFixed(1)}</span>
+                    <span className="text-xs font-bold">{Number(booking.review.averageRating).toFixed(1)}</span>
                   </div>
                 )}
               </div>
@@ -474,7 +474,7 @@ const BusBookingDetail = () => {
                   <button
                     onClick={handleSubmitReview}
                     disabled={savingReview || !selectedRating}
-                    className="w-full py-4 bg-slate-900 text-white rounded-2xl text-xs font-black uppercase tracking-widest shadow-lg shadow-slate-100 active:scale-[0.98] transition-transform"
+                    className="w-full py-4 bg-slate-900 text-white rounded-2xl text-xs font-bold uppercase tracking-widest shadow-lg shadow-slate-100 active:scale-[0.98] transition-transform"
                   >
                     {savingReview ? 'Saving...' : 'Submit Review'}
                   </button>
@@ -482,7 +482,7 @@ const BusBookingDetail = () => {
               ) : (
                 <div className="bg-slate-50 rounded-2xl p-6 text-center border border-slate-100">
                   <Info size={24} className="mx-auto text-slate-300 mb-2" />
-                  <p className="text-sm font-black text-slate-500">
+                  <p className="text-sm font-bold text-slate-500">
                     {booking.review?.tripCompleted 
                       ? 'Review window is closed'
                       : 'You can rate this trip after completion'}
@@ -495,12 +495,12 @@ const BusBookingDetail = () => {
             <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm p-6">
               <div className="flex items-center gap-3 mb-6">
                 <ShieldAlert size={20} className="text-slate-900" />
-                <h2 className="text-lg font-black text-slate-900">Policies</h2>
+                <h2 className="text-lg font-bold text-slate-900">Policies</h2>
               </div>
               <div className="space-y-4">
                 {(booking.cancellationPolicy?.rules || []).map((rule) => (
                   <div key={rule.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                    <p className="text-sm font-black text-slate-900">{rule.label}</p>
+                    <p className="text-sm font-bold text-slate-900">{rule.label}</p>
                     <div className="flex items-center gap-2 mt-2">
                       <Clock size={12} className="text-slate-400" />
                       <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">

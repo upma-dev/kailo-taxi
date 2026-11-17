@@ -23,6 +23,14 @@ export const createDefaultAppSettings = () => ({
     enable_tips: '1',
     min_tip_amount: '10',
   },
+  go_home_setting: {
+    enabled: '1',
+    cone_angle_degrees: '45',
+    corridor_width_km: '3',
+    max_uses_per_day: '2',
+    max_duration_minutes: '180',
+    arrival_radius_meters: '300',
+  },
   country: {
     default_country_code: 'IN',
     default_country_name: 'India',

@@ -105,6 +105,9 @@ const serializeUserWalletTransaction = (entry = {}) => ({
   kind: entry.kind,
   amount: Number(entry.amount || 0),
   title: entry.title || '',
+  description: entry.description || '',
+  affectsBalance: entry.affectsBalance !== false,
+  provider: entry.provider || '',
   counterpartyPhone: entry.counterpartyPhone || '',
   createdAt: entry.createdAt || null,
 });
@@ -329,7 +332,10 @@ const resolveBusSeatPrice = (busService = {}, seat = {}) => {
   const variantPricing = busService?.variantPricing || {};
   const defaultPrice = Number(busService?.seatPrice || 0);
   const variantKey = String(seat?.variant || 'seat').trim().toLowerCase();
-  const resolvedPrice = variantPricing?.[variantKey] ?? variantPricing?.seat ?? defaultPrice;
+  // A price of 0 means "not set": fall back to the plain seat price, then to the bus's base seat price.
+  const resolvedPrice = [variantPricing?.[variantKey], variantPricing?.seat, defaultPrice]
+    .map(Number)
+    .find((value) => Number.isFinite(value) && value > 0) ?? 0;
 
   return Number.isFinite(Number(resolvedPrice)) ? Number(resolvedPrice) : defaultPrice;
 };
@@ -735,7 +741,7 @@ export const getIntercityPackageCatalog = async (_req, res) => {
             vehicleTypeId: row.vehicle_type?._id ? String(row.vehicle_type._id) : '',
             vehicleName: row.vehicle_type?.name || 'Vehicle',
             capacity: Number(row.vehicle_type?.capacity || 0),
-            icon: row.vehicle_type?.map_icon || row.vehicle_type?.icon || row.vehicle_type?.image || '',
+            icon: row.vehicle_type?.map_icon || row.vehicle_type?.icon || '',
             iconType: row.vehicle_type?.icon_types || row.vehicle_type?.name || '',
             dispatchType: String(row.vehicle_type?.dispatch_type || 'normal').trim().toLowerCase(),
             basePrice: Number(row.base_price ?? 0),
@@ -979,6 +985,20 @@ const serializeRentalBookingRequest = (item = {}) => ({
   totalCost: Number(item.totalCost || 0),
   payableNow: Number(item.payableNow || 0),
   advancePaymentLabel: item.advancePaymentLabel || '',
+  conditionPhoto: {
+    imageUrl: item.conditionPhoto?.imageUrl || '',
+    fileName: item.conditionPhoto?.fileName || '',
+    uploadedAt: item.conditionPhoto?.uploadedAt || null,
+  },
+  paymentOption: item.paymentOption === 'safety_money' ? 'safety_money' : 'advance',
+  safetyMoney: {
+    amount: Number(item.safetyMoney?.amount || 0),
+    status: item.safetyMoney?.status || 'none',
+    deductedAmount: Number(item.safetyMoney?.deductedAmount || 0),
+    refundedAmount: Number(item.safetyMoney?.refundedAmount || 0),
+    dueAmount: Number(item.safetyMoney?.dueAmount || 0),
+    settledAt: item.safetyMoney?.settledAt || null,
+  },
   paymentStatus: item.paymentStatus || 'pending',
   paymentMethod: item.paymentMethod || '',
   paymentMethodLabel: item.paymentMethodLabel || '',
@@ -1016,6 +1036,7 @@ const serializeRentalBookingRequest = (item = {}) => ({
   status: item.status || 'pending',
   adminNote: item.adminNote || '',
   assignedAt: item.assignedAt || null,
+  reviewedAt: item.reviewedAt || null,
   completionRequestedAt: item.completionRequestedAt || null,
   completedAt: item.completedAt || null,
   finalCharge: Number(item.finalCharge || 0),
@@ -1055,44 +1076,51 @@ const resolveRentalSelectedPackagePricing = (item = {}) => {
 };
 
 const computeRentalRideMetrics = (item = {}, endedAt = null) => {
-  const startDate = item.assignedAt || item.pickupDateTime || item.createdAt;
+  const startDate = item.assignedAt || item.reviewedAt || item.createdAt;
   const startMs = startDate ? new Date(startDate).getTime() : NaN;
   const endMs = endedAt ? new Date(endedAt).getTime() : Date.now();
   const { includedHours, basePrice, extraHourPrice } = resolveRentalSelectedPackagePricing(item);
   const hourlyRate = includedHours > 0 ? basePrice / includedHours : 0;
+  const round2 = (value) => Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
 
-  if (!Number.isFinite(startMs)) {
-    return {
-      hourlyRate: Math.max(0, hourlyRate),
-      includedHours,
-      basePrice,
-      extraHourRate: extraHourPrice,
-      elapsedMinutes: 0,
-      elapsedHours: 0,
-      currentCharge: Math.max(basePrice, Number(item.payableNow || 0)),
-      remainingDue: Math.max(0, Math.max(basePrice, Number(item.payableNow || 0)) - Number(item.payableNow || 0)),
-    };
-  }
+  // Two ways to pay at booking: a small advance (it is also the minimum bill) or refundable safety money
+  // (no minimum: the final bill is deducted from it and the balance is refunded).
+  const isSafetyMoney = item.paymentOption === 'safety_money';
+  const paidNow = Number(item.payableNow || 0);
+  const safetyAmount = isSafetyMoney ? Number(item.safetyMoney?.amount || paidNow) : 0;
+  const minimumCharge = isSafetyMoney ? 0 : paidNow;
 
-  const elapsedMs = Math.max(0, endMs - startMs);
+  const hasStart = Number.isFinite(startMs);
+  const elapsedMs = hasStart ? Math.max(0, endMs - startMs) : 0;
   const elapsedMinutes = Math.max(0, Math.ceil(elapsedMs / 60000));
   const elapsedHours = elapsedMs / 3600000;
-  const elapsedChargeWithinPackage = elapsedHours <= includedHours
+  // The bill grows with the running time (per minute): hourly rate while inside the package,
+  // then the extra-hour rate.
+  const overtimeRate = extraHourPrice > 0 ? extraHourPrice : hourlyRate;
+  // Safety money option: the rental package is always charged in full (even if the ride is returned early);
+  // only time beyond the package adds to the bill. Advance option: the bill grows with the running time.
+  const runningCharge = !hasStart
     ? basePrice
-    : basePrice + Math.ceil(Math.max(0, elapsedHours - includedHours)) * extraHourPrice;
-  const uncappedCharge = Math.max(Number(item.payableNow || 0), elapsedChargeWithinPackage);
-  const currentCharge = Math.round((uncappedCharge + Number.EPSILON) * 100) / 100;
-  const remainingDue = Math.max(0, Math.round((currentCharge - Number(item.payableNow || 0) + Number.EPSILON) * 100) / 100);
+    : elapsedHours <= includedHours
+      ? (isSafetyMoney ? basePrice : hourlyRate * elapsedHours)
+      : basePrice + (elapsedHours - includedHours) * overtimeRate;
+  const currentCharge = round2(Math.max(minimumCharge, runningCharge));
+  const dueAmount = isSafetyMoney ? round2(Math.max(0, currentCharge - safetyAmount)) : round2(Math.max(0, currentCharge - paidNow));
 
   return {
-    hourlyRate: Math.max(0, Math.round((hourlyRate + Number.EPSILON) * 100) / 100),
+    hourlyRate: Math.max(0, round2(hourlyRate)),
     includedHours,
-    basePrice: Math.round((basePrice + Number.EPSILON) * 100) / 100,
-    extraHourRate: Math.round((extraHourPrice + Number.EPSILON) * 100) / 100,
+    basePrice: round2(basePrice),
+    extraHourRate: round2(extraHourPrice),
     elapsedMinutes,
-    elapsedHours: Math.round((elapsedHours + Number.EPSILON) * 100) / 100,
+    elapsedSeconds: Math.floor(elapsedMs / 1000),
+    elapsedHours: round2(elapsedHours),
     currentCharge,
-    remainingDue,
+    remainingDue: dueAmount,
+    paymentOption: isSafetyMoney ? 'safety_money' : 'advance',
+    safetyMoneyAmount: round2(safetyAmount),
+    safetyDeducted: isSafetyMoney ? round2(Math.min(currentCharge, safetyAmount)) : 0,
+    safetyRefund: isSafetyMoney ? round2(Math.max(0, safetyAmount - currentCharge)) : 0,
   };
 };
 
@@ -1266,12 +1294,15 @@ const processSignupReferralRewards = async ({ user, referrer }) => {
   const rewardBaseKey = `user-referral:signup:${String(user._id)}`;
 
   if (referralType === 'instant_referrer' || referralType === 'instant_referrer_new') {
-    await creditUserWalletByReference({
+    const referrerResult = await creditUserWalletByReference({
       userId: referrer._id,
       amount: settings.amount,
       title: `Referral reward for inviting ${user.phone}`,
       referenceKey: `${rewardBaseKey}:referrer`,
     });
+    if (['credited', 'existing'].includes(referrerResult) && referralType === 'instant_referrer') {
+      await User.updateOne({ _id: user._id }, { $set: { referralRewardGrantedAt: new Date() } });
+    }
   }
 
   if (referralType === 'instant_referrer_new') {
@@ -1440,6 +1471,10 @@ export const signupUser = async (req, res) => {
     throw new ApiError(400, 'Invalid referral code');
   }
 
+  if (referrer && existingUser && String(referrer._id) === String(existingUser._id)) {
+    throw new ApiError(400, 'You can not use your own referral code');
+  }
+
   if (existingUser && !canRestoreUserForSignup(existingUser)) {
     throw new ApiError(409, 'Phone number is already registered');
   }
@@ -1551,13 +1586,21 @@ export const getCurrentUser = async (req, res) => {
     await user.save();
   }
 
-  const subscriptionSummary = await getUserSubscriptionSummary(user._id);
+  const [subscriptionSummary, completedTrips] = await Promise.all([
+    getUserSubscriptionSummary(user._id),
+    // Trips the rider actually took (cancelled / unmatched bookings are not trips).
+    Ride.countDocuments({ userId: user._id, status: 'completed' }),
+  ]);
 
   res.json({
     success: true,
     data: {
       user: {
         ...toUserPayload(user, { subscriptionSummary }),
+        completedTrips,
+        // Average of the ratings drivers gave this rider (null until the first rating).
+        riderRating: user.riderRating ?? null,
+        riderRatingCount: Number(user.riderRatingCount || 0),
         createdAt: user.createdAt || null,
       },
     },
@@ -2131,7 +2174,8 @@ export const payRentalAdvanceWithWallet = async (req, res) => {
     wallet.transactions.push({
       kind: 'debit',
       amount,
-      title: 'Rental Advance Payment',
+      title: req.body?.paymentOption === 'safety_money' ? 'Rental payment (rental + safety money)' : 'Rental advance payment',
+      description: [toCleanString(req.body?.vehicleName) || 'Rental vehicle', bookingReference].join(' - '),
       provider: 'wallet',
       providerPaymentId: bookingReference,
       referenceKey,
@@ -3372,10 +3416,48 @@ export const createRentalQuoteRequest = async (req, res) => {
     status: 'pending',
   });
 
+  // Tell the admin panel (bell + sidebar badge + toast) about the new custom quote request.
+  try {
+    emitToAdmins('new_registration_alert', {
+      id: `pending_rental_quote:${String(request._id)}`,
+      type: 'rental_quote',
+      role: 'rental_quote',
+      title: 'New Custom Quote Request',
+      name: `${contactName} - ${vehicle.name || 'Rental vehicle'} (${requestedHours}h)`,
+      phone: contactPhone || '',
+      createdAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.warn('Failed to emit rental quote alert to admins:', error?.message);
+  }
+
   return res.status(201).json({
     success: true,
     data: serializeRentalQuoteRequest(request.toObject()),
     message: 'Rental quote request submitted successfully',
+  });
+};
+
+// The logged-in user's own custom quote requests, so they can see the admin's decision (quoted / rejected).
+export const listMyRentalQuoteRequests = async (req, res) => {
+  const userId = req.auth?.sub;
+  if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
+    return res.status(200).json({ success: true, data: { results: [] } });
+  }
+
+  // Quotes sent before the endpoint knew the user have no userId, so also match them by the user's phone.
+  const me = await User.findById(userId).select('phone').lean();
+  const myPhone = me?.phone ? normalizePhone(me.phone) : '';
+  const items = await RentalQuoteRequest.find({
+    $or: [{ userId }, ...(myPhone ? [{ userId: null, contactPhone: myPhone }] : [])],
+  })
+    .sort({ createdAt: -1 })
+    .limit(20)
+    .lean();
+
+  return res.status(200).json({
+    success: true,
+    data: { results: items.map((item) => serializeRentalQuoteRequest(item)) },
   });
 };
 
@@ -3425,6 +3507,25 @@ export const createRentalBookingRequest = async (req, res) => {
 
   if (!user) {
     throw new ApiError(404, 'User not found');
+  }
+
+  // Refundable safety money is only valid when this vehicle offers it and the full amount was paid.
+  const safetyMoneyAmount = Math.max(0, Number(vehicle.safetyMoney?.amount || 0));
+  const paymentOption =
+    String(payload.paymentOption || '') === 'safety_money' && vehicle.safetyMoney?.enabled && safetyMoneyAmount > 0
+      ? 'safety_money'
+      : 'advance';
+
+  // Safety option = rental cost + refundable safety money, paid together.
+  // No condition photo, no rental request.
+  const conditionPhotoPayload = payload.conditionPhoto || {};
+  const conditionPhotoUrl = toCleanString(conditionPhotoPayload.imageUrl || conditionPhotoPayload.secureUrl || conditionPhotoPayload.url || '');
+  if (!conditionPhotoUrl) {
+    throw new ApiError(400, 'A vehicle condition photo is required to book a rental');
+  }
+
+  if (paymentOption === 'safety_money' && payableNow < safetyMoneyAmount + totalCost) {
+    throw new ApiError(400, 'The full rental cost and safety money must be paid for this option');
   }
 
   const requestedHours = Math.max(
@@ -3491,6 +3592,7 @@ export const createRentalBookingRequest = async (req, res) => {
     totalCost,
     payableNow,
     advancePaymentLabel,
+    paymentOption,
     paymentStatus,
     paymentMethod,
     paymentMethodLabel,
@@ -3507,6 +3609,11 @@ export const createRentalBookingRequest = async (req, res) => {
     contactPhone: toCleanString(user.phone),
     contactEmail: toCleanString(user.email),
     kycCompleted,
+    conditionPhoto: {
+      imageUrl: conditionPhotoUrl,
+      fileName: toCleanString(conditionPhotoPayload.fileName || 'condition-photo'),
+      uploadedAt: conditionPhotoPayload.uploadedAt ? new Date(conditionPhotoPayload.uploadedAt) : new Date(),
+    },
     kycDocuments: {
       drivingLicense: {
         imageUrl: normalizedDrivingLicenseUrl,
@@ -3537,6 +3644,8 @@ export const createRentalBookingRequest = async (req, res) => {
     },
   };
 
+  const isNewRentalRequest = !(await RentalBookingRequest.exists({ bookingReference, userId: user._id }));
+
   const request = await RentalBookingRequest.findOneAndUpdate(
     { bookingReference, userId: user._id },
     {
@@ -3544,6 +3653,14 @@ export const createRentalBookingRequest = async (req, res) => {
       $setOnInsert: {
         status: 'pending',
         adminNote: '',
+        safetyMoney: {
+          amount: paymentOption === 'safety_money' ? payableNow : 0,
+          status: paymentOption === 'safety_money' ? 'held' : 'none',
+          deductedAmount: 0,
+          refundedAmount: 0,
+          dueAmount: 0,
+          settledAt: null,
+        },
       },
     },
     {
@@ -3552,6 +3669,55 @@ export const createRentalBookingRequest = async (req, res) => {
       setDefaultsOnInsert: true,
     },
   ).lean();
+
+  // Online (UPI/card) payment: keep a history record. The wallet balance is not touched (paid via Razorpay).
+  if (isNewRentalRequest && paymentStatus === 'paid' && paymentMethod !== 'wallet' && payableNow > 0) {
+    try {
+      await ensureUserWallet(user._id);
+      const referenceKey = `rental_online_${bookingReference}`;
+      await UserWallet.updateOne(
+        { userId: user._id, 'transactions.referenceKey': { $ne: referenceKey } },
+        {
+          $push: {
+            transactions: {
+              $each: [{
+                kind: 'debit',
+                amount: payableNow,
+                title: `Rental payment via ${paymentMethodLabel || 'online'}`,
+                description: `${vehicle.name || 'Rental vehicle'} - ${bookingReference}${paymentOption === 'safety_money' ? ' (rental + safety money)' : ' (advance)'}`,
+                provider: toCleanString(paymentPayload.provider) || 'razorpay',
+                providerOrderId: toCleanString(paymentPayload.orderId || paymentPayload.razorpay_order_id),
+                providerPaymentId: toCleanString(paymentPayload.paymentId || paymentPayload.razorpay_payment_id),
+                referenceKey,
+                affectsBalance: false,
+              }],
+              $slice: -50,
+            },
+          },
+        },
+      );
+    } catch (error) {
+      console.warn('Failed to record the rental online payment in wallet history:', error?.message);
+    }
+  }
+
+  // Tell the admin panel (bell + toast) about a brand-new rental request.
+  if (isNewRentalRequest) {
+    try {
+      emitToAdmins('new_registration_alert', {
+        id: `pending_rental:${String(request._id)}`,
+        type: 'rental',
+        role: 'rental',
+        title: 'New Rental Request',
+        name: `${user.name || 'Customer'} - ${vehicle.name || 'Rental vehicle'} (${bookingReference})`,
+        phone: user.phone || '',
+        service_location_id: update.serviceLocation?.locationId || undefined,
+        createdAt: new Date().toISOString(),
+      });
+    } catch (error) {
+      console.warn('Failed to emit rental request alert to admins:', error?.message);
+    }
+  }
 
   return res.status(201).json({
     success: true,
@@ -3671,6 +3837,22 @@ export const endMyActiveRentalRide = async (req, res) => {
   item.finalElapsedMinutes = metrics.elapsedMinutes;
 
   await item.save();
+
+  try {
+    const rider = await User.findById(userId).select('name phone').lean();
+    emitToAdmins('new_registration_alert', {
+      id: `pending_rental_end:${String(item._id)}`,
+      type: 'rental_end',
+      role: 'rental_end',
+      title: 'Rental End Requested',
+      name: `${rider?.name || item.contactName || 'Customer'} - ${item.vehicleName || 'Rental vehicle'} (${item.bookingReference}) - Rs.${Number(item.finalCharge || 0).toFixed(0)}`,
+      phone: rider?.phone || item.contactPhone || '',
+      service_location_id: item.serviceLocation?.locationId || undefined,
+      createdAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.warn('Failed to emit rental end alert to admins:', error?.message);
+  }
 
   return res.status(200).json({
     success: true,

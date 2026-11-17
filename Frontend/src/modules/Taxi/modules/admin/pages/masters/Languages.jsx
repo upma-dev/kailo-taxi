@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Globe, Trash2, ChevronRight, Loader2, Edit2 } from 'lucide-react';
+import { Plus, Search, Globe, Trash2, ChevronRight, Loader2, Edit2, X } from 'lucide-react';
 import { adminService } from '../../services/adminService';
 
 const StatusToggle = ({ active, onToggle }) => (
@@ -11,7 +11,132 @@ const StatusToggle = ({ active, onToggle }) => (
   </button>
 );
 
+const LanguageModal = ({ language, onClose, onSaved }) => {
+  const isEdit = Boolean(language);
+  const [name, setName] = useState(language?.name || '');
+  const [code, setCode] = useState(language?.code || '');
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState('');
+  const [catalog, setCatalog] = useState([]);
+  const [catalogLoading, setCatalogLoading] = useState(!isEdit);
+  const [query, setQuery] = useState('');
+
+  // Adding: the list of languages comes from the API; the admin just picks one.
+  useEffect(() => {
+    if (isEdit) return undefined;
+    let cancelled = false;
+    adminService
+      .getAvailableLanguages()
+      .then((response) => {
+        const payload = response?.data?.data || response?.data || response;
+        if (!cancelled) setCatalog(Array.isArray(payload?.results) ? payload.results : []);
+      })
+      .catch((err) => {
+        if (!cancelled) setFormError(err?.response?.data?.message || err?.message || 'Failed to load languages');
+      })
+      .finally(() => {
+        if (!cancelled) setCatalogLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [isEdit]);
+
+  const filteredCatalog = catalog.filter((item) => {
+    const q = query.trim().toLowerCase();
+    return !q || item.name.toLowerCase().includes(q) || item.native_name.toLowerCase().includes(q) || item.code.toLowerCase().includes(q);
+  });
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!name.trim() || !code.trim()) {
+      setFormError('Name and code are required');
+      return;
+    }
+    setSaving(true);
+    setFormError('');
+    try {
+      const payload = { name: name.trim(), code: code.trim().toLowerCase() };
+      if (isEdit) await adminService.updateLanguage(language._id || language.id, payload);
+      else await adminService.createLanguage(payload);
+      onSaved();
+    } catch (err) {
+      setFormError(err?.response?.data?.message || err?.message || 'Failed to save language');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <form onSubmit={handleSubmit} className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-base font-semibold text-gray-900">{isEdit ? 'Edit Language' : 'Add Language'}</h2>
+          <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
+        </div>
+        {isEdit ? (
+          <>
+            <label className="mb-1.5 block text-xs font-semibold text-gray-500">Name *</label>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="mb-4 w-full rounded-lg border border-gray-200 px-4 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+            />
+            <label className="mb-1.5 block text-xs font-semibold text-gray-500">Code *</label>
+            <input
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              className="mb-4 w-full rounded-lg border border-gray-200 px-4 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+            />
+          </>
+        ) : (
+          <>
+            <label className="mb-1.5 block text-xs font-semibold text-gray-500">Choose a language *</label>
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search language..."
+              className="mb-2 w-full rounded-lg border border-gray-200 px-4 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+            />
+            <div className="mb-4 max-h-64 overflow-y-auto rounded-lg border border-gray-200">
+              {catalogLoading ? (
+                <p className="px-4 py-6 text-center text-sm text-gray-400">Loading languages...</p>
+              ) : filteredCatalog.length === 0 ? (
+                <p className="px-4 py-6 text-center text-sm text-gray-400">No languages found</p>
+              ) : (
+                filteredCatalog.map((item) => {
+                  const selected = code === item.code;
+                  return (
+                    <button
+                      type="button"
+                      key={item.code}
+                      onClick={() => { setName(item.name); setCode(item.code); }}
+                      className={`flex w-full items-center justify-between border-b border-gray-100 px-4 py-2.5 text-left text-sm last:border-none hover:bg-gray-50 ${selected ? 'bg-indigo-50' : ''}`}
+                    >
+                      <span>
+                        <span className="font-medium text-gray-900">{item.name}</span>
+                        <span className="ml-2 text-gray-400">{item.native_name}</span>
+                      </span>
+                      <span className="text-xs font-semibold uppercase text-gray-400">{item.code}</span>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </>
+        )}
+        {formError ? <p className="mb-3 text-sm text-red-500">{formError}</p> : null}
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
+          <button type="submit" disabled={saving} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60">
+            {saving ? 'Saving...' : isEdit ? 'Update' : 'Add'}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+};
+
 const Languages = () => {
+  const [modal, setModal] = useState(null); // null | { language?: object }
   const [languages, setLanguages] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -43,6 +168,15 @@ const Languages = () => {
     }
   };
 
+  const handleSetDefault = async (id) => {
+    try {
+      await adminService.updateLanguage(id, { default_status: 1 });
+      fetchLanguages();
+    } catch (err) {
+      console.error('Set Default Error:', err);
+    }
+  };
+
   const handleDelete = async (id) => {
     if (window.confirm('Are you sure you want to delete this language?')) {
       try {
@@ -71,7 +205,7 @@ const Languages = () => {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-xl font-semibold text-gray-900">Languages</h1>
-        <button className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors">
+        <button onClick={() => setModal({})} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors">
           <Plus size={16} /> Add Language
         </button>
       </div>
@@ -132,7 +266,7 @@ const Languages = () => {
                     {lang.default_status === 1 ? (
                       <span className="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium bg-indigo-50 text-indigo-700">Default</span>
                     ) : (
-                      <button className="text-xs text-gray-400 hover:text-indigo-600 transition-colors">Set as Default</button>
+                      <button onClick={() => handleSetDefault(lang._id || lang.id)} className="text-xs text-gray-400 hover:text-indigo-600 transition-colors">Set as Default</button>
                     )}
                   </td>
                   <td className="px-6 py-4">
@@ -143,7 +277,7 @@ const Languages = () => {
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center justify-center gap-2">
-                      <button className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors">
+                      <button onClick={() => setModal({ language: lang })} className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors">
                         <Edit2 size={15} />
                       </button>
                       {lang.default_status !== 1 && (
@@ -180,6 +314,13 @@ const Languages = () => {
           </div>
         )}
       </div>
+      {modal ? (
+        <LanguageModal
+          language={modal.language}
+          onClose={() => setModal(null)}
+          onSaved={() => { setModal(null); fetchLanguages(); }}
+        />
+      ) : null}
     </div>
   );
 };

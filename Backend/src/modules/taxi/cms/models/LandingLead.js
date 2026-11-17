@@ -3,7 +3,7 @@ import mongoose from 'mongoose';
 const landingLeadSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true, maxlength: 100 },
-    phone: { type: String, required: true, trim: true, maxlength: 20 },
+    phone: { type: String, trim: true, maxlength: 20, default: '' },
     email: { type: String, trim: true, lowercase: true, maxlength: 120, default: '' },
     city: { type: String, trim: true, maxlength: 80, default: '' },
     role: { type: String, trim: true, maxlength: 30, default: 'user' },

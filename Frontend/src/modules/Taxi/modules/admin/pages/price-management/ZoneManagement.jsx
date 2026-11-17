@@ -129,12 +129,22 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
     setLoading(true);
     setFetchError('');
     try {
-      const [zoneRes, slRes, driverRes, modulesRes] = await Promise.all([
+      // Each request is independent: one failing (for example the drivers list) must not hide the zones.
+      const settled = await Promise.allSettled([
         adminService.getZones(),
         adminService.getServiceLocations(),
         adminService.getDrivers(1, 200),
         adminService.getAppModules(),
       ]);
+      const [zoneRes, slRes, driverRes, modulesRes] = settled.map((item) => (item.status === 'fulfilled' ? item.value : null));
+      const labels = ['zones', 'service locations', 'drivers', 'app modules'];
+      const failed = settled
+        .map((item, index) => (item.status === 'rejected' ? `${labels[index]} (${item.reason?.response?.data?.message || item.reason?.message || 'request failed'})` : null))
+        .filter(Boolean);
+      if (failed.length) {
+        console.error('Zone page: some data could not be loaded', failed);
+        setFetchError(`Could not load: ${failed.join(', ')}.`);
+      }
 
       let fetchedZones = [];
       let fetchedLocations = [];
@@ -392,14 +402,15 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
         : await adminService.createZone(payload);
       if (res.success) {
         resetForm();
-        navigate("/taxi/admin/pricing/zone");
+        navigate("/admin/pricing/zone");
         fetchData();
       } else {
         alert(res.message || "Operation failed");
       }
     } catch (err) {
       console.error("Save error:", err);
-      alert("Error connecting to server.");
+      // Show the server's reason (for example "choose the correct service location") instead of a generic message.
+      alert(err?.response?.data?.message || err?.message || "Could not save the zone.");
     } finally {
       setSaving(false);
     }
@@ -604,6 +615,11 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
 
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
               <div className="p-4 border-b border-gray-100 bg-gray-50/50">
+                {fetchError ? (
+                  <div className="mb-3 w-full rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
+                    {fetchError}
+                  </div>
+                ) : null}
                 <div className="relative w-full max-w-sm">
                   <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                   <input 
@@ -695,7 +711,7 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
               <div className="flex items-center justify-between">
                 <h1 className="text-xl font-semibold text-gray-900">{editingId ? 'Edit Market Zone' : 'Add Market Zone'}</h1>
                 <button 
-                  onClick={() => navigate("/taxi/admin/pricing/zone")}
+                  onClick={() => navigate("/admin/pricing/zone")}
                   className="flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors shadow-sm"
                 >
                   <ArrowLeft size={14} /> Back
@@ -905,7 +921,7 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
                      {editingId ? 'Update Zone' : 'Save'}
                    </button>
                    <button 
-                     onClick={() => navigate("/taxi/admin/pricing/zone")}
+                     onClick={() => navigate("/admin/pricing/zone")}
                      className="w-full py-3 bg-gray-50 text-gray-600 border border-gray-200 rounded-lg text-sm font-medium hover:bg-gray-100 transition-colors"
                    >
                      Cancel

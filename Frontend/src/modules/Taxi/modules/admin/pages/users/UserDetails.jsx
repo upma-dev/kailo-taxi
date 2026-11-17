@@ -22,6 +22,7 @@ import {
   History as HistoryIcon
 } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
+import ReferralPanel from '../../components/ReferralPanel';
 
 const UserDetails = () => {
   const { id } = useParams();
@@ -228,7 +229,7 @@ const UserDetails = () => {
             <AlertCircle size={32} />
          </div>
          <p className="text-lg font-black text-gray-900 uppercase">{error || 'User not found'}</p>
-         <button onClick={() => navigate('/taxi/admin/users')} className="px-6 py-2 bg-black text-white rounded-xl text-[12px] font-black uppercase tracking-widest">Go Back</button>
+         <button onClick={() => navigate('/admin/users')} className="px-6 py-2 bg-black text-white rounded-xl text-[12px] font-black uppercase tracking-widest">Go Back</button>
       </div>
     );
   }
@@ -239,7 +240,7 @@ const UserDetails = () => {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <button 
-            onClick={() => navigate('/taxi/admin/users')}
+            onClick={() => navigate('/admin/users')}
             className="p-2 hover:bg-white rounded-xl border border-transparent hover:border-gray-100 transition-all text-gray-400 hover:text-gray-900"
           >
             <ArrowLeft size={20} />
@@ -279,7 +280,7 @@ const UserDetails = () => {
 
         {/* TABS HEADER */}
         <div className="mt-12 flex gap-1 bg-gray-50/50 p-1 rounded-2xl border border-gray-100 w-fit">
-          {['Request List', 'User Payment History', 'Review History', 'Subscriptions'].map(tab => (
+          {['Request List', 'User Payment History', 'Review History', 'Subscriptions', 'Referrals'].map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -513,6 +514,8 @@ const UserDetails = () => {
           </div>
         )}
 
+        {activeTab === 'Referrals' && <ReferralPanel kind="user" id={id} />}
+
         {activeTab === 'Subscriptions' && (
           <div className="space-y-6 animate-in fade-in duration-500">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -612,7 +615,7 @@ const UserDetails = () => {
 
       {/* BACK BUTTON */}
       <button 
-         onClick={() => navigate('/taxi/admin/users')}
+         onClick={() => navigate('/admin/users')}
          className="fixed bottom-10 right-10 w-14 h-14 bg-black text-white rounded-2xl shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all group z-50">
          <ArrowLeft size={24} />
       </button>

@@ -42,6 +42,8 @@ const formatTravelDate = (dateStr) => {
 const formatDurationBrief = (value = '') => {
   const raw = String(value || '').trim();
   if (!raw) return 'Direct';
+  // A bare number means hours.
+  if (/^\d+(\.\d+)?$/.test(raw)) return `${raw}h`;
   return raw
     .replace(/days?/gi, 'd')
     .replace(/hours?/gi, 'h')
@@ -231,8 +233,8 @@ const BusList = () => {
   };
 
   return (
-    <div className="min-h-screen max-w-lg mx-auto bg-[linear-gradient(180deg,#fff7ed_0%,#fffaf7_16%,#f8fafc_100%)] font-sans pb-10">
-      <div className="sticky top-0 z-20 border-b border-orange-100/70 bg-white/92 px-4 pb-4 pt-10 shadow-[0_6px_20px_rgba(15,23,42,0.05)] backdrop-blur-md">
+    <div className="min-h-screen max-w-lg mx-auto bg-[linear-gradient(180deg,#eef7f6_0%,#f4faf9_16%,#f8fafc_100%)] font-booking pb-10">
+      <div className="sticky top-0 z-20 border-b border-[#0F766E]/10 bg-white/92 px-4 pb-4 pt-10 shadow-[0_6px_20px_rgba(15,23,42,0.05)] backdrop-blur-md">
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate(-1)}
@@ -241,13 +243,13 @@ const BusList = () => {
             <ArrowLeft size={18} className="text-slate-900" />
           </button>
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-base font-black text-slate-900">
+            <h1 className="truncate text-base font-bold text-slate-900">
               {fromCity} <span className="text-slate-300">→</span> {toCity}
             </h1>
-            <p className="mt-0.5 text-xs font-semibold text-slate-500">{visibleBuses.length || 0} buses</p>
+            <p className="mt-0.5 text-xs font-semibold text-slate-500">{visibleBuses.length || 0} {visibleBuses.length === 1 ? 'bus' : 'buses'} found</p>
           </div>
-          <div className="rounded-2xl border border-orange-100 bg-orange-50 px-3 py-2 text-right">
-            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-orange-400">{formatTravelDate(date)}</p>
+          <div className="rounded-2xl border border-[var(--app-primary,#0F766E)]/20 bg-[var(--app-primary-soft,#E7F3F2)] px-3 py-2 text-right">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--app-primary,#0F766E)]">{formatTravelDate(date)}</p>
           </div>
         </div>
       </div>
@@ -300,7 +302,7 @@ const BusList = () => {
                   onClick={() => setShowDealsOnly((current) => !current)}
                   className={`inline-flex shrink-0 items-center rounded-xl border px-4 py-2 text-xs font-bold shadow-sm transition ${
                     showDealsOnly
-                      ? 'border-orange-200 bg-orange-50 text-orange-700'
+                      ? 'border-[var(--app-primary,#0F766E)]/20 bg-[var(--app-primary-soft,#E7F3F2)] text-[var(--app-primary,#0F766E)]'
                       : 'border-slate-200 bg-white text-slate-700'
                   }`}
                 >
@@ -323,7 +325,7 @@ const BusList = () => {
                 <div
                   className="absolute left-0 top-[calc(100%+0.5rem)] z-20 w-[min(20rem,calc(100vw-2rem))] rounded-[20px] border border-slate-200 bg-white p-2 shadow-[0_18px_48px_rgba(15,23,42,0.14)]"
                 >
-                  <p className="px-3 pb-2 pt-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+                  <p className="px-3 pb-2 pt-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
                     Sort buses by
                   </p>
                   <div className="space-y-1">
@@ -337,7 +339,7 @@ const BusList = () => {
                           onClick={() => handleSortSelect(option.id)}
                           className={`flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-xs font-bold transition ${
                             isActive
-                              ? 'bg-slate-900 text-white'
+                              ? 'bg-[var(--app-primary,#0F766E)] text-white'
                               : 'bg-white text-slate-700 hover:bg-slate-50'
                           }`}
                         >
@@ -351,7 +353,7 @@ const BusList = () => {
                   {busCompanies.length > 0 ? (
                     <>
                       <div className="mx-1 my-2 h-px bg-slate-100" />
-                      <p className="px-3 pb-2 pt-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+                      <p className="px-3 pb-2 pt-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
                         Bus company
                       </p>
                       <div className="max-h-56 space-y-1 overflow-y-auto">
@@ -360,7 +362,7 @@ const BusList = () => {
                           onClick={() => setSelectedCompany('all')}
                           className={`flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-xs font-bold transition ${
                             selectedCompany === 'all'
-                              ? 'bg-slate-900 text-white'
+                              ? 'bg-[var(--app-primary,#0F766E)] text-white'
                               : 'bg-white text-slate-700 hover:bg-slate-50'
                           }`}
                         >
@@ -377,7 +379,7 @@ const BusList = () => {
                               onClick={() => setSelectedCompany(company)}
                               className={`flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-xs font-bold transition ${
                                 isActive
-                                  ? 'bg-slate-900 text-white'
+                                  ? 'bg-[var(--app-primary,#0F766E)] text-white'
                                   : 'bg-white text-slate-700 hover:bg-slate-50'
                               }`}
                             >
@@ -411,89 +413,52 @@ const BusList = () => {
                   className="w-full rounded-[24px] border border-slate-200/80 bg-white p-4 text-left shadow-[0_8px_24px_rgba(15,23,42,0.06)] transition-transform active:scale-[0.98]"
                 >
                   <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="flex items-end gap-2">
-                            <p className="text-2xl font-black leading-none text-slate-900">{bus.departure}</p>
-                            <p className="pb-0.5 text-sm font-bold text-slate-400">→</p>
-                            <p className="text-2xl font-black leading-none text-slate-700">{bus.arrival}</p>
-                          </div>
-                          <p className="mt-1 text-xs font-semibold text-slate-500">
-                            {formatDurationBrief(bus.duration)} {bus.availableSeats > 0 ? `• ${bus.availableSeats} Seats` : ''}
-                          </p>
-                        </div>
-                        <div className="shrink-0 text-right">
-                          <p className="text-2xl font-black leading-none text-slate-900">₹{Number(bus.price || 0).toLocaleString('en-IN')}</p>
-                          <p className="mt-1 text-[11px] font-semibold text-slate-400">Onwards</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="mt-3 flex items-center gap-2 text-xs font-semibold text-slate-500">
-                    <Clock3 size={13} className="text-slate-400" />
-                    <span>{bus.type}</span>
-                    <span>•</span>
-                    <span>{bus.busName || getBusCompany(bus)}</span>
-                  </div>
-
-                  <div className="mt-3 flex items-center justify-between gap-3">
                     <div className="min-w-0">
-                      <h3 className="truncate text-[15px] font-black text-slate-900">{getBusCompany(bus) || 'Bus Service'}</h3>
+                      <h3 className="truncate text-base font-bold text-slate-900">{getBusCompany(bus) || 'Bus Service'}</h3>
                       <p className="mt-0.5 truncate text-xs font-semibold text-slate-500">
-                        {topAmenities.length > 0 ? topAmenities.join(' • ') : (bus.routeName || `${fromCity} to ${toCity}`)}
+                        {bus.type}{bus.busName ? ` • ${bus.busName}` : ''}
                       </p>
                     </div>
-                    {rated ? (
-                      <div className="shrink-0 rounded-xl bg-amber-400 px-2.5 py-1.5 text-white shadow-sm">
-                        <div className="flex items-center gap-1">
-                          <Star size={12} className="fill-current" />
-                          <span className="text-sm font-black">{getBusRating(bus).toFixed(1)}</span>
-                        </div>
-                        <p className="mt-0.5 text-center text-[10px] font-bold text-white/90">{getBusRatingCount(bus)}</p>
-                      </div>
-                    ) : (
-                      <div className="shrink-0 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[10px] font-black text-emerald-700">
-                        New
-                      </div>
-                    )}
+                    <div className="shrink-0 text-right">
+                      <p className="text-xl font-bold leading-none text-slate-900">₹{Number(bus.price || 0).toLocaleString('en-IN')}</p>
+                      <p className="mt-1 text-[11px] font-semibold text-slate-400">per seat</p>
+                    </div>
                   </div>
 
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {bus.availableSeats > 0 ? (
-                      <span className="rounded-full bg-orange-50 px-3 py-1 text-[10px] font-black text-orange-600">
-                        {bus.availableSeats} seats left
+                  <div className="mt-4 flex items-center gap-3">
+                    <div className="min-w-0">
+                      <p className="text-lg font-bold leading-none text-slate-900">{bus.departure}</p>
+                      <p className="mt-1 truncate text-[11px] font-semibold text-slate-400">{fromCity}</p>
+                    </div>
+                    <div className="flex flex-1 flex-col items-center">
+                      <span className="text-[11px] font-bold text-slate-500">{formatDurationBrief(bus.duration)}</span>
+                      <span className="mt-1 h-px w-full bg-slate-200" />
+                    </div>
+                    <div className="min-w-0 text-right">
+                      <p className="text-lg font-bold leading-none text-slate-900">{bus.arrival}</p>
+                      <p className="mt-1 truncate text-[11px] font-semibold text-slate-400">{toCity}</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap items-center gap-2">
+                    {Number(bus.availableSeats) > 0 ? (
+                      <span className={`rounded-full px-3 py-1 text-[10px] font-bold ${Number(bus.availableSeats) <= 5 ? 'bg-rose-50 text-rose-600' : 'bg-[var(--app-primary-soft,#E7F3F2)] text-[var(--app-primary,#0F766E)]'}`}>
+                        {Number(bus.availableSeats) <= 5 ? `Only ${bus.availableSeats} left` : `${bus.availableSeats} seats left`}
+                      </span>
+                    ) : (
+                      <span className="rounded-full bg-slate-100 px-3 py-1 text-[10px] font-bold text-slate-500">Sold out</span>
+                    )}
+                    {(String(bus.cancellationPolicy || '').toLowerCase().includes('free') || (bus.cancellationRules || []).some((rule) => rule.refundType === 'percentage' && Number(rule.refundValue) >= 100)) ? (
+                      <span className="rounded-full bg-[#EEFAB8] px-3 py-1 text-[10px] font-bold text-[#4D5F00]">Free cancellation</span>
+                    ) : null}
+                    {rated ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-3 py-1 text-[10px] font-bold text-amber-700">
+                        <Star size={11} className="fill-current" /> {getBusRating(bus).toFixed(1)}
                       </span>
                     ) : null}
-                    {topAmenities.map((amenity) => (
-                      <span key={amenity} className="rounded-full bg-slate-100 px-3 py-1 text-[10px] font-bold text-slate-600">
-                        {amenity}
-                      </span>
-                    ))}
-                  </div>
-
-                  <div className="mt-3 flex items-center justify-between gap-3">
-                    <div className="flex min-w-0 flex-wrap gap-2">
-                      {isHighlyRatedBus(bus) ? (
-                        <span className="rounded-full bg-pink-50 px-3 py-1 text-[10px] font-black text-pink-600">
-                          Highly rated
-                        </span>
-                      ) : null}
-                      {(String(bus.cancellationPolicy || '').toLowerCase().includes('free') || (bus.cancellationRules || []).some((rule) => rule.refundType === 'percentage' && Number(rule.refundValue) >= 100)) ? (
-                        <span className="rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black text-emerald-600">
-                          Free cancellation
-                        </span>
-                      ) : null}
-                      {!rated ? (
-                        <span className="rounded-full bg-sky-50 px-3 py-1 text-[10px] font-black text-sky-700">
-                          New
-                        </span>
-                      ) : null}
-                    </div>
-                    <div className="flex items-center gap-1 text-xs font-black uppercase tracking-[0.14em] text-slate-900">
-                      Details <ChevronRight size={16} />
-                    </div>
+                    <span className={`ml-auto inline-flex items-center gap-1 rounded-xl px-5 py-2.5 text-sm font-bold shadow-sm ${Number(bus.availableSeats) > 0 ? 'bg-[var(--app-primary,#0F766E)] text-white shadow-[#0F766E]/25' : 'bg-slate-100 text-slate-400'}`}>
+                      {Number(bus.availableSeats) > 0 ? 'Book' : 'Sold out'} {Number(bus.availableSeats) > 0 ? <ChevronRight size={16} /> : null}
+                    </span>
                   </div>
                 </motion.button>
               );

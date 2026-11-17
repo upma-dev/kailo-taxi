@@ -104,7 +104,10 @@ const resolveSeatPrice = (busService = {}, seatCell = {}) => {
   const variantPricing = busService?.variantPricing || {};
   const defaultPrice = Number(busService?.seatPrice || 0);
   const variantKey = String(seatCell?.variant || 'seat').trim().toLowerCase();
-  const resolvedPrice = variantPricing?.[variantKey] ?? variantPricing?.seat ?? defaultPrice;
+  // A price of 0 means "not set": fall back to the plain seat price, then to the bus's base seat price.
+  const resolvedPrice = [variantPricing?.[variantKey], variantPricing?.seat, defaultPrice]
+    .map(Number)
+    .find((value) => Number.isFinite(value) && value > 0) ?? 0;
 
   return Number.isFinite(Number(resolvedPrice)) ? Number(resolvedPrice) : defaultPrice;
 };

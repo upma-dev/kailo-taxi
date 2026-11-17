@@ -103,7 +103,7 @@ const OwnerNeededDocuments = () => {
 
             <button
               type="button"
-              onClick={() => navigate('/taxi/admin/owners/documents/create')}
+              onClick={() => navigate('/admin/owners/documents/create')}
               className="flex h-12 items-center gap-3 rounded bg-indigo-950 px-6 text-sm font-semibold text-white transition-colors hover:bg-indigo-900"
             >
               <Plus size={16} /> Add Owner Needed Documents
@@ -160,7 +160,7 @@ const OwnerNeededDocuments = () => {
                           <div className="flex items-center gap-2">
                             <button
                               type="button"
-                              onClick={() => navigate(`/taxi/admin/owners/documents/create?id=${doc._id}`)}
+                              onClick={() => navigate(`/admin/owners/documents/create?id=${doc._id}`)}
                               className="inline-flex h-9 w-10 items-center justify-center rounded bg-amber-50 text-amber-600 transition-colors hover:bg-amber-100"
                               title="Edit"
                             >

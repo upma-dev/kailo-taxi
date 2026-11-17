@@ -48,6 +48,11 @@ const startServer = async () => {
         // 1. Connect to Database (MongoDB)
         await connectDB();
 
+        // Starter catalog data (vehicle pictures, a zone per service location, ride prices). Never blocks start-up.
+        import('./src/modules/taxi/admin/services/adminService.js')
+            .then((admin) => admin.ensureCatalogSeeded())
+            .catch((err) => logger.error(`Catalog seed skipped: ${err.message}`));
+
         // 2. Create HTTP server from Express app
         const httpServer = http.createServer(app);
 
@@ -78,29 +83,46 @@ const startServer = async () => {
             logger.warn('BullMQ is enabled but Redis is disabled. Queue initialization skipped.');
         }
 
+        // GitHub deploy webhook. The secret comes from DEPLOY_WEBHOOK_SECRET (never from the code);
+        // without it the endpoint is switched off.
         app.post('/api/deploy', (req, res) => {
-            const signature = req.headers['x-hub-signature-256'];
-            const secret = 'mysecret123';
+            const secret = String(process.env.DEPLOY_WEBHOOK_SECRET || '').trim();
+            if (!secret) {
+                return res.status(404).send('Not found');
+            }
+            const signature = String(req.headers['x-hub-signature-256'] || '');
 
             const hash = 'sha256=' + crypto
                 .createHmac('sha256', secret)
                 .update(JSON.stringify(req.body))
                 .digest('hex');
 
-            if (signature !== hash) {
+            const given = Buffer.from(signature);
+            const expected = Buffer.from(hash);
+            if (given.length !== expected.length || !crypto.timingSafeEqual(given, expected)) {
                 return res.status(403).send('Unauthorized');
             }
 
             exec('cd ~ && ./deploy.sh', (err, stdout, stderr) => {
                 if (err) {
-                    console.error(err);
-                    return res.send('Deploy failed');
+                    console.error('Deploy failed:', err.message);
+                    return res.status(500).send('Deploy failed');
                 }
 
                 console.log(stdout);
                 res.send('Deploy success');
             });
         });
+
+        // Hourly driver selfie check (takes a driver offline when the selfie runs out).
+        import('./src/modules/taxi/services/selfieExpiryService.js')
+            .then((job) => job.startSelfieExpiryJob())
+            .catch((err) => logger.error(`Selfie check job not started: ${err.message}`));
+
+        // Outstation Return Trip: ends it when the driver is back home or the time is over.
+        import('./src/modules/taxi/services/returnTripService.js')
+            .then((job) => job.startReturnTripJob())
+            .catch((err) => logger.error(`Return trip job not started: ${err.message}`));
 
         // 6. Start the HTTP server
 

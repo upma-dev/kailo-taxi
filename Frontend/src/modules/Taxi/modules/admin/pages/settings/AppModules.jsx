@@ -18,6 +18,11 @@ import {
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { adminService } from '../../services/adminService';
 import { useImageUpload } from '../../../../shared/hooks/useImageUpload';
+import taxiArt from '../../../../assets/3d images/AutoCab/taxi.png';
+import busArt from '../../../../assets/3d images/AutoCab/bus.png';
+import airportArt from '../../../../assets/3d images/AutoCab/airoplan.png';
+import parcelArt from '../../../../assets/3d images/gifts.png';
+import cabArt from '../../../../assets/modern_cab_cutout.png';
 import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -32,8 +37,13 @@ const SERVICE_OPTIONS = [
   { value: 'rental', label: 'Rental', transport: 'taxi' },
   { value: 'parcel', label: 'Parcel', transport: 'delivery' },
   { value: 'bus', label: 'Bus', transport: 'taxi' },
+  { value: 'airport', label: 'Airport', transport: 'taxi' },
   { value: 'pooling', label: 'Car Pooling', transport: 'pooling' },
 ];
+
+// Picture shown for a module that has no thumbnail (the user app uses the same pictures).
+const SERVICE_ART = { normal: cabArt, outstation: cabArt, rental: cabArt, parcel: parcelArt, bus: busArt, airport: airportArt, pooling: taxiArt };
+const isPlaceholderThumb = (url) => !url || /tabler-icons/i.test(url);
 
 const getServiceLabel = (value) =>
   SERVICE_OPTIONS.find((s) => s.value === String(value || 'normal').toLowerCase())?.label ||
@@ -116,6 +126,9 @@ const AppModules = ({ mode: propMode }) => {
               order_by: item.order_by || '',
               short_description: item.short_description || '',
               description: item.description || '',
+              banner_title: item.banner_title || '',
+              banner_text: item.banner_text || '',
+              banner_cta: item.banner_cta || '',
               active: item.active !== false,
               mobile_menu_icon: item.mobile_menu_icon || ''
             });
@@ -165,7 +178,7 @@ const AppModules = ({ mode: propMode }) => {
         await adminService.createAppModule(payload);
         toast.success('New module created');
       }
-      navigate('/taxi/admin/pricing/app-modules');
+      navigate('/admin/pricing/app-modules');
     } catch (err) {
       toast.error(err.message || 'Failed to save module');
     } finally {
@@ -354,6 +367,7 @@ const AppModules = ({ mode: propMode }) => {
                       <tr className="bg-[#E9E9E9]">
                         <th className="px-6 py-4 text-[13px] font-bold text-slate-700">Name</th>
                         <th className="px-6 py-4 text-[13px] font-bold text-slate-700">Service</th>
+                        <th className="px-6 py-4 text-[13px] font-bold text-slate-700">Vehicle Types</th>
                         <th className="px-6 py-4 text-[13px] font-bold text-slate-700">Thumbnail</th>
                         <th className="px-6 py-4 text-[13px] font-bold text-slate-700">Status</th>
                         <th className="px-6 py-4 text-[13px] font-bold text-slate-700">Action</th>
@@ -362,7 +376,7 @@ const AppModules = ({ mode: propMode }) => {
                     <tbody className="divide-y divide-gray-50">
                       {loading ? (
                         <tr>
-                          <td colSpan="5" className="py-24 text-center">
+                          <td colSpan="6" className="py-24 text-center">
                             <Loader2 className="animate-spin text-indigo-600 mx-auto" size={32} />
                           </td>
                         </tr>
@@ -376,8 +390,27 @@ const AppModules = ({ mode: propMode }) => {
                               <span className="text-[14px] font-medium text-slate-600">{getServiceLabel(m.service_type)}</span>
                             </td>
                             <td className="px-6 py-5">
+                              {Array.isArray(m.vehicles) && m.vehicles.length > 0 ? (
+                                <div className="flex max-w-[260px] flex-wrap gap-1.5">
+                                  {m.vehicles.slice(0, 5).map((vehicle) => (
+                                    <span
+                                      key={vehicle.id}
+                                      className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${vehicle.active ? 'bg-indigo-50 text-indigo-700' : 'bg-gray-100 text-gray-400 line-through'}`}
+                                    >
+                                      {vehicle.name}
+                                    </span>
+                                  ))}
+                                  {m.vehicles.length > 5 ? (
+                                    <span className="rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-semibold text-gray-500">+{m.vehicles.length - 5} more</span>
+                                  ) : null}
+                                </div>
+                              ) : (
+                                <span className="text-[12px] text-gray-400">None yet</span>
+                              )}
+                            </td>
+                            <td className="px-6 py-5">
                               <div className="w-10 h-10 rounded bg-indigo-50/60 border border-indigo-100 flex items-center justify-center overflow-hidden font-bold text-xs text-indigo-600">
-                                {m.mobile_menu_icon ? (
+                                {!isPlaceholderThumb(m.mobile_menu_icon) ? (
                                   <img 
                                     src={m.mobile_menu_icon} 
                                     className="w-full h-full object-contain" 
@@ -386,6 +419,8 @@ const AppModules = ({ mode: propMode }) => {
                                       e.target.style.display = 'none';
                                     }}
                                   />
+                                ) : SERVICE_ART[String(m.service_type || '').toLowerCase()] ? (
+                                  <img src={SERVICE_ART[String(m.service_type || '').toLowerCase()]} className="w-full h-full object-contain p-0.5" alt={m.name || ''} />
                                 ) : (
                                   <span>{m.name?.substring(0, 2).toUpperCase() || 'MOD'}</span>
                                 )}
@@ -410,7 +445,7 @@ const AppModules = ({ mode: propMode }) => {
                         ))
                       ) : (
                         <tr>
-                          <td colSpan="5" className="py-32 text-center text-gray-400 font-medium italic">
+                          <td colSpan="6" className="py-32 text-center text-gray-400 font-medium italic">
                             No records integrated in the system database.
                           </td>
                         </tr>
@@ -460,7 +495,7 @@ const AppModules = ({ mode: propMode }) => {
       <div className="bg-white border-b border-gray-200 px-8 py-4 flex items-center justify-between shrink-0 shadow-sm relative z-10">
         <h1 className="text-[14px] font-black text-slate-900 uppercase tracking-tight">{isEdit ? 'EDIT' : 'CREATE'}</h1>
         <div className="flex items-center gap-2 text-[11px] font-bold text-gray-400">
-          <span className="hover:text-indigo-600 cursor-pointer" onClick={() => navigate("/taxi/admin/pricing/app-modules")}>App Modules</span>
+          <span className="hover:text-indigo-600 cursor-pointer" onClick={() => navigate("/admin/pricing/app-modules")}>App Modules</span>
           <ChevronRight size={12} className="opacity-50" />
           <span className="text-gray-700">{isEdit ? 'Edit' : 'Create'}</span>
         </div>
@@ -520,6 +555,28 @@ const AppModules = ({ mode: propMode }) => {
             </div>
           </div>
 
+          <div className="mt-8 rounded-2xl border border-gray-100 bg-gray-50/60 p-6">
+            <p className="text-sm font-bold text-slate-700">Home banner text <span className="font-medium text-slate-400">(optional)</span></p>
+            <p className="mb-4 mt-1 text-xs text-slate-400">
+              The banner of this service at the top of the user app home. Leave blank to use the standard text for this service.
+              The picture is the Thumbnail below.
+            </p>
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+              <div className="space-y-1.5">
+                <label className={labelClass}>Banner title</label>
+                <input name="banner_title" value={formData.banner_title || ''} onChange={handleInputChange} maxLength={80} placeholder="Send anything, anywhere" className={inputClass} />
+              </div>
+              <div className="space-y-1.5">
+                <label className={labelClass}>Banner text</label>
+                <input name="banner_text" value={formData.banner_text || ''} onChange={handleInputChange} maxLength={140} placeholder="Pickup in minutes with a secure OTP handover." className={inputClass} />
+              </div>
+              <div className="space-y-1.5">
+                <label className={labelClass}>Button text</label>
+                <input name="banner_cta" value={formData.banner_cta || ''} onChange={handleInputChange} maxLength={30} placeholder="Send parcel" className={inputClass} />
+              </div>
+            </div>
+          </div>
+
           <div className="mt-8 space-y-1.5">
             <label className={labelClass}>Description *</label>
             <textarea name="description" value={formData.description} onChange={handleInputChange} rows={4} placeholder="Enter Description" className={inputClass + " resize-none"} />
@@ -550,7 +607,7 @@ const AppModules = ({ mode: propMode }) => {
 
           <div className="mt-12 flex justify-end gap-3 pt-8 border-t border-gray-100">
              <button 
-                onClick={() => navigate('/taxi/admin/pricing/app-modules')}
+                onClick={() => navigate('/admin/pricing/app-modules')}
                 className="px-6 py-2.5 bg-gray-50 text-gray-500 border border-gray-200 rounded-lg text-sm font-semibold hover:bg-gray-100 transition-all active:scale-95"
              >
                 Cancel

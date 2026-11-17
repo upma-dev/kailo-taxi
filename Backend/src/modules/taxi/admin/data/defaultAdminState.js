@@ -184,32 +184,6 @@ export const createDefaultAdminState = () => {
       { name: 'Stripe', slug: 'stripe', active: true },
       { name: 'PayPal', slug: 'paypal', active: false },
     ],
-    onboardingScreens: [
-      {
-        audience: 'user',
-        screen: 'user',
-        order: 1,
-        title: 'Book Rides Faster',
-        description: 'Save places, pick vehicle types, and ride in seconds.',
-        active: true,
-      },
-      {
-        audience: 'driver',
-        screen: 'driver',
-        order: 1,
-        title: 'Drive On Your Schedule',
-        description: 'Go online when ready and track earnings live.',
-        active: true,
-      },
-      {
-        audience: 'owner',
-        screen: 'owner',
-        order: 1,
-        title: 'Scale Your Fleet',
-        description: 'Manage vehicles, drivers, and payouts from one panel.',
-        active: true,
-      },
-    ],
     serviceLocations: [
       {
         _id: indoreId,

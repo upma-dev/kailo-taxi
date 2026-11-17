@@ -94,7 +94,7 @@ const CreatePackagePrice = ({ mode = 'create' }) => {
 
           if (!selected) {
             toast.error('Package pricing not found');
-            navigate('/taxi/admin/pricing/package-pricing');
+            navigate('/admin/pricing/package-pricing');
             return;
           }
 
@@ -221,7 +221,7 @@ const CreatePackagePrice = ({ mode = 'create' }) => {
         await adminService.createSetPrice(payload);
         toast.success('Package pricing created');
       }
-      navigate('/taxi/admin/pricing/package-pricing');
+      navigate('/admin/pricing/package-pricing');
     } catch (error) {
       toast.error('Failed to save package pricing');
     } finally {
@@ -237,7 +237,7 @@ const CreatePackagePrice = ({ mode = 'create' }) => {
           <p className="mt-2 text-sm text-slate-500">Use a simple package form and set a different price block for each vehicle.</p>
         </div>
         <div className="flex items-center gap-1.5 text-[11px] text-slate-400 font-medium tracking-tight">
-          <span className="hover:text-slate-600 transition-colors cursor-pointer" onClick={() => navigate('/taxi/admin/pricing/package-pricing')}>Package Pricing</span>
+          <span className="hover:text-slate-600 transition-colors cursor-pointer" onClick={() => navigate('/admin/pricing/package-pricing')}>Package Pricing</span>
           <ChevronRight size={10} className="text-slate-300" />
           <span className="text-slate-800 font-bold">{isEdit ? 'Edit' : 'Create'}</span>
         </div>
@@ -254,7 +254,7 @@ const CreatePackagePrice = ({ mode = 'create' }) => {
           <div className="mb-8 flex items-center justify-between">
             <button
               type="button"
-              onClick={() => navigate('/taxi/admin/pricing/package-pricing')}
+              onClick={() => navigate('/admin/pricing/package-pricing')}
               className="inline-flex items-center gap-2 text-sm font-semibold text-slate-500 transition hover:text-slate-800"
             >
               <ArrowLeft size={16} />

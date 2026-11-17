@@ -1,17 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import {
-  ArrowLeft,
-  UserPlus,
-  Mail,
-  Phone,
-  MapPin,
-  IndianRupee,
-  Trash2,
-  Edit3,
-  Briefcase,
-  Plus,
-} from "lucide-react";
+import { ArrowLeft, Edit3, Plus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { getOwnerFleetDrivers } from "../../services/registrationService";
 import DriverBottomNav from "../../../shared/components/DriverBottomNav";
@@ -74,165 +62,118 @@ const ManageDrivers = () => {
     };
   }, []);
 
-  const deleteDriver = (id) => {
-    setDrivers((d) => d.filter((item) => item.id !== id));
-  };
-
   const activeCount = useMemo(
     () => drivers.filter((d) => d.status === "Active").length,
     [drivers],
   );
 
   return (
-    <div className="min-h-screen bg-[#f8f9fb] font-sans p-6 pt-10 pb-32 overflow-x-hidden">
-      <header className="flex items-center gap-4 mb-8 text-slate-900 uppercase">
+    <div
+      className="min-h-screen bg-[#f8f9fb] px-5 pb-32 pt-8 overflow-x-hidden"
+      style={{ fontFamily: "'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" }}
+    >
+      <header className="mb-6 flex items-center gap-3">
         <button
+          type="button"
+          aria-label="Back"
           onClick={() => navigate(routePrefix === "/taxi/owner" ? "/taxi/owner/home" : `${routePrefix}/profile`)}
-          className="w-10 h-10 bg-white rounded-xl shadow-sm border border-slate-100 flex items-center justify-center">
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-800 shadow-sm"
+        >
           <ArrowLeft size={18} />
         </button>
-        <h1 className="text-lg font-black tracking-tight tracking-tighter uppercase">
-          Manage Drivers
-        </h1>
+        <div>
+          <h1 className="text-xl font-extrabold text-slate-900">Drivers</h1>
+          <p className="text-xs font-medium text-slate-500">Taxi drivers working for your fleet</p>
+        </div>
       </header>
 
-      <main className="space-y-6">
-        <div className="bg-gradient-to-br from-slate-900 to-slate-800 p-6 rounded-[2rem] text-white relative overflow-hidden group shadow-2xl">
-          <div className="absolute top-[-30%] right-[-10%] w-48 h-48 bg-sky-500/10 rounded-full blur-3xl" />
-          <div className="relative z-10 space-y-4">
-            <div className="flex items-start justify-between">
-              <div className="space-y-1">
-                <h3 className="text-[12px] font-black uppercase tracking-widest text-sky-500/60">
-                  Total Active
-                </h3>
-                <p className="text-[28px] font-black tracking-tight leading-none italic">
-                  {activeCount} Drivers
-                </p>
-                <p className="text-[11px] font-bold tracking-widest opacity-40 uppercase">
-                  Managing your fleet team
-                </p>
+      <main className="space-y-5">
+        {/* summary: plain numbers from the list below */}
+        <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="grid grid-cols-3 divide-x divide-slate-100 text-center">
+            {[
+              ["Total", drivers.length],
+              ["Active", activeCount],
+              ["Pending", drivers.length - activeCount],
+            ].map(([label, value]) => (
+              <div key={label} className="px-2">
+                <p className="text-2xl font-extrabold text-slate-900">{isLoading ? "-" : value}</p>
+                <p className="mt-0.5 text-xs font-semibold text-slate-500">{label}</p>
               </div>
-              <div className="w-14 h-14 bg-white/10 rounded-2xl flex items-center justify-center text-sky-500 border border-white/10 shadow-lg">
-                <Briefcase size={28} />
-              </div>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate(`${routePrefix}/add-driver`)}
+            className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 text-sm font-bold text-white active:scale-[0.99]"
+          >
+            <Plus size={17} strokeWidth={2.5} /> Add a driver
+          </button>
+        </section>
+
+        <section className="space-y-3">
+          <h2 className="px-1 text-sm font-bold text-slate-700">Your drivers</h2>
+
+          {isLoading ? (
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm font-medium text-slate-500">
+              Loading drivers...
             </div>
-            <button
-              onClick={() => navigate(`${routePrefix}/add-driver`)}
-              className="bg-white/10 hover:bg-white/20 border border-white/10 text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-xl transition-all">
-              + Add New Driver
-            </button>
-          </div>
-        </div>
-
-        <div className="space-y-4">
-          <div className="flex items-center justify-between px-1">
-            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest opacity-60">
-              Team List
-            </h3>
-            <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest leading-none">
-              Status Overview
-            </p>
-          </div>
-
-          <div className="space-y-3">
-            {isLoading ? (
-              <div className="bg-white p-5 rounded-2xl border border-white shadow-sm text-[12px] font-bold text-slate-400">
-                Loading drivers...
-              </div>
-            ) : error ? (
-              <div className="bg-white p-5 rounded-2xl border border-white shadow-sm text-[12px] font-bold text-rose-500">
-                {error}
-              </div>
-            ) : drivers.length === 0 ? (
-              <div className="bg-white p-5 rounded-2xl border border-white shadow-sm text-[12px] font-bold text-slate-400">
-                No drivers found.
-              </div>
-            ) : (
-              drivers.map((d) => (
-                <div
-                  key={d.id}
-                  className="bg-white p-5 rounded-2xl border border-white shadow-sm flex flex-col gap-4 group active:scale-98 transition-all">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div
-                        className={`w-11 h-11 rounded-xl flex items-center justify-center border border-slate-50 transition-colors ${d.status === "Active" ? "bg-emerald-50 text-emerald-500 shadow-sm" : "bg-amber-50 text-amber-500 shadow-sm"}`}>
-                        <UserPlus size={18} />
-                      </div>
-                      <div className="space-y-0.5">
-                        <h4 className="text-[14px] font-black text-slate-900 leading-tight uppercase tracking-tighter">
-                          {d.name}
-                        </h4>
-                        <div className="flex items-center gap-2">
-                          <div
-                            className={`w-1.5 h-1.5 rounded-full ${d.status === "Active" ? "bg-emerald-500" : "bg-amber-500"}`}
-                          />
-                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                            {d.status}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() =>
-                          navigate(`${routePrefix}/edit-driver/${d.id}`, {
-                            state: {
-                              driver: d,
-                              returnTo: `${routePrefix}/manage-drivers`,
-                            },
-                          })
-                        }
-                        className="p-2 bg-slate-50 rounded-lg text-slate-400 hover:text-slate-900 transition-colors">
-                        <Edit3 size={14} />
-                      </button>
-                      <button
-                        onClick={() => deleteDriver(d.id)}
-                        className="p-2 bg-slate-50 rounded-lg text-slate-400 hover:text-rose-500 transition-colors">
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
+          ) : error ? (
+            <div className="rounded-2xl border border-rose-100 bg-rose-50 p-5 text-sm font-semibold text-rose-600">
+              {error}
+            </div>
+          ) : drivers.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center">
+              <p className="text-sm font-bold text-slate-800">No drivers added yet</p>
+              <p className="mt-1 text-xs font-medium text-slate-500">
+                Add a driver with their name, mobile number and licence details. They can then log in with that number.
+              </p>
+            </div>
+          ) : (
+            drivers.map((d) => (
+              <article key={d.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h3 className="truncate text-base font-bold text-slate-900">{d.name}</h3>
+                    <span
+                      className={`mt-1 inline-block rounded-full px-2.5 py-0.5 text-xs font-bold ${
+                        d.status === "Active" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"
+                      }`}
+                    >
+                      {d.status === "Active" ? "Approved" : "Waiting for approval"}
+                    </span>
                   </div>
-
-                    <div className="grid grid-cols-2 gap-3 pt-1">
-                      <div className="flex items-center gap-2 text-slate-400">
-                        <Phone size={12} strokeWidth={2.5} />
-                      <span className="text-[10px] font-bold text-slate-600 uppercase tracking-tighter">
-                        {d.phone}
-                      </span>
-                    </div>
-                      <div className="flex items-center gap-2 text-slate-400">
-                        <Mail size={12} strokeWidth={2.5} />
-                        <span className="text-[10px] font-bold text-slate-600 truncate">
-                          {d.email}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2 text-slate-400">
-                        <IndianRupee size={12} strokeWidth={2.5} />
-                        <span className="text-[10px] font-bold text-slate-600 uppercase tracking-tighter">
-                          Monthly Salary Rs {Number(d.salary || 0).toLocaleString("en-IN")}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2 text-slate-400 col-span-2">
-                        <MapPin size={12} strokeWidth={2.5} />
-                      <span className="text-[10px] font-bold text-slate-600 uppercase tracking-tighter">
-                        {d.address}
-                      </span>
-                    </div>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      navigate(`${routePrefix}/edit-driver/${d.id}`, {
+                        state: { driver: d, returnTo: `${routePrefix}/manage-drivers` },
+                      })
+                    }
+                    className="flex h-10 shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700"
+                  >
+                    <Edit3 size={14} /> Edit
+                  </button>
                 </div>
-              ))
-            )}
-          </div>
-        </div>
-      </main>
 
-      <div className="fixed bottom-24 right-6">
-        <button
-          onClick={() => navigate(`${routePrefix}/add-driver`)}
-          className="w-14 h-14 bg-slate-900 text-white rounded-2xl shadow-2xl flex items-center justify-center active:scale-95 transition-transform">
-          <Plus size={24} strokeWidth={3} />
-        </button>
-      </div>
+                <dl className="mt-4 divide-y divide-slate-100 rounded-xl bg-slate-50 text-sm">
+                  {[
+                    ["Mobile", d.phone],
+                    ["Email", d.email],
+                    ["City", d.address],
+                    ["Monthly salary", d.salary > 0 ? `₹${Number(d.salary).toLocaleString("en-IN")}` : "-"],
+                  ].map(([label, value]) => (
+                    <div key={label} className="flex items-center justify-between gap-4 px-3.5 py-2.5">
+                      <dt className="font-medium text-slate-500">{label}</dt>
+                      <dd className="min-w-0 truncate text-right font-semibold text-slate-900">{value || "-"}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </article>
+            ))
+          )}
+        </section>
+      </main>
 
       <DriverBottomNav />
     </div>

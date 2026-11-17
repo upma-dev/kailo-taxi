@@ -27,7 +27,7 @@ import { acceptRideAssignment, createRideRecord, getRideRoom, submitRideBid } fr
 import { SOCKET_EVENTS } from './events.js';
 import { registerRideSocketHandlers } from './handlers/rideSocketHandler.js';
 import { authorizeRideRoomAccess } from './middleware/rideRoomAuth.js';
-import { attachSocketAuth } from './middleware/socketAuth.js';
+import { attachSocketAuth, getIdentityFromSocket } from './middleware/socketAuth.js';
 import { clearDriverRoute } from './services/driverRouteService.js';
 
 const onAsync = (socket, handler) => async (payload = {}) => {
@@ -53,12 +53,27 @@ const approxDistanceMeters = ([lngA, latA], [lngB, latB]) => {
   return Math.sqrt(x * x + y * y) * 6371000;
 };
 
-const TAXI_SOCKET_ROLES =new Set(['driver', 'user', 'admin', 'owner']);
+const TAXI_SOCKET_ROLES = new Set(['driver', 'user', 'admin', 'owner', 'bus_driver']);
 
 const resolveTaxiSocketIdentity = (socket) => {
   if (socket.auth?.sub && socket.auth?.role) {
-    return socket.auth;
+    return {
+      sub: String(socket.auth.sub),
+      role: String(socket.auth.role).toLowerCase(),
+    };
   }
+
+  try {
+    const fromToken = getIdentityFromSocket(socket);
+    if (fromToken?.sub && fromToken?.role && TAXI_SOCKET_ROLES.has(String(fromToken.role).toLowerCase())) {
+      const normalized = {
+        sub: String(fromToken.sub),
+        role: String(fromToken.role).toLowerCase(),
+      };
+      socket.auth = normalized;
+      return normalized;
+    }
+  } catch (_) {}
 
   const userId = socket.user?.userId;
   const role = String(socket.user?.role || '').toLowerCase();
@@ -90,6 +105,7 @@ const registerTaxiSocketConnectionHandlers = (io) => {
 
     if (identity.role === 'driver') {
       await Driver.findByIdAndUpdate(identity.sub, { socketId: socket.id });
+      socket.join('drivers');
       notifyLateAvailableDriver(identity.sub).catch((error) => {
         console.error('Failed to notify late-available driver on socket connect', error);
       });
@@ -327,6 +343,7 @@ export const registerTaxiSocketIntegration = (io) => {
     return null;
   }
 
+  attachSocketAuth(io);
   setSocketServer(io);
   setSupportChatServer(io);
   registerTaxiSocketConnectionHandlers(io);

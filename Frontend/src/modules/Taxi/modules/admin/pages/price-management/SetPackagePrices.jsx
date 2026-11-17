@@ -74,7 +74,7 @@ const SetPackagePrices = () => {
           <p className="mt-2 text-sm text-slate-500">Manage package name, destination, availability, and vehicle-wise pricing in one place.</p>
         </div>
         <div className="flex items-center gap-1.5 text-[11px] text-slate-400 font-medium tracking-tight">
-          <span className="hover:text-slate-600 transition-colors cursor-pointer" onClick={() => navigate('/taxi/admin/pricing/package-pricing')}>Package Pricing</span>
+          <span className="hover:text-slate-600 transition-colors cursor-pointer" onClick={() => navigate('/admin/pricing/package-pricing')}>Package Pricing</span>
           <ChevronRight size={10} className="text-slate-300" />
           <span className="text-slate-800 font-bold">Listing</span>
         </div>
@@ -91,7 +91,7 @@ const SetPackagePrices = () => {
             />
           </div>
           <button
-            onClick={() => navigate('/taxi/admin/pricing/package-pricing/create')}
+            onClick={() => navigate('/admin/pricing/package-pricing/create')}
             className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#0F766E] px-5 py-2.5 text-sm font-bold text-white transition hover:bg-[#115E59]"
           >
             <Plus size={16} />
@@ -157,7 +157,7 @@ const SetPackagePrices = () => {
                     <td className="px-6 py-5">
                       <div className="flex items-center justify-end gap-2">
                         <button
-                          onClick={() => navigate(`/taxi/admin/pricing/package-pricing/edit/${item.id}`)}
+                          onClick={() => navigate(`/admin/pricing/package-pricing/edit/${item.id}`)}
                           className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-50 text-amber-600 transition hover:bg-amber-100"
                         >
                           <Edit2 size={14} />

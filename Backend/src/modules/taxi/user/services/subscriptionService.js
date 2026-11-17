@@ -195,16 +195,31 @@ export const purchaseUserSubscription = async ({ userId, planId, paymentSource =
     { $setOnInsert: { userId, balance: 0, refundWallet: 0, transactions: [] } },
     { upsert: true },
   );
-  const wallet = await UserWallet.findOne({ userId });
+  const now = new Date();
+  const providerPaymentId = `sub_${Date.now().toString(36)}_${String(plan._id).slice(-6)}`;
+  const wallet = await UserWallet.findOneAndUpdate(
+    { userId, balance: { $gte: amount } },
+    {
+      $inc: { balance: -amount },
+      $push: {
+        transactions: {
+          $each: [{
+            kind: 'debit',
+            amount,
+            title: `Subscription purchase: ${plan.name || 'Plan'}`,
+            provider: 'user_subscription_wallet',
+            providerPaymentId,
+          }],
+          $slice: -50,
+        },
+      },
+    },
+    { returnDocument: 'after' },
+  );
   if (!wallet) {
-    throw new ApiError(404, 'User wallet not found');
-  }
-
-  if (Number(wallet.balance || 0) < amount) {
     throw new ApiError(400, 'Insufficient wallet balance');
   }
 
-  const now = new Date();
   const durationDays = Math.max(0, Number(plan.duration || 0));
   const benefitType = normalizeBenefitType(plan.benefit_type);
   const rideLimit = benefitType === 'unlimited'
@@ -214,15 +229,6 @@ export const purchaseUserSubscription = async ({ userId, planId, paymentSource =
     ? new Date(now.getTime() + durationDays * 24 * 60 * 60 * 1000)
     : null;
 
-  wallet.balance = roundMoney(Number(wallet.balance || 0) - amount);
-  wallet.transactions.push({
-    kind: 'debit',
-    amount,
-    title: `Subscription purchase: ${plan.name || 'Plan'}`,
-    provider: 'user_subscription_wallet',
-    providerPaymentId: `sub_${Date.now().toString(36)}_${String(plan._id).slice(-6)}`,
-  });
-  wallet.transactions = wallet.transactions.slice(-50);
 
   const subscription = new UserSubscription({
     userId,
@@ -244,7 +250,7 @@ export const purchaseUserSubscription = async ({ userId, planId, paymentSource =
     expiresAt,
   });
 
-  await Promise.all([wallet.save(), subscription.save()]);
+  await subscription.save();
 
   return {
     subscription: serializeUserSubscription({

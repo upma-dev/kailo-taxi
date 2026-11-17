@@ -153,7 +153,7 @@ const RentalPackageTypes = ({ mode: propMode }) => {
         await adminService.createRentalPackageType(formData);
         toast.success('Package created');
       }
-      navigate('/taxi/admin/pricing/rental-packages');
+      navigate('/admin/pricing/rental-packages');
     } catch (err) {
       toast.error(err.message || 'Failed to save package');
     } finally {
@@ -307,7 +307,7 @@ const RentalPackageTypes = ({ mode: propMode }) => {
       <div className="bg-white border-b border-gray-200 px-8 py-4 flex items-center justify-between shrink-0 shadow-sm relative z-10">
         <h1 className="text-[14px] font-black text-slate-900 uppercase tracking-tight">{isEdit ? 'EDIT' : 'CREATE'}</h1>
         <div className="flex items-center gap-2 text-[11px] font-bold text-gray-400">
-          <span className="hover:text-indigo-600 cursor-pointer" onClick={() => navigate("/taxi/admin/pricing/rental-packages")}>Rental Package Types</span>
+          <span className="hover:text-indigo-600 cursor-pointer" onClick={() => navigate("/admin/pricing/rental-packages")}>Rental Package Types</span>
           <ChevronRight size={12} className="opacity-50" />
           <span className="text-gray-700 uppercase">{isEdit ? 'Edit' : 'Create'}</span>
         </div>
@@ -359,7 +359,7 @@ const RentalPackageTypes = ({ mode: propMode }) => {
 
           <div className="p-8 flex justify-end items-center gap-4">
              <button 
-                onClick={() => navigate('/taxi/admin/pricing/rental-packages')}
+                onClick={() => navigate('/admin/pricing/rental-packages')}
                 className="px-6 py-2.5 bg-gray-50 text-gray-500 rounded text-sm font-semibold hover:bg-gray-100 transition-all active:scale-95 border border-gray-200"
              >
                 Cancel

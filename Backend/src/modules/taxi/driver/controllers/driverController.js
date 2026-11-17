@@ -70,6 +70,8 @@ import {
   updateRentalVehicleType,
 } from "../../admin/services/adminService.js";
 import { resolveConfiguredGatewayCredentials } from "../../services/paymentGatewayService.js";
+import { getGoHomeConfig, serializeGoHome } from "../../services/goHomeService.js";
+import { settleGoHomeOnLocation } from "./goHomeController.js";
 import {
   completeDriverOnboarding,
   getDriverOnboardingSession,
@@ -214,7 +216,10 @@ const normalizeFleetVehicleDocuments = (documents = {}, rcFile = "") => {
   return normalizedDocuments;
 };
 
-const serializeDriverRouteBooking = (routeBooking = {}) => {
+// "My Route Booking" was removed: it is always reported as off and can not be switched on any more.
+const serializeDriverRouteBooking = (routeBooking = {}) => ({ ...serializeDriverRouteBookingRaw(routeBooking), enabled: false });
+
+const serializeDriverRouteBookingRaw = (routeBooking = {}) => {
   const coordinates = Array.isArray(routeBooking?.anchorLocation?.coordinates)
     ? routeBooking.anchorLocation.coordinates
     : [];
@@ -433,7 +438,10 @@ const resolveOwnerBusSeatPrice = (busService = {}, seat = {}) => {
   const variantPricing = busService?.variantPricing || {};
   const defaultPrice = Number(busService?.seatPrice || 0);
   const variantKey = String(seat?.variant || "seat").trim().toLowerCase();
-  const resolvedPrice = variantPricing?.[variantKey] ?? variantPricing?.seat ?? defaultPrice;
+  // A price of 0 means "not set": fall back to the plain seat price, then to the bus's base seat price.
+  const resolvedPrice = [variantPricing?.[variantKey], variantPricing?.seat, defaultPrice]
+    .map(Number)
+    .find((value) => Number.isFinite(value) && value > 0) ?? 0;
 
   return Number.isFinite(Number(resolvedPrice)) ? Number(resolvedPrice) : defaultPrice;
 };
@@ -665,17 +673,51 @@ const resolveOwnerScopedBusDriverDetails = async (owner, payload = {}, existing 
   };
 };
 
+// When a bus trip leaves and arrives (IST). A trip that arrives "earlier" than it leaves runs overnight.
+const getBusTripTiming = (travelDate, schedule = {}) => {
+  const departsAt = parseOwnerBusDateTime(travelDate, schedule?.departureTime);
+  let arrivesAt = parseOwnerBusDateTime(travelDate, schedule?.arrivalTime);
+  if (departsAt && arrivesAt && arrivesAt <= departsAt) {
+    arrivesAt = new Date(arrivesAt.getTime() + 24 * 60 * 60 * 1000);
+  }
+  return { departsAt, arrivesAt };
+};
+
+// Over = already arrived. Over trips (and their passengers) are not shown to the captain any more.
+const isBusTripOver = (travelDate, schedule, now = new Date()) => {
+  const { departsAt, arrivesAt } = getBusTripTiming(travelDate, schedule);
+  const end = arrivesAt || (departsAt ? new Date(departsAt.getTime() + 12 * 60 * 60 * 1000) : null);
+  return Boolean(end) && end <= now;
+};
+
 const buildBusDriverSeatLayout = async ({ busService, scheduleId, travelDate }) => {
   const activeHolds = await BusSeatHold.find({
     busServiceId: busService._id,
     scheduleId,
     travelDate,
-    status: { $in: ["held", "booked"] },
+    // "converted" = a confirmed booking (online or counter); "held" = payment in progress.
+    status: { $in: ["held", "converted"] },
   })
-    .select("seatId")
+    .select("seatId seatIds")
     .lean();
 
-  const reservedSeatIds = new Set(activeHolds.map((item) => String(item.seatId || "")));
+  // Price of each seat for this exact trip (set from the owner's seat / window / aisle / sleeper prices).
+  const inventoryRows = await TripSeatInventory.find({
+    busServiceId: busService._id,
+    scheduleId,
+    travelDate,
+  })
+    .select("seatId price status")
+    .lean();
+  const inventoryPriceBySeat = new Map(inventoryRows.map((row) => [String(row.seatId), Number(row.price || 0)]));
+
+  const reservedSeatIds = new Set(
+    inventoryRows.length > 0
+      ? inventoryRows.filter((row) => ["booked", "held"].includes(String(row.status || ""))).map((row) => String(row.seatId))
+      : activeHolds.flatMap((item) => [item.seatId, ...(Array.isArray(item.seatIds) ? item.seatIds : [])])
+        .map((id) => String(id || ""))
+        .filter(Boolean),
+  );
 
   const normalizeDeck = (deckRows = []) =>
     (Array.isArray(deckRows) ? deckRows : []).map((row) =>
@@ -697,6 +739,7 @@ const buildBusDriverSeatLayout = async ({ busService, scheduleId, travelDate }) 
         return {
           ...cell,
           status: isBlocked || isReserved ? "booked" : "available",
+          price: inventoryPriceBySeat.get(seatId) || resolveOwnerBusSeatPrice(busService, cell),
         };
       }),
     );
@@ -716,6 +759,7 @@ const buildBusDriverSeatLayout = async ({ busService, scheduleId, travelDate }) 
     scheduleId,
     travelDate,
     availableSeats,
+    currency: busService.fareCurrency || "INR",
     blueprint,
   };
 };
@@ -760,12 +804,61 @@ const serializeBusDriverProfile = async (busDriver) => {
       .lean()
     : [];
 
+  // Seats booked per upcoming trip (next 7 days), so the captain's home can show "N seats booked" for each trip.
+  const istToday = new Date(Date.now() + IST_OFFSET_MS);
+  const istLast = new Date(Date.now() + IST_OFFSET_MS + 7 * DAY_MS);
+  const tripSummary = assignedBusServiceId
+    ? await BusBooking.aggregate([
+      {
+        $match: {
+          busServiceId: new mongoose.Types.ObjectId(assignedBusServiceId),
+          status: { $in: ["pending", "confirmed", "boarded"] },
+          travelDate: { $gte: istToday.toISOString().slice(0, 10), $lte: istLast.toISOString().slice(0, 10) },
+        },
+      },
+      {
+        $group: {
+          _id: { travelDate: "$travelDate", scheduleId: "$scheduleId" },
+          bookings: { $sum: 1 },
+          seats: { $sum: { $size: { $ifNull: ["$seatIds", []] } } },
+        },
+      },
+    ]).then((rows) =>
+      rows
+        .filter((row) => {
+          const sched = (busService?.schedules || []).find((item) => String(item.id) === String(row._id.scheduleId));
+          return !isBusTripOver(row._id.travelDate, sched);
+        })
+        .map((row) => ({
+          travelDate: row._id.travelDate,
+          scheduleId: row._id.scheduleId,
+          bookings: row.bookings,
+          seats: row.seats,
+        })),
+    )
+    : [];
+
+  const blueprintSeatCount = ["lowerDeck", "upperDeck"]
+    .flatMap((deck) => (Array.isArray(busService?.blueprint?.[deck]) ? busService.blueprint[deck] : []))
+    .flatMap((row) => (Array.isArray(row) ? row : []))
+    .filter((cell) => cell?.kind === "seat").length;
+  const totalCapacity = Number(busService?.capacity || 0) || blueprintSeatCount;
+  const completedBookingsCount = assignedBusServiceId
+    ? await BusBooking.countDocuments({ busServiceId: assignedBusServiceId, status: "completed" })
+    : 0;
+  const route = busService?.route || {};
+  const routeLabel =
+    route.routeName ||
+    [route.originCity, route.destinationCity].filter(Boolean).join(" → ") ||
+    "";
+
   return {
     id: busDriver._id,
     accountType: "bus_driver",
     name: busDriver.name || "",
     phone: busDriver.phone || "",
     email: busDriver.email || "",
+    profileImage: busDriver.profileImage || "",
     approve: busDriver.approve,
     active: busDriver.active,
     status: busDriver.status || "approved",
@@ -786,16 +879,19 @@ const serializeBusDriverProfile = async (busDriver) => {
         route: busService.route || {},
         schedules: Array.isArray(busService.schedules) ? busService.schedules : [],
         amenities: Array.isArray(busService.amenities) ? busService.amenities : [],
-        capacity: Number(busService.capacity || 0),
+        capacity: totalCapacity,
         status: busService.status || "draft",
+        routeLabel,
       }
       : null,
     metrics: {
       upcomingBookings: upcomingBookingsCount,
+      completedBookings: completedBookingsCount,
       totalSchedules: Array.isArray(busService?.schedules) ? busService.schedules.length : 0,
-      totalCapacity: Number(busService?.capacity || 0),
+      totalCapacity,
     },
     recentBookings: recentBookings.map(serializeBusDriverBooking),
+    tripSummary,
   };
 };
 
@@ -967,6 +1063,48 @@ const getCurrentActiveStreak = (dailyActivity = [], minimumMinutes = 1) => {
   return streak;
 };
 
+// A day counts as an "active day" (streak) only after this much time online. The admin can change it in
+// Driver Referral Settings; one stray minute online is never a working day.
+const ACTIVE_DAY_MINUTES = 60;
+const resolveActiveDayMinutes = (settings = {}) => {
+  const value = Number(settings?.active_day_minutes);
+  return Number.isFinite(value) && value > 0 ? Math.min(720, Math.max(1, Math.round(value))) : ACTIVE_DAY_MINUTES;
+};
+// Rating / low-cancellation bonuses need real work behind them: at least this many trips in the month.
+const GUARD_MIN_MONTH_TRIPS = 10;
+
+// Driver levels from lifetime completed trips. Only a badge (no money attached).
+const DRIVER_LEVELS = [
+  { name: "Bronze", minTrips: 0 },
+  { name: "Silver", minTrips: 50 },
+  { name: "Gold", minTrips: 200 },
+  { name: "Platinum", minTrips: 500 },
+];
+
+const buildDriverLevel = (totalTrips = 0) => {
+  let index = 0;
+  DRIVER_LEVELS.forEach((level, levelIndex) => {
+    if (totalTrips >= level.minTrips) index = levelIndex;
+  });
+  const current = DRIVER_LEVELS[index];
+  const next = DRIVER_LEVELS[index + 1] || null;
+  return {
+    name: current.name,
+    level: index + 1,
+    totalTrips,
+    currentMinTrips: current.minTrips,
+    nextName: next?.name || null,
+    nextMinTrips: next?.minTrips ?? null,
+    tripsToNext: next ? Math.max(0, next.minTrips - totalTrips) : 0,
+  };
+};
+
+const isCompletedRide = (ride) => {
+  const status = String(ride?.status || "").toLowerCase();
+  const liveStatus = String(ride?.liveStatus || "").toLowerCase();
+  return ["completed", "delivered"].includes(status) || ["completed", "delivered"].includes(liveStatus);
+};
+
 const hasClaimedReward = (claimedRewards = [], rewardType, rewardKey, periodKey) =>
   (Array.isArray(claimedRewards) ? claimedRewards : []).some((item) =>
     item?.rewardType === rewardType &&
@@ -982,15 +1120,15 @@ const buildDriverIncentiveSnapshot = ({ driver, settings, rides }) => {
   const rewardFeatures = Array.isArray(settings?.reward_features) ? settings.reward_features : [];
   const dailyActivityMap = new Map(dailyActivity.map((item) => [item.date, Number(item.activeMinutes || 0)]));
 
-  const milestones = milestonePrograms.map((item, index) => {
+  const milestoneProgramOn = Boolean(settings?.milestone_program_enabled);
+  const milestones = (milestoneProgramOn ? milestonePrograms : []).filter((item) => item?.enabled).map((item, index) => {
     const requiredWeeks = Math.max(1, Number(item.required_weeks || 1));
     const requiredHours = Math.max(0, Number(item.active_hours_per_day || 0));
     const minTripsPerWeek = Math.max(0, Number(item.min_trips_per_week || 0));
     const weekWindows = collectWeekWindows(requiredWeeks, new Date());
-    const qualifyingWeeks = weekWindows.filter((week) => {
-      const tripCount = countCompletedRidesInRange(rides, week.start, week.end);
-      return tripCount >= minTripsPerWeek;
-    }).length;
+    const weeklyTrips = weekWindows.map((week) => countCompletedRidesInRange(rides, week.start, week.end));
+    const qualifyingWeeks = weeklyTrips.filter((tripCount) => tripCount >= minTripsPerWeek).length;
+    const windowStart = weekWindows[0]?.start || new Date();
 
     const targetDays = requiredWeeks * 7;
     let qualifyingDays = 0;
@@ -1002,8 +1140,15 @@ const buildDriverIncentiveSnapshot = ({ driver, settings, rides }) => {
       }
     }
 
-    const periodKey = `milestone:${item.id || index}`;
-    const eligible = Boolean(item.enabled) && qualifyingWeeks >= requiredWeeks && qualifyingDays >= targetDays;
+    const rewardKey = String(item.id || index);
+    const periodKey = `milestone:${rewardKey}:${toIstDayKey(windowStart)}`;
+    // Claimed inside the current window = already paid for these weeks. After a full new window it can be earned again.
+    const isClaimed = claimedRewards.some((claim) =>
+      claim?.rewardType === "milestone" &&
+      claim?.rewardKey === rewardKey &&
+      new Date(claim?.claimedAt || 0) >= windowStart,
+    );
+    const eligible = qualifyingWeeks >= requiredWeeks && qualifyingDays >= targetDays;
 
     return {
       ...item,
@@ -1013,16 +1158,21 @@ const buildDriverIncentiveSnapshot = ({ driver, settings, rides }) => {
         targetWeeks: requiredWeeks,
         qualifyingDays,
         targetDays,
+        currentWeekTrips: weeklyTrips[weeklyTrips.length - 1] || 0,
+        minTripsPerWeek,
+        activeHoursPerDay: requiredHours,
       },
-      isEligible: eligible,
-      isClaimed: hasClaimedReward(claimedRewards, "milestone", item.id || String(index), periodKey),
+      isEligible: eligible && !isClaimed,
+      isClaimed,
     };
   });
 
   const currentWeekWindow = collectWeekWindows(1, new Date())[0];
   const currentWeekTrips = currentWeekWindow ? countCompletedRidesInRange(rides, currentWeekWindow.start, currentWeekWindow.end) : 0;
   const currentPeakTrips = currentWeekWindow ? countPeakHourTripsInRange(rides, currentWeekWindow.start, currentWeekWindow.end) : 0;
-  const currentStreak = getCurrentActiveStreak(dailyActivity, 1);
+  const activeDayMinutes = resolveActiveDayMinutes(settings);
+  const currentStreak = getCurrentActiveStreak(dailyActivity, activeDayMinutes);
+  const totalTrips = rides.filter(isCompletedRide).length;
   const weekendCount = collectWeekWindows(4, new Date()).reduce((total, week) => {
     const saturday = new Date(week.start.getTime() + 5 * DAY_MS);
     const sunday = new Date(week.start.getTime() + 6 * DAY_MS);
@@ -1048,10 +1198,13 @@ const buildDriverIncentiveSnapshot = ({ driver, settings, rides }) => {
     ? Number(((monthCancelled / (monthCompleted + monthCancelled)) * 100).toFixed(2))
     : 0;
 
-  const features = rewardFeatures.map((item, index) => {
+  const features = rewardFeatures.filter((item) => item?.enabled).map((item, index) => {
     const key = item.key || item.id || `feature_${index + 1}`;
     let currentValue = 0;
     let periodKey = key;
+    let period = "week";
+    let requirement = "";
+    let blocked = false;
 
     switch (key) {
       case "daily_active_streak":
@@ -1069,34 +1222,47 @@ const buildDriverIncentiveSnapshot = ({ driver, settings, rides }) => {
       case "weekend_warrior":
         currentValue = weekendCount;
         periodKey = `${key}:${currentMonthKey}`;
+        period = "month";
         break;
       case "rating_guard":
         currentValue = Number(driver?.rating || 0);
         periodKey = `${key}:${currentMonthKey}`;
+        period = "month";
+        requirement = `Needs at least ${GUARD_MIN_MONTH_TRIPS} completed trips this month (${monthCompleted} done).`;
+        blocked = monthCompleted < GUARD_MIN_MONTH_TRIPS;
         break;
       case "cancellation_guard":
         currentValue = cancellationRate;
         periodKey = `${key}:${currentMonthKey}`;
+        period = "month";
+        requirement = `Needs at least ${GUARD_MIN_MONTH_TRIPS} completed trips this month (${monthCompleted} done).`;
+        blocked = monthCompleted < GUARD_MIN_MONTH_TRIPS;
         break;
       default:
-        currentValue = Number(item.target_value || 0);
+        // Unknown booster: nothing is measured for it, so it can never be claimed.
+        currentValue = 0;
         periodKey = `${key}:${currentMonthKey}`;
+        blocked = true;
         break;
     }
 
     const target = Number(item.target_value || 0);
-    const isEligible = key === "cancellation_guard"
+    const reached = key === "cancellation_guard"
       ? currentValue <= target
-      : currentValue >= target;
+      : target > 0 && currentValue >= target;
+    const isClaimed = hasClaimedReward(claimedRewards, "feature", key, periodKey);
 
     return {
       ...item,
       key,
       periodKey,
+      period,
+      requirement,
       currentValue,
       targetValue: target,
-      isEligible: Boolean(item.enabled) && isEligible,
-      isClaimed: hasClaimedReward(claimedRewards, "feature", key, periodKey),
+      lowerIsBetter: key === "cancellation_guard",
+      isEligible: !blocked && reached && !isClaimed,
+      isClaimed,
     };
   });
 
@@ -1108,11 +1274,23 @@ const buildDriverIncentiveSnapshot = ({ driver, settings, rides }) => {
     },
     summary: {
       streakDays: currentStreak,
+      activeDayMinutes,
+      totalTrips,
+      monthTrips: monthCompleted,
+      rating: Number(driver?.rating || 0),
       currentWeekTrips,
       currentPeakTrips,
       weekendCount,
       monthCancellationRate: cancellationRate,
       totalClaimedRewards: claimedRewards.length,
+    },
+    level: buildDriverLevel(totalTrips),
+    // What the referral program really pays (paid out by the onboarding / ride services).
+    referral: {
+      enabled: Boolean(settings?.enabled) && Number(settings?.amount || 0) > 0,
+      type: String(settings?.type || "instant_referrer"),
+      amount: Number(settings?.amount || 0),
+      rideCount: Number(settings?.ride_count || 0),
     },
     milestones,
     features,
@@ -1390,8 +1568,9 @@ const resolveVehicleMapIcon = async (vehicleTypeId) => {
     return "";
   }
 
-  const vehicle = await Vehicle.findById(vehicleTypeId).select("icon map_icon image").lean();
-  return vehicle?.map_icon || vehicle?.icon || vehicle?.image || "";
+  // Only the Map Icon: the Preview Image is a display picture and shows as a white box on the map.
+  const vehicle = await Vehicle.findById(vehicleTypeId).select("icon map_icon").lean();
+  return vehicle?.map_icon || vehicle?.icon || "";
 };
 
 const normalizePhone = (value) =>
@@ -1460,7 +1639,7 @@ const serializeOwnerProfile = (owner = {}) => ({
   name: owner.owner_name || owner.name || owner.company_name || "Owner",
   phone: owner.mobile || owner.phone || "",
   email: owner.email || "",
-  profileImage: "",
+  profileImage: owner.profileImage || "",
   gender: "",
   vehicleType: owner.transport_type || "taxi",
   vehicleTypeId: null,
@@ -2228,6 +2407,15 @@ export const loginDriver = async (req, res) => {
 
   await clearDriverActiveRideIfStale(driver);
 
+  // A fresh login always starts offline, and going online again needs a new selfie.
+  if (!driver.isOnRide) {
+    await Driver.updateOne(
+      { _id: driver._id },
+      { $set: { isOnline: false, socketId: null, "onlineSelfie.expiresAt": null } },
+    );
+    driver.isOnline = false;
+  }
+
   const token = signAccessToken({ sub: String(driver._id), role: "driver" });
 
   res.json({
@@ -2286,6 +2474,12 @@ export const getDriverEarningsFilter = async (req, res) => {
     lastSun.setDate(lastMon.getDate() + 6);
     fromDate = new Date(lastMon.getFullYear(), lastMon.getMonth(), lastMon.getDate(), 0, 0, 0, 0);
     toDate = new Date(lastSun.getFullYear(), lastSun.getMonth(), lastSun.getDate(), 23, 59, 59, 999);
+  } else if (normPeriod === 'this_month') {
+    fromDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+    toDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+  } else if (normPeriod === 'all') {
+    fromDate = new Date(2000, 0, 1, 0, 0, 0, 0);
+    toDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
   } else if (normPeriod === 'custom_date' && date) {
     const parsed = new Date(date);
     if (!isNaN(parsed.getTime())) {
@@ -2443,6 +2637,8 @@ export const updateDriverLocation = async (req, res) => {
     console.warn("[driver-location] could not update live ride location:", error?.message);
   }
 
+  const goHomeEnded = await settleGoHomeOnLocation(driver).catch(() => null);
+
   res.json({
     success: true,
     data: {
@@ -2450,8 +2646,16 @@ export const updateDriverLocation = async (req, res) => {
       location: driver.location,
       isOnline: driver.isOnline,
       isOnRide: driver.isOnRide,
+      ...(goHomeEnded ? { goHomeEnded } : {}),
     },
   });
+};
+
+export const ONLINE_SELFIE_VALID_MS = 60 * 60 * 1000;
+
+const isOnlineSelfieValid = (onlineSelfie = {}) => {
+  const expiresAt = onlineSelfie?.expiresAt ? new Date(onlineSelfie.expiresAt).getTime() : 0;
+  return Boolean(String(onlineSelfie?.imageUrl || "").trim()) && expiresAt > Date.now();
 };
 
 export const goOnline = async (req, res) => {
@@ -2466,15 +2670,20 @@ export const goOnline = async (req, res) => {
   }
 
   const todayKey = new Date().toISOString().slice(0, 10);
-  const hasTodaySelfie =
-    String(existingDriver.onlineSelfie?.forDate || "") === todayKey &&
-    String(existingDriver.onlineSelfie?.imageUrl || "").trim();
+  // A selfie counts for one hour after it was taken, and never across a new login.
+  const hasTodaySelfie = isOnlineSelfieValid(existingDriver.onlineSelfie);
 
   if (!hasTodaySelfie && !String(selfieImageUrl || "").trim()) {
-    throw new ApiError(400, "A selfie is required before going online today");
+    throw new ApiError(400, "A selfie is required before going online");
   }
 
   await ensureDriverWalletCanAcceptRide(existingDriver);
+  {
+    const { getDriverSubscriptionMode, findActiveDriverSubscription } = await import('../../services/driverSubscriptionService.js');
+    if ((await getDriverSubscriptionMode()) === 'subscriptionOnly' && !(await findActiveDriverSubscription(existingDriver._id))) {
+      throw new ApiError(400, 'An active subscription is required to go online. Buy a plan in Profile → Subscription.');
+    }
+  }
   await clearDriverActiveRideIfStale(existingDriver);
   const trackingBeforeOnline = mergeOnlineSessionIntoTracking(
     existingDriver.incentiveTracking || {},
@@ -2491,6 +2700,7 @@ export const goOnline = async (req, res) => {
         capturedAt: new Date(),
         uploadedAt: new Date(),
         forDate: todayKey,
+        expiresAt: new Date(Date.now() + ONLINE_SELFIE_VALID_MS),
       };
 
   const driver = await Driver.findByIdAndUpdate(
@@ -2637,6 +2847,11 @@ export const getCurrentDriver = async (req, res) => {
 
   await clearDriverActiveRideIfStale(driver);
   const vehicleIconUrl = await resolveVehicleMapIcon(driver.vehicleTypeId);
+  // The vehicle type's picture set by the admin. The driver home shows it in a round map marker when the
+  // vehicle type has no Map Icon.
+  const vehicleTypeImage = driver.vehicleTypeId
+    ? String((await Vehicle.findById(driver.vehicleTypeId).select("image").lean())?.image || "")
+    : "";
   const todaySummary = await syncDriverTodaySummaryDocument(driver);
 
   res.json({
@@ -2654,6 +2869,7 @@ export const getCurrentDriver = async (req, res) => {
       vehicleTypeId: driver.vehicleTypeId,
       vehicleIconType: driver.vehicleIconType,
       vehicleIconUrl,
+      vehicleTypeImage,
       vehicleMake: driver.vehicleMake,
       vehicleModel: driver.vehicleModel,
       registerFor: driver.registerFor,
@@ -2676,6 +2892,8 @@ export const getCurrentDriver = async (req, res) => {
       location: driver.location,
       zoneId: driver.zoneId,
       routeBooking: serializeDriverRouteBooking(driver.routeBooking),
+      goHome: serializeGoHome(driver, await getGoHomeConfig()),
+      savedAddress: driver.savedAddress || "",
       ...(await resolveDriverPreferenceOptions(driver)),
       documents: driver.documents || {},
       emergencyContacts: Array.isArray(driver.emergencyContacts)
@@ -3099,8 +3317,63 @@ export const deleteDriverEmergencyContact = async (req, res) => {
 };
 
 export const updateCurrentDriver = async (req, res) => {
-  if (String(req.auth?.role || "").toLowerCase() === "owner") {
-    throw new ApiError(403, "Owner profile editing is not available from this screen");
+  const accountRole = String(req.auth?.role || "").toLowerCase();
+
+  // Owner and bus captain accounts can change their name and email (nothing else is editable for them here).
+  if (accountRole === "owner" || accountRole === "bus_driver") {
+    const account =
+      accountRole === "owner"
+        ? await Owner.findById(req.auth.sub)
+        : await BusDriver.findById(req.auth.sub);
+
+    if (!account) {
+      throw new ApiError(404, accountRole === "owner" ? "Owner not found" : "Bus driver not found");
+    }
+
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, "name")) {
+      const name = String(req.body.name || "").trim();
+      if (!DRIVER_NAME_REGEX.test(name)) {
+        throw new ApiError(400, "Full name can contain alphabets only");
+      }
+      account.name = name;
+      if (accountRole === "owner") {
+        account.owner_name = name;
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, "email")) {
+      const email = String(req.body.email || "").trim().toLowerCase();
+      if (email && !EMAIL_REGEX.test(email)) {
+        throw new ApiError(400, "Enter a valid email address");
+      }
+      account.email = email;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, "profileImage")) {
+      const image = String(req.body.profileImage || "").trim();
+      if (image && !/^https?:\/\//i.test(image)) {
+        throw new ApiError(400, "Profile photo must be an uploaded image link");
+      }
+      account.profileImage = image;
+    }
+
+    try {
+      await account.save();
+    } catch (saveError) {
+      if (saveError?.code === 11000) {
+        throw new ApiError(409, "This email is already used by another account");
+      }
+      throw saveError;
+    }
+
+    res.json({
+      success: true,
+      data:
+        accountRole === "owner"
+          ? serializeOwnerProfile(account.toObject())
+          : await serializeBusDriverProfile(account),
+    });
+    return;
   }
 
   const driver = await Driver.findById(req.auth.sub);
@@ -3129,6 +3402,10 @@ export const updateCurrentDriver = async (req, res) => {
 
   if (Object.prototype.hasOwnProperty.call(req.body || {}, "profileImage")) {
     driver.profileImage = String(req.body.profileImage || "").trim();
+  }
+
+  if (Object.prototype.hasOwnProperty.call(req.body || {}, "savedAddress")) {
+    driver.savedAddress = String(req.body.savedAddress || "").trim().slice(0, 300);
   }
 
   if (Object.prototype.hasOwnProperty.call(req.body || {}, "registerFor") || Object.prototype.hasOwnProperty.call(req.body || {}, "transport_type") || Object.prototype.hasOwnProperty.call(req.body || {}, "transportType")) {
@@ -3188,7 +3465,8 @@ export const updateCurrentDriver = async (req, res) => {
 
   if (Object.prototype.hasOwnProperty.call(req.body || {}, "routeBooking")) {
     const routeBookingPayload = req.body?.routeBooking || {};
-    const enabled = Boolean(routeBookingPayload?.enabled);
+    // "My Route Booking" was removed, so any save only switches it off.
+    const enabled = false && Boolean(routeBookingPayload?.enabled);
 
     if (!enabled) {
       driver.routeBooking = {
@@ -4588,6 +4866,10 @@ export const getBusDriverSeatLayout = async (req, res) => {
     throw new ApiError(404, "Bus schedule not found for the selected date");
   }
 
+  if (isBusTripOver(travelDate, schedule)) {
+    throw new ApiError(409, "This trip is already over");
+  }
+
   res.json({
     success: true,
     data: {
@@ -4636,7 +4918,12 @@ export const listBusDriverBookings = async (req, res) => {
     query.status = status;
   }
 
-  const items = await BusBooking.find(query).sort({ travelDate: 1, createdAt: -1 }).lean();
+  const busServiceDoc = await BusService.findById(busDriver.assignedBusServiceId).select("schedules").lean();
+  const scheduleById = new Map((busServiceDoc?.schedules || []).map((item) => [String(item.id), item]));
+  const now = new Date();
+  const items = (await BusBooking.find(query).sort({ travelDate: 1, createdAt: -1 }).lean()).filter(
+    (item) => !isBusTripOver(item.travelDate, scheduleById.get(String(item.scheduleId)), now),
+  );
 
   res.json({
     success: true,
@@ -4691,6 +4978,11 @@ export const createBusDriverReservation = async (req, res) => {
     throw new ApiError(404, "Bus schedule not found for the selected date");
   }
 
+  const { departsAt } = getBusTripTiming(travelDate, schedule);
+  if (departsAt && departsAt <= new Date()) {
+    throw new ApiError(409, "This bus has already left. Seats can be booked only before departure.");
+  }
+
   const trip = await ensureTripInstance({ busService, scheduleId, travelDate });
   if (trip.status === "cancelled") {
     throw new ApiError(409, "This trip has been cancelled by the operator");
@@ -4717,9 +5009,22 @@ export const createBusDriverReservation = async (req, res) => {
 
   const availableSeatDocs = lockedSeatDocs;
   const seatCellMap = new Map(availableSeatDocs.map((doc) => [doc.seatId, doc]));
-  const amount = Math.round(
-    seatIds.reduce((sum, seatId) => sum + Number(seatCellMap.get(seatId)?.price || resolveBusSeatPrice(busService, { id: seatId })), 0) * 100,
-  ) / 100;
+  let amount;
+  try {
+    amount = Math.round(
+      seatIds.reduce((sum, seatId) => {
+        const seatDoc = seatCellMap.get(seatId) || {};
+        return sum + Number(seatDoc.price || resolveOwnerBusSeatPrice(busService, { id: seatId, variant: seatDoc.variant }));
+      }, 0) * 100,
+    ) / 100;
+  } catch (priceErr) {
+    // Never leave seats locked when the fare could not be worked out.
+    await TripSeatInventory.updateMany(
+      { tripId: trip._id, bookingId: bookingObjectId },
+      { $set: { status: "available", bookingId: null, holdId: null, holdExpiresAt: null, bookedBy: {} } },
+    );
+    throw priceErr;
+  }
 
   let booking;
   try {
@@ -6537,7 +6842,7 @@ export const getOwnerFleetDashboard = async (req, res) => {
   );
 
   const ownerBusServices = await BusService.find({ ownerId: owner._id })
-    .select("status")
+    .select("status busDriverId")
     .sort({ createdAt: -1 })
     .lean();
   const ownerBusServiceIds = ownerBusServices.map((item) => item._id);
@@ -6590,6 +6895,10 @@ export const getOwnerFleetDashboard = async (req, res) => {
     const busMetrics = busBookingMetrics[0] || {};
     busOverview = {
       totalBuses: ownerBusServices.length,
+      // Bus captains are a separate account type from taxi drivers, so they are counted here, not under Drivers.
+      totalBusDrivers: new Set(
+        ownerBusServices.map((item) => String(item.busDriverId || "")).filter(Boolean),
+      ).size,
       activeBuses: ownerBusServices.filter(
         (item) => String(item.status || "").toLowerCase() === "active",
       ).length,
@@ -6724,8 +7033,11 @@ export const createOwnerBusService = async (req, res) => {
   delete payload.adminCommissionPercentage;
   delete payload.commissionType;
   delete payload.commissionValue;
+  // Fields only the admin controls: an owner must not be able to send them (approval status, tax, links to other records).
+  ["serviceTaxPercentage", "rejectionReason", "busDriverId", "ownerId", "rating", "ratingCount", "totalRatingScore", "reviews"].forEach((key) => {
+    delete payload[key];
+  });
   payload.status = 'pending_approval';
-  payload.rejectionReason = '';
 
   const resolvedDriver = await resolveOwnerScopedBusDriverDetails(owner, payload);
 
@@ -6778,6 +7090,10 @@ export const updateOwnerBusService = async (req, res) => {
   delete payload.adminCommissionPercentage;
   delete payload.commissionType;
   delete payload.commissionValue;
+  // Fields only the admin controls: an owner must not be able to send them (approval status, tax, links to other records).
+  ["serviceTaxPercentage", "rejectionReason", "busDriverId", "ownerId", "rating", "ratingCount", "totalRatingScore", "reviews"].forEach((key) => {
+    delete payload[key];
+  });
 
   let isResubmitted = false;
   // If currently rejected, draft, or pending, resubmit as pending_approval
@@ -6785,6 +7101,9 @@ export const updateOwnerBusService = async (req, res) => {
     payload.status = 'pending_approval';
     payload.rejectionReason = '';
     isResubmitted = true;
+  } else {
+    // Live / paused / suspended buses keep the status the admin gave them. An owner cannot re-activate a suspended bus.
+    payload.status = existingBus.status;
   }
 
   const resolvedDriver = await resolveOwnerScopedBusDriverDetails(owner, payload, existingBus);
@@ -7231,11 +7550,22 @@ export const cancelOwnerBusBookingSeats = async (req, res) => {
   await booking.save();
   await syncBusBookingOwnerEarning(booking._id);
 
-  await BusSeatHold.deleteMany({
-    bookingId: booking._id,
-    status: { $in: ["held", "booked"] },
-    seatId: { $in: seatsToCancel.map((item) => item.seatId) },
-  });
+  // Give the cancelled seats back to sale. Without this they stay locked and nobody can book them again.
+  const releasedSeatIds = seatsToCancel.map((item) => item.seatId);
+  await TripSeatInventory.updateMany(
+    booking.tripId
+      ? { tripId: booking.tripId, seatId: { $in: releasedSeatIds } }
+      : { busServiceId: booking.busServiceId, scheduleId: booking.scheduleId, travelDate: booking.travelDate, seatId: { $in: releasedSeatIds } },
+    { $set: { status: "available", bookingId: null, holdId: null, holdExpiresAt: null, bookedBy: {} } },
+  );
+  if (remainingActiveSeatCount <= 0) {
+    await BusSeatHold.updateMany({ bookingId: booking._id }, { $set: { status: "released" } });
+  } else {
+    await BusSeatHold.updateMany(
+      { bookingId: booking._id },
+      { $pull: { seatIds: { $in: releasedSeatIds } } },
+    );
+  }
 
   const hydratedBooking = await BusBooking.findById(booking._id)
     .populate("userId", "name phone email")
@@ -7509,12 +7839,12 @@ export const claimDriverIncentiveReward = async (req, res) => {
     throw new ApiError(404, "Reward not found");
   }
 
-  if (!targetReward.isEligible) {
-    throw new ApiError(400, "Reward is not eligible yet");
-  }
-
   if (targetReward.isClaimed) {
     throw new ApiError(400, "Reward already claimed");
+  }
+
+  if (!targetReward.isEligible) {
+    throw new ApiError(400, "Reward is not eligible yet");
   }
 
   const claimedRewards = pruneClaimedRewards([

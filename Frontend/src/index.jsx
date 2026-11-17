@@ -118,7 +118,7 @@ const APP_ENTRY_ROUTES = [
   '/taxi/owner',
   TAXI_OWNER_HOME,
   '/owner',
-  '/taxi/admin',
+  '/admin',
   TAXI_ADMIN_HOME,
   '/admin',
 ]
@@ -127,7 +127,7 @@ const RESUME_LAST_ROUTE_MAX_AGE_MS = 30 * 60 * 1000
 function getHomeRouteForResuming(resumeRoute) {
   if (resumeRoute.startsWith('/taxi/driver')) return TAXI_DRIVER_HOME
   if (resumeRoute.startsWith('/taxi/owner')) return TAXI_OWNER_HOME
-  if (resumeRoute.startsWith('/taxi/admin') || resumeRoute.startsWith('/admin')) return TAXI_ADMIN_HOME
+  if (resumeRoute.startsWith('/admin') || resumeRoute.startsWith('/admin')) return TAXI_ADMIN_HOME
   return TAXI_USER_HOME
 }
 

@@ -1009,8 +1009,10 @@ export const createRideRecord = async ({
   const primaryVehicle = primaryVehicleTypeId
     ? await Vehicle.findById(primaryVehicleTypeId).select('icon map_icon image dispatch_type').lean()
     : null;
+  // The map marker comes from the vehicle type's Map Icon only (never its Preview Image). With no Map Icon the
+  // apps draw their built-in icon for the vehicle kind.
   const resolvedVehicleIconUrl = String(
-    vehicleIconUrl || primaryVehicle?.map_icon || primaryVehicle?.icon || primaryVehicle?.image || '',
+    primaryVehicle ? (primaryVehicle.map_icon || primaryVehicle.icon || '') : (vehicleIconUrl || ''),
   ).trim();
   const normalizedTransportType = normalizeRideTransportType(transport_type);
   const resolvedServiceLocationId =
@@ -2156,7 +2158,8 @@ export const updateRideLifecycle = async ({ rideId, driverId, nextStatus, paymen
     ride.startedAt = new Date();
   }
 
-  if (paymentMethod !== undefined && paymentMethod !== null && String(paymentMethod).trim()) {
+  // A ride covered by the rider's subscription is already paid: it stays "online" whatever the driver app sends.
+  if (paymentMethod !== undefined && paymentMethod !== null && String(paymentMethod).trim() && !ride.subscriptionUsage?.covered) {
     ride.paymentMethod = normalizeRidePaymentMethod(paymentMethod);
   }
 

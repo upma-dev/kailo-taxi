@@ -6,6 +6,7 @@ import {
   Filter,
   Image as ImageIcon,
   Loader2,
+  Pencil,
   MapPin,
   Plus,
   Send,
@@ -36,15 +37,15 @@ const createInitialFilters = () => ({
   send_to: '',
 });
 
-const HeaderBlock = ({ isCreateRoute, onBack }) => (
+const HeaderBlock = ({ isCreateRoute, editId, onBack }) => (
   <div className="mb-6">
     <div className="flex items-center gap-1.5 text-xs text-gray-400 mb-2">
       <span>Promotions</span>
       <ChevronRight size={12} />
-      <span className="text-gray-700">{isCreateRoute ? 'Create Push Notification' : 'Push Notifications'}</span>
+      <span className="text-gray-700">{isCreateRoute ? (editId ? 'Edit Push Notification' : 'Create Push Notification') : 'Push Notifications'}</span>
     </div>
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <h1 className="text-xl font-semibold text-gray-900">{isCreateRoute ? 'Create Push Notification' : 'Push Notifications'}</h1>
+      <h1 className="text-xl font-semibold text-gray-900">{isCreateRoute ? (editId ? 'Edit Push Notification' : 'Create Push Notification') : 'Push Notifications'}</h1>
       {isCreateRoute ? (
         <button
           type="button"
@@ -112,7 +113,9 @@ const buildDeliveryAlertMessage = (responseData) => {
 const SendNotification = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const isCreateRoute = location.pathname === CREATE_PATH;
+  const editMatch = location.pathname.match(/\/send-notification\/edit\/([^/]+)\/?$/);
+  const editId = editMatch ? editMatch[1] : null;
+  const isCreateRoute = location.pathname.endsWith('/send-notification/create') || Boolean(editId);
 
   const [notifications, setNotifications] = useState([]);
   const [serviceLocations, setServiceLocations] = useState([]);
@@ -141,6 +144,20 @@ const SendNotification = () => {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  useEffect(() => {
+    if (!editId || loading) return;
+    const item = notifications.find((n) => String(n._id || n.id) === String(editId));
+    if (!item) return;
+    setFormData({
+      service_location_id: item.service_location_id === 'all' || !item.service_location_id ? 'all' : String(item.service_location_id),
+      send_to: item.send_to || 'all',
+      push_title: item.push_title || '',
+      message: item.message || '',
+      image: null,
+    });
+    setImagePreview(item.image || null);
+  }, [editId, loading, notifications]);
 
   useEffect(() => {
     if (!isCreateRoute) {
@@ -209,10 +226,16 @@ const SendNotification = () => {
         image: imageData,
       };
 
-      const data = await adminService.sendNotification(payload);
+      if (editId && !imageData && imagePreview && !formData.image) {
+        payload.image = imagePreview;
+      }
+
+      const data = editId
+        ? await adminService.updateNotification(editId, payload)
+        : await adminService.sendNotification(payload);
 
       if (data.success) {
-        const deliveryMessage = buildDeliveryAlertMessage(data);
+        const deliveryMessage = editId ? 'Notification updated.' : buildDeliveryAlertMessage(data);
         setFormData(createInitialFormData());
         setImagePreview(null);
         await fetchData();
@@ -244,7 +267,7 @@ const SendNotification = () => {
 
   return (
     <div className="min-h-full bg-gray-50 text-gray-900">
-      <HeaderBlock isCreateRoute={isCreateRoute} onBack={() => navigate(LIST_PATH)} />
+      <HeaderBlock isCreateRoute={isCreateRoute} editId={editId} onBack={() => navigate(LIST_PATH)} />
 
       <AnimatePresence mode="wait">
         {!isCreateRoute ? (
@@ -373,6 +396,13 @@ const SendNotification = () => {
                           </td>
                           <td className="px-6 py-4">
                             <div className="flex items-center justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() => navigate(`${LIST_PATH}/edit/${item._id || item.id}`)}
+                                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-indigo-600 transition-colors"
+                              >
+                                <Pencil size={16} />
+                              </button>
                               <button
                                 type="button"
                                 onClick={() => handleDelete(item._id || item.id)}
@@ -515,7 +545,7 @@ const SendNotification = () => {
                   className="w-full py-3 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
                 >
                   {saving ? <Loader2 className="animate-spin" size={16} /> : <Send size={16} />}
-                  Send Notification
+                  {editId ? 'Update Notification' : 'Send Notification'}
                 </button>
                 <button
                   type="button"

@@ -405,6 +405,8 @@ const Wallet = () => {
           ) : wallet.recentTransactions?.length ? (
             wallet.recentTransactions.map((tx) => {
               const isDebit = tx.kind === 'debit';
+              // An online (UPI/card) payment is listed for the record; it did not change the wallet balance.
+              const isOnlinePayment = tx.affectsBalance === false;
               const title = tx.title || (isDebit ? 'Debit' : 'Credit');
               const sign = isDebit ? '-' : '+';
               const amountText = formatInr(tx.amount);
@@ -421,14 +423,17 @@ const Wallet = () => {
                   </div>
                   <div className="flex-1 min-w-0">
                     <h4 className="text-sm font-bold text-slate-900 truncate">{title}</h4>
+                    {tx.description ? (
+                      <p className="text-[11px] font-semibold text-slate-500 truncate mt-0.5">{tx.description}</p>
+                    ) : null}
                     <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">{whenText}</p>
                   </div>
                   <div className="text-right shrink-0">
-                    <h4 className={`text-base font-bold ${isDebit ? 'text-slate-900' : 'text-emerald-600'}`}>
+                    <h4 className={`text-base font-bold ${isOnlinePayment ? 'text-slate-400' : isDebit ? 'text-slate-900' : 'text-emerald-600'}`}>
                       {sign}₹{amountText}
                     </h4>
                     <span className={`text-[8px] font-bold uppercase tracking-wider ${isDebit ? 'text-slate-400' : 'text-emerald-400'}`}>
-                      {isDebit ? 'Debit' : 'Credit'}
+                      {isOnlinePayment ? 'Paid online - not from wallet' : isDebit ? 'Debit' : 'Credit'}
                     </span>
                   </div>
                 </div>

@@ -58,6 +58,8 @@ const ServiceLocation = ({ mode }) => {
   const [saving, setSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeLangTab, setActiveLangTab] = useState('English');
+  // Once the admin types their own name, it is no longer filled in from the country.
+  const [nameEdited, setNameEdited] = useState(false);
   const [formData, setFormData] = useState(defaultFormData);
 
   const fetchData = async () => {
@@ -149,10 +151,17 @@ const ServiceLocation = ({ mode }) => {
       if (isEdit && id) {
         const item = nextLocations.find(l => String(l._id || l.id) === String(id));
         if (item) {
-          const matchedCountry = nextCountries.find(c => (c._id || c.id) === item.country || String(c.name).toLowerCase() === String(typeof item.country === 'object' ? item.country?.name : item.country).toLowerCase());
+          // The saved country can be a name ("India"), an object, or an old numeric id (102 = India).
+          const savedCountry = typeof item.country === 'object' && item.country !== null
+            ? (item.country._id || item.country.id || item.country.name || '')
+            : item.country;
+          const savedCountryName = legacyIdMap[String(savedCountry)]?.name
+            || (typeof item.country === 'object' && item.country !== null ? item.country.name : savedCountry);
+          const matchedCountry = nextCountries.find(c => String(c._id || c.id) === String(savedCountry))
+            || nextCountries.find(c => String(c.name).toLowerCase() === String(savedCountryName || '').toLowerCase());
           setFormData({
             name: item.name || item.service_location_name || '',
-            country: matchedCountry?._id || matchedCountry?.id || item.country || '',
+            country: matchedCountry?._id || matchedCountry?.id || '',
             currency_code: item.currency_code || matchedCountry?.currency_code || '',
             currency_symbol: item.currency_symbol || matchedCountry?.currency_symbol || '',
             timezone: item.timezone || matchedCountry?.timezone || ''
@@ -190,13 +199,15 @@ const ServiceLocation = ({ mode }) => {
       if (matched) {
         setFormData(prev => ({
           ...prev,
+          // A service location is a country, so a new one starts with the country's name (until the admin types one).
+          name: isCreate && !nameEdited && matched.name ? matched.name : prev.name,
           currency_code: matched.currency_code || prev.currency_code,
           currency_symbol: matched.currency_symbol || prev.currency_symbol,
           timezone: prev.timezone || matched.timezone || ''
         }));
       }
     }
-  }, [formData.country, countries]);
+  }, [formData.country, countries, isCreate, nameEdited]);
 
   useEffect(() => { fetchData(); }, [mode, id]);
 
@@ -224,7 +235,7 @@ const ServiceLocation = ({ mode }) => {
 
       const res = isEdit ? await adminService.updateServiceLocation(id, payload) : await adminService.createServiceLocation(payload);
       if (res?.success) {
-        navigate('/taxi/admin/pricing/service-location');
+        navigate('/admin/pricing/service-location');
       } else {
         alert(res?.message || "Operation failed");
       }
@@ -261,7 +272,7 @@ const ServiceLocation = ({ mode }) => {
                 <p className="text-xs text-gray-500 mt-1 font-medium">Manage localized settings including currency, timezone, and regional clusters.</p>
               </div>
               <button 
-                onClick={() => navigate('/taxi/admin/pricing/service-location/add')}
+                onClick={() => navigate('/admin/pricing/service-location/add')}
                 className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700 transition-all shadow-md active:scale-95"
               >
                 <Plus size={18} /> Add Location
@@ -343,7 +354,7 @@ const ServiceLocation = ({ mode }) => {
                         </td>
                         <td className="px-6 py-4 text-right whitespace-nowrap">
                            <div className="flex items-center justify-end gap-2">
-                             <button onClick={() => navigate(`/taxi/admin/pricing/service-location/edit/${l._id || l.id}`)} className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all shadow-sm"><Edit2 size={16} /></button>
+                             <button onClick={() => navigate(`/admin/pricing/service-location/edit/${l._id || l.id}`)} className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all shadow-sm"><Edit2 size={16} /></button>
                              <button onClick={() => handleDelete(l._id || l.id)} className="p-2 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all shadow-sm"><Trash2 size={16} /></button>
                            </div>
                         </td>
@@ -402,7 +413,7 @@ const ServiceLocation = ({ mode }) => {
                     <label className={labelClass}>Name <span className="text-rose-400">*</span></label>
                     <input 
                        value={formData.name}
-                       onChange={(e) => setFormData(p => ({ ...p, name: e.target.value }))}
+                       onChange={(e) => { setNameEdited(true); setFormData(p => ({ ...p, name: e.target.value })); }}
                        placeholder={`Enter Name in ${activeLangTab}`} 
                        className={inputClass} 
                        required

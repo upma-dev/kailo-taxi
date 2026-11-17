@@ -102,7 +102,7 @@ const UserCreate = () => {
 
       setSuccess(true);
       toast.success('Passenger created successfully');
-      setTimeout(() => navigate('/taxi/admin/users'), 900);
+      setTimeout(() => navigate('/admin/users'), 900);
     } catch (submitError) {
       setError(submitError.message || 'Failed to create user');
     } finally {
@@ -123,7 +123,7 @@ const UserCreate = () => {
           <h1 className="text-xl font-semibold text-gray-900">Add User</h1>
           <button
             type="button"
-            onClick={() => navigate('/taxi/admin/users')}
+            onClick={() => navigate('/admin/users')}
             className="flex items-center gap-2 px-4 py-2 text-sm text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
           >
             <ArrowLeft size={16} /> Back
@@ -295,7 +295,7 @@ const UserCreate = () => {
 
             <button
               type="button"
-              onClick={() => navigate('/taxi/admin/users')}
+              onClick={() => navigate('/admin/users')}
               className="w-full py-3 bg-gray-50 text-gray-600 border border-gray-200 rounded-lg text-sm font-medium hover:bg-gray-100 transition-colors"
             >
               Cancel

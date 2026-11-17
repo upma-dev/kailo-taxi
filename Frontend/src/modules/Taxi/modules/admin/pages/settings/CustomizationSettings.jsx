@@ -223,7 +223,7 @@ const CustomizationSettings = () => {
 
              <button
                type="button"
-               onClick={() => navigate('/taxi/admin/bus-service')}
+               onClick={() => navigate('/admin/bus-service')}
                className="mt-4 inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-[12px] font-black text-slate-700 border border-rose-100 shadow-sm hover:border-rose-200 hover:text-rose-600 transition-all"
              >
                Manage Bus Services <ArrowUpRight size={14} />

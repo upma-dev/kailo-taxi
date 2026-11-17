@@ -1,5 +1,6 @@
 import { Suspense, lazy, useEffect } from 'react';
 import { MotionConfig } from 'framer-motion';
+import { RestoreRealLocation } from '../../app/realLocation.jsx';
 import { Routes, Route, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { MapPin, FileText } from 'lucide-react';
 import { Toaster } from 'react-hot-toast';
@@ -19,6 +20,7 @@ import { getAuthenticatedDriverRole, getLocalDriverToken } from './modules/drive
 import { installBrowserFcmRegistration } from './shared/push/browserFcmRegistration';
 import { installNativeFcmBridge } from './shared/push/nativeFcmBridge';
 import { POOLING_ENABLED, RENTAL_ENABLED } from './shared/featureFlags';
+import useRentalEnabled from './shared/hooks/useRentalEnabled';
 import { showChatNotification } from '@/shared/utils/chatNotificationSound';
 import { TaxiAppSkeleton } from '@/shared/components/skeletons/ModuleSkeletons';
 import './App.css';
@@ -100,8 +102,6 @@ const BusPreview = lazy(() => import('./modules/user/pages/bus/BusPreview'));
 const BusDetails = lazy(() => import('./modules/user/pages/bus/BusDetails'));
 const BusConfirm = lazy(() => import('./modules/user/pages/bus/BusConfirm'));
 
-// Phase 5 — Onboarding
-const Onboarding = lazy(() => import('./modules/user/pages/auth/Onboarding'));
 
 // New Feature Pages
 const BikeRentalHome = lazy(() => import('./modules/user/pages/rental/BikeRentalHome'));
@@ -153,6 +153,9 @@ const ServiceCenterDashboard = lazy(() => import('./modules/driver/pages/Service
 const ServiceCenterVehicleDetails = lazy(() => import('./modules/driver/pages/ServiceCenterVehicleDetails'));
 const RideRequests = lazy(() => import('./modules/driver/pages/RideRequests'));
 const DriverIncentives = lazy(() => import('./modules/driver/pages/DriverIncentives'));
+const AdminHomeOffers = lazy(() => import('./modules/admin/pages/settings/HomeOffers'));
+const AdminGoHomeSettings = lazy(() => import('./modules/admin/pages/settings/GoHomeSettings'));
+const DriverGoHome = lazy(() => import('./modules/driver/pages/GoHome'));
 const BusDriverHome = lazy(() => import('./modules/driver/pages/BusDriverHome'));
 
 // Driver Module - Settings
@@ -161,6 +164,7 @@ const DriverDocuments = lazy(() => import('./modules/driver/pages/settings/Drive
 const Notifications = lazy(() => import('./modules/driver/pages/settings/Notifications'));
 const PayoutMethods = lazy(() => import('./modules/driver/pages/settings/PayoutMethods'));
 const Referral = lazy(() => import('./modules/driver/pages/settings/Referral'));
+const DriverSubscription = lazy(() => import('./modules/driver/pages/settings/DriverSubscription'));
 const DriverDeleteAccount = lazy(() => import('./modules/driver/pages/settings/DeleteAccount'));
 const SecuritySOS = lazy(() => import('./modules/driver/pages/settings/SecuritySOS'));
 const DriverSupport = lazy(() => import('./modules/driver/pages/settings/Support'));
@@ -219,10 +223,11 @@ const AdminDriverEdit = lazy(() => import('./modules/admin/pages/drivers/EditDri
 const AdminReferralDashboard = lazy(() => import('./modules/admin/pages/referrals/ReferralDashboard'));
 const AdminUserReferralSettings = lazy(() => import('./modules/admin/pages/referrals/UserReferralSettings'));
 const AdminDriverReferralSettings = lazy(() => import('./modules/admin/pages/referrals/DriverReferralSettings'));
-const AdminReferralTranslation = lazy(() => import('./modules/admin/pages/referrals/ReferralTranslation'));
 
 const AdminPromoCodes = lazy(() => import('./modules/admin/pages/promotions/PromoCodes'));
 const AdminSendNotification = lazy(() => import('./modules/admin/pages/promotions/SendNotification'));
+const AdminLoginBanners = lazy(() => import('./modules/admin/pages/promotions/LoginBanners'));
+const AdminLoginScreens = lazy(() => import('./modules/admin/pages/promotions/LoginBanners').then((m) => ({ default: m.LoginScreenDesign })));
 const AdminBannerImage = lazy(() => import('./modules/admin/pages/promotions/BannerImage'));
 
 // Price Management
@@ -288,13 +293,7 @@ const AdminFinance = lazy(() => import('./modules/admin/pages/finance/Finance'))
 const AdminFareConfig = lazy(() => import('./modules/admin/pages/finance/FareConfiguration'));
 const AdminSafetyCenter = lazy(() => import('./modules/admin/pages/safety/SafetyCenter'));
 const AdminCMSBuilder = lazy(() => import('./modules/admin/pages/cms/CMSBuilder'));
-const AdminHeaderFooter = lazy(() => import('./modules/admin/pages/cms/HeaderFooter'));
-const AdminCMSHome = lazy(() => import('./modules/admin/pages/cms/CMSHome'));
-const AdminCMSAbout = lazy(() => import('./modules/admin/pages/cms/CMSAbout'));
-const AdminCMSDriver = lazy(() => import('./modules/admin/pages/cms/CMSDriver'));
-const AdminCMSUser = lazy(() => import('./modules/admin/pages/cms/CMSUser'));
 const AdminCMSLanding = lazy(() => import('./modules/admin/pages/cms/CMSLanding'));
-const AdminCMSContact = lazy(() => import('./modules/admin/pages/cms/CMSContact'));
 const AdminGlobalSettings = lazy(() => import('./modules/admin/pages/settings/GlobalSettings'));
 const AdminGeneralSettings = lazy(() => import('./modules/admin/pages/settings/GeneralSettings'));
 const AdminCustomizationSettings = lazy(() => import('./modules/admin/pages/settings/CustomizationSettings'));
@@ -304,12 +303,6 @@ const AdminBidRideSettings = lazy(() => import('./modules/admin/pages/settings/B
 const AdminWalletSettings = lazy(() => import('./modules/admin/pages/settings/WalletSettings'));
 const AdminTipSettings = lazy(() => import('./modules/admin/pages/settings/TipSettings'));
 const AdminAppModules = lazy(() => import('./modules/admin/pages/settings/AppModules'));
-const AdminOnboardingScreens = lazy(() => import('./modules/admin/pages/settings/OnboardingScreens'));
-const AdminPaymentGateways = lazy(() => import('./modules/admin/pages/settings/PaymentGateways'));
-const AdminSMSGateways = lazy(() => import('./modules/admin/pages/settings/SMSGateways'));
-const AdminFirebaseSettings = lazy(() => import('./modules/admin/pages/settings/FirebaseSettings'));
-const AdminMapSettings = lazy(() => import('./modules/admin/pages/settings/MapSettings'));
-const AdminMailSettings = lazy(() => import('./modules/admin/pages/settings/MailSettings'));
 const AdminNotificationChannels = lazy(() => import('./modules/admin/pages/settings/NotificationChannels'));
 const AdminDispatcherAddons = lazy(() => import('./modules/admin/pages/settings/DispatcherAddons'));
 const AdminCountryManagement = lazy(() => import('./modules/admin/pages/masters/CountryManagement'));
@@ -365,7 +358,7 @@ const AdminSectionPlaceholder = () => {
         </p>
         <button
           type="button"
-          onClick={() => navigate('/taxi/admin/dashboard')}
+          onClick={() => navigate('/admin/dashboard')}
           className="mt-8 inline-flex items-center justify-center px-6 py-3 rounded-xl bg-[#2563EB] text-white text-[12px] font-black uppercase tracking-widest shadow-lg shadow-blue-900/20"
         >
           Back to Dashboard
@@ -387,7 +380,7 @@ const MainLayout = ({ children }) => {
   ];
   const isStaticPath = staticPages.includes(location.pathname);
   const isAdminPath =
-    location.pathname.startsWith('/taxi/admin') ||
+    location.pathname.startsWith('/admin') ||
     location.pathname.startsWith('/admin') ||
     location.pathname.startsWith('/taxi/user-import') ||
     location.pathname.startsWith('/taxi/driver-import');
@@ -461,7 +454,7 @@ const UserAccountInvalidationListener = () => {
   useEffect(() => {
     const isUserRoute =
       !location.pathname.startsWith('/admin') &&
-      !location.pathname.startsWith('/taxi/admin') &&
+      !location.pathname.startsWith('/admin') &&
       !location.pathname.startsWith('/user-import') &&
       !location.pathname.startsWith('/driver-import') &&
       !location.pathname.startsWith('/owner') &&
@@ -548,7 +541,7 @@ const UserAccountInvalidationListener = () => {
 
       if (targetRole === 'admin' && (!staleToken || staleToken === currentAdminToken)) {
         socketService.disconnect();
-        navigate('/taxi/admin/login');
+        navigate('/admin/login');
       }
     };
 
@@ -714,9 +707,21 @@ const DriverEntryRedirect = () => {
   );
 };
 
+const UnknownTaxiRoute = () => {
+  const { pathname } = useLocation();
+  return <Navigate to={pathname.startsWith('/admin') ? '/admin/dashboard' : '/taxi/user'} replace />;
+};
+
 function TaxiApp() {
-  const { pathname: taxiPathname } = useLocation();
-  const isTaxiAdminPath = taxiPathname.startsWith('/taxi/admin');
+  // Re-renders the whole route tree when the admin switches Rental on or off.
+  useRentalEnabled();
+  const realLocation = useLocation();
+  const { pathname: taxiPathname } = realLocation;
+  // Admin lives at /admin/..., but its routes are declared under /taxi/admin/...
+  const routesLocation = taxiPathname.startsWith('/admin')
+    ? { ...realLocation, pathname: `/taxi${taxiPathname}` }
+    : undefined;
+  const isTaxiAdminPath = taxiPathname.startsWith('/admin');
   useEffect(() => {
     if (!LOW_POWER_UI || isTaxiAdminPath) return undefined;
     document.documentElement.classList.add('taxi-low-power');
@@ -760,7 +765,8 @@ function TaxiApp() {
         <MainLayout>
           <Suspense fallback={isTaxiAdminPath ? <div className="min-h-screen bg-neutral-100" /> : <TaxiAppSkeleton />}>
             <Toaster position="top-right" closeButton />
-            <Routes>
+            <Routes location={routesLocation}>
+              <Route element={<RestoreRealLocation><Outlet /></RestoreRealLocation>}>
               {/* Static / Public routes */}
               <Route index element={<Navigate to="/taxi/user" replace />} />
               <Route path="about" element={<AboutPage />} />
@@ -776,7 +782,8 @@ function TaxiApp() {
               <Route path="refund" element={<LegalPage />} />
               <Route path="cancellation" element={<LegalPage />} />
               <Route path="login" element={<Login />} />
-              <Route path="onboarding" element={<Onboarding />} />
+              <Route path="auth/login" element={<Navigate to="/taxi/user/login" replace />} />
+              <Route path="user/auth/login" element={<Navigate to="/taxi/user/login" replace />} />
               <Route path="verify-otp" element={<VerifyOTP />} />
               <Route path="signup" element={<Signup />} />
 
@@ -876,7 +883,6 @@ function TaxiApp() {
               </Route>
 
               {/* User Module Routes (Taxi-prefixed aliases to match Driver style) */}
-              <Route path="user/onboarding" element={<Onboarding />} />
               <Route path="user/login" element={<Login />} />
               <Route path="user/terms" element={<LegalPage />} />
               <Route path="user/privacy" element={<LegalPage />} />
@@ -1104,12 +1110,14 @@ function TaxiApp() {
                 ) : null}
                 <Route path="history" element={<RideRequests />} />
                 <Route path="incentives" element={<DriverIncentives />} />
+                <Route path="go-home" element={<DriverGoHome />} />
 
                 <Route path="edit-profile" element={<EditProfile />} />
                 <Route path="documents" element={<DriverDocuments />} />
                 <Route path="notifications" element={<Notifications />} />
                 <Route path="payout-methods" element={<PayoutMethods />} />
                 <Route path="referral" element={<Referral />} />
+                <Route path="subscription" element={<DriverSubscription />} />
                 <Route
                   path="delete-account"
                   element={<DriverDeleteAccount />}
@@ -1200,7 +1208,7 @@ function TaxiApp() {
                 <Route index element={<AdminOwnerCreate />} />
               </Route>
               <Route path="admin" element={<AdminLayout />}>
-                <Route index element={<Navigate to="/taxi/admin/dashboard" />} />
+                <Route index element={<Navigate to="/admin/dashboard" />} />
                 <Route path="dashboard" element={<AdminDashboard />} />
                 <Route path="cancellation-analytics" element={<AdminCancellationAnalytics />} />
                 <Route path="earnings" element={<AdminEarnings />} />
@@ -1209,15 +1217,15 @@ function TaxiApp() {
                 <Route path="outstation-rides" element={<AdminOutstationRides />} />
                 <Route path="deliveries" element={<AdminDeliveries />} />
                 <Route path="ongoing" element={<AdminOngoing />} />
-                <Route path="bus-service" element={<AdminBusServiceManager basePath="/taxi/admin/bus-service" />} />
-                <Route path="bus-service/create" element={<AdminBusServiceManager mode="create" basePath="/taxi/admin/bus-service" />} />
-                <Route path="bus-service/edit/:id" element={<AdminBusServiceManager mode="edit" basePath="/taxi/admin/bus-service" />} />
+                <Route path="bus-service" element={<AdminBusServiceManager basePath="/admin/bus-service" />} />
+                <Route path="bus-service/create" element={<AdminBusServiceManager mode="create" basePath="/admin/bus-service" />} />
+                <Route path="bus-service/edit/:id" element={<AdminBusServiceManager mode="edit" basePath="/admin/bus-service" />} />
                 <Route path="bus-service/commission" element={<AdminBusCommissionManager />} />
                 <Route path="bus-service/bookings" element={<AdminBusBookingManager />} />
                 <Route path="bus-service/:id" element={<AdminBusServiceDetails />} />
                 {POOLING_ENABLED ? (
                   <>
-                    <Route path="pooling" element={<Navigate to="/taxi/admin/pooling/routes" replace />} />
+                    <Route path="pooling" element={<Navigate to="/admin/pooling/routes" replace />} />
                     <Route path="pooling/routes" element={<AdminPoolingManager />} />
                     <Route
                       path="pooling/create"
@@ -1345,9 +1353,10 @@ function TaxiApp() {
                   path="referrals/driver-settings"
                   element={<AdminDriverReferralSettings />}
                 />
+                {/* Referral Translation was removed: old links go to the referral dashboard. */}
                 <Route
                   path="referrals/translation"
-                  element={<AdminReferralTranslation />}
+                  element={<Navigate to="/admin/referrals/dashboard" replace />}
                 />
                 {/* Promotions Management */}
                 <Route
@@ -1370,6 +1379,11 @@ function TaxiApp() {
                   path="promotions/send-notification/create"
                   element={<AdminSendNotification />}
                 />
+                <Route
+                  path="promotions/send-notification/edit/:id"
+                  element={<AdminSendNotification />}
+                />
+                <Route path="promotions/login-banners" element={<AdminLoginBanners />} />
                 <Route
                   path="promotions/banner-image"
                   element={<AdminBannerImage />}
@@ -1637,26 +1651,26 @@ function TaxiApp() {
                 <Route path="safety" element={<AdminSafetyCenter />} />
                 <Route path="cms" element={<AdminCMSBuilder />} />
                 <Route
-                  path="settings/cms/header-footer" element={<Navigate to="/taxi/admin/global/cms/header-footer" replace />}
+                  path="settings/cms/header-footer" element={<Navigate to="/admin/global/cms/landing" replace />}
                 />
                 <Route
-                  path="settings/cms/home" element={<Navigate to="/taxi/admin/global/cms/home" replace />}
+                  path="settings/cms/home" element={<Navigate to="/admin/global/cms/landing" replace />}
                 />
                 <Route
-                  path="settings/cms/about" element={<Navigate to="/taxi/admin/global/cms/about" replace />}
+                  path="settings/cms/about" element={<Navigate to="/admin/global/cms/landing" replace />}
                 />
                 <Route
-                  path="settings/cms/driver" element={<Navigate to="/taxi/admin/global/cms/driver" replace />}
+                  path="settings/cms/driver" element={<Navigate to="/admin/global/cms/landing" replace />}
                 />
                 <Route
-                  path="settings/cms/user" element={<Navigate to="/taxi/admin/global/cms/user" replace />}
+                  path="settings/cms/user" element={<Navigate to="/admin/global/cms/landing" replace />}
                 />
                 <Route
-                  path="settings/cms/contact" element={<Navigate to="/taxi/admin/global/cms/contact" replace />}
+                  path="settings/cms/contact" element={<Navigate to="/admin/global/cms/landing" replace />}
                 />
                 <Route
                   path="settings/cms/legal"
-                  element={<Navigate to="/taxi/admin/global/legal" replace />}
+                  element={<Navigate to="/admin/global/legal" replace />}
                 />
                 <Route
                   path="support/ticket-title"
@@ -1697,36 +1711,33 @@ function TaxiApp() {
                 />
                 <Route
                   path="masters/roles"
-                  element={<Navigate to="/taxi/admin/management/admins" replace />}
+                  element={<Navigate to="/admin/management/admins" replace />}
                 />
 
                 <Route
                   path="settings/business/general"
-                  element={<Navigate to="/taxi/admin/global/branding" replace />}
+                  element={<Navigate to="/admin/global/branding" replace />}
                 />
                 <Route
                   path="settings/business/customization"
-                  element={<Navigate to="/taxi/admin/global/customization" replace />}
+                  element={<Navigate to="/admin/global/customization" replace />}
                 />
                 <Route path="global">
                   <Route index element={<Navigate to="branding" replace />} />
                   <Route path="branding" element={<AdminGeneralSettings />} />
                   <Route path="customization" element={<AdminCustomizationSettings />} />
+                  <Route path="login-screens" element={<AdminLoginScreens />} />
                   <Route path="app/wallet" element={<AdminWalletSettings />} />
                   <Route path="app/tip" element={<AdminTipSettings />} />
-                  <Route path="app/onboard" element={<AdminOnboardingScreens />} />
-                  <Route path="third-party/payment" element={<AdminPaymentGateways />} />
-                  <Route path="third-party/sms" element={<AdminSMSGateways />} />
-                  <Route path="third-party/firebase" element={<AdminFirebaseSettings />} />
-                  <Route path="third-party/map-apis" element={<AdminMapSettings />} />
-                  <Route path="third-party/mail" element={<AdminMailSettings />} />
-                  <Route path="cms/header-footer" element={<AdminHeaderFooter />} />
-                  <Route path="cms/home" element={<AdminCMSHome />} />
-                  <Route path="cms/about" element={<AdminCMSAbout />} />
-                  <Route path="cms/driver" element={<AdminCMSDriver />} />
-                  <Route path="cms/user" element={<AdminCMSUser />} />
+                  <Route path="app/go-home" element={<AdminGoHomeSettings />} />
+                  <Route path="home-offers" element={<AdminHomeOffers />} />
+                  <Route path="cms/header-footer" element={<Navigate to="/admin/global/cms/landing" replace />} />
+                  <Route path="cms/home" element={<Navigate to="/admin/global/cms/landing" replace />} />
+                  <Route path="cms/about" element={<Navigate to="/admin/global/cms/landing" replace />} />
+                  <Route path="cms/driver" element={<Navigate to="/admin/global/cms/landing" replace />} />
+                  <Route path="cms/user" element={<Navigate to="/admin/global/cms/landing" replace />} />
                   <Route path="cms/landing" element={<AdminCMSLanding />} />
-                  <Route path="cms/contact" element={<AdminCMSContact />} />
+                  <Route path="cms/contact" element={<Navigate to="/admin/global/cms/landing" replace />} />
                   <Route path="legal" element={<AdminCMSLegal />} />
                 </Route>
 
@@ -1740,15 +1751,12 @@ function TaxiApp() {
                 />
 
                 <Route
-                  path="settings/app/wallet" element={<Navigate to="/taxi/admin/global/app/wallet" replace />}
+                  path="settings/app/wallet" element={<Navigate to="/admin/global/app/wallet" replace />}
                 />
-                <Route path="settings/app/tip" element={<Navigate to="/taxi/admin/global/app/tip" replace />} />
+                <Route path="settings/app/tip" element={<Navigate to="/admin/global/app/tip" replace />} />
                 <Route
                   path="settings/app/country"
                   element={<AdminCountryManagement />}
-                />
-                <Route
-                  path="settings/app/onboard" element={<Navigate to="/taxi/admin/global/app/onboard" replace />}
                 />
 
                 <Route
@@ -1760,21 +1768,6 @@ function TaxiApp() {
                   element={<AdminGeneralSettings />}
                 />
 
-                <Route
-                  path="settings/third-party/payment" element={<Navigate to="/taxi/admin/global/third-party/payment" replace />}
-                />
-                <Route
-                  path="settings/third-party/sms" element={<Navigate to="/taxi/admin/global/third-party/sms" replace />}
-                />
-                <Route
-                  path="settings/third-party/firebase" element={<Navigate to="/taxi/admin/global/third-party/firebase" replace />}
-                />
-                <Route
-                  path="settings/third-party/map-apis" element={<Navigate to="/taxi/admin/global/third-party/map-apis" replace />}
-                />
-                <Route
-                  path="settings/third-party/mail" element={<Navigate to="/taxi/admin/global/third-party/mail" replace />}
-                />
                 <Route
                   path="settings/third-party/notification-channel"
                   element={<AdminNotificationChannels />}
@@ -1793,7 +1786,9 @@ function TaxiApp() {
                 />
               </Route>
 
-              {/* Removed catch-all to allow parent routing to handle 404s */}
+              {/* Unknown paths land on the right home instead of a blank page */}
+              <Route path="*" element={<UnknownTaxiRoute />} />
+              </Route>
             </Routes>
           </Suspense>
         </MainLayout>

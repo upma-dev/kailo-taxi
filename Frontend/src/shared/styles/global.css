@@ -36,9 +36,9 @@ html[data-theme="light"] {
 }
 
 :root {
-  font-family: 'Poppins', system-ui, Avenir, Helvetica, Arial, sans-serif;
-  --font-poppins: 'Poppins', sans-serif;
-  --font-outfit: 'Outfit', sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-poppins: 'Inter', sans-serif;
+  --font-outfit: 'Inter', sans-serif;
   line-height: 1.5;
   font-weight: 400;
 
@@ -107,6 +107,24 @@ html[data-theme="light"] {
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  /* landing page theme (set from Admin > Landing Page > Theme) */
+  --color-lp-primary: var(--lp-primary);
+  --color-lp-dark: var(--lp-dark);
+  --color-lp-accent: var(--lp-accent);
+  --color-lp-ink: var(--lp-ink);
+  --color-lp-deep: var(--lp-deep);
+  --color-lp-dark-2: var(--lp-dark-2);
+  --color-lp-mid: var(--lp-mid);
+  --color-lp-primary-2: var(--lp-primary-2);
+  --color-lp-mint: var(--lp-mint);
+  --color-lp-mint-2: var(--lp-mint-2);
+  --color-lp-mint-3: var(--lp-mint-3);
+  --color-lp-mint-4: var(--lp-mint-4);
+  --color-lp-mint-pale: var(--lp-mint-pale);
+  --color-lp-lime-1: var(--lp-lime-1);
+  --color-lp-lime-2: var(--lp-lime-2);
+  --color-lp-accent-light: var(--lp-accent-light);
+  --color-lp-accent-deep: var(--lp-accent-deep);
   
   --color-page-bg: #ffffff;
   --color-primary-orange: #dc2626;
@@ -272,4 +290,10 @@ iframe.skiptranslate,
     -webkit-backdrop-filter: none !important;
     backdrop-filter: none !important;
   }
+}
+
+/* Booking screens (bus tickets and similar) use Poppins with calmer weights. */
+.font-booking {
+  font-family: 'Poppins', 'Inter', system-ui, sans-serif;
+  letter-spacing: 0;
 }

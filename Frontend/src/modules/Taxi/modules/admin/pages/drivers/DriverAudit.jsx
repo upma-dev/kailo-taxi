@@ -70,7 +70,7 @@ const DriverAudit = () => {
         status: status === 'approve' ? 'approved' : 'inactive',
       });
       alert(status === 'approve' ? 'Driver Approved Successfully' : 'Driver Rejected');
-      navigate('/taxi/admin/drivers/pending');
+      navigate('/admin/drivers/pending');
     } catch (err) {
       alert(err?.message || 'Operation failed');
     } finally {
@@ -126,7 +126,7 @@ const DriverAudit = () => {
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700 max-w-7xl mx-auto pb-20 font-sans text-gray-950">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <button onClick={() => navigate('/taxi/admin/drivers/pending')} className="p-2 bg-white border border-gray-100 rounded-xl hover:bg-gray-50 text-gray-500 transition-all shadow-sm">
+          <button onClick={() => navigate('/admin/drivers/pending')} className="p-2 bg-white border border-gray-100 rounded-xl hover:bg-gray-50 text-gray-500 transition-all shadow-sm">
             <ArrowLeft size={20} />
           </button>
           <div>

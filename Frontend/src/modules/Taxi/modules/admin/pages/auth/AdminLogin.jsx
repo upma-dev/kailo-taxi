@@ -179,7 +179,7 @@ const AdminLogin = () => {
         user: response?.data?.admin || {},
         refreshToken: response?.data?.refreshToken || null,
       });
-      setTimeout(() => navigate('/taxi/admin/dashboard'), 300);
+      setTimeout(() => navigate('/admin/dashboard'), 300);
     } catch (err) {
       console.error('[Taxi AdminLogin Submit Error]', err);
       setError(messageFrom(err, 'Unable to complete admin login.'));

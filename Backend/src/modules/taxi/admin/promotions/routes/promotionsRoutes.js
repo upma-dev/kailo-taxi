@@ -16,6 +16,7 @@ import {
   sendNotification,
   togglePromoCodeStatus,
   updateBanner,
+  updateNotification,
   updatePromoCode,
 } from '../controllers/promotionsController.js';
 
@@ -35,6 +36,7 @@ promotionsRouter.get('/admin/promos/service-locations', getPromotionsServiceLoca
 promotionsRouter.get('/admin/notifications', getNotifications);
 promotionsRouter.post('/admin/notifications', sendNotification);
 promotionsRouter.post('/admin/notifications/send', sendNotification);
+promotionsRouter.patch('/admin/notifications/:id', updateNotification);
 promotionsRouter.delete('/admin/notifications/:id', deleteNotification);
 promotionsRouter.delete('/admin/push-notifications/:id', deleteNotification);
 

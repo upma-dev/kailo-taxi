@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { useLocation } from 'react-router-dom'
 import { Globe, Check } from 'lucide-react'
 import { LANGUAGES } from './languages.js'
 import { LANGUAGE_CHANGED_EVENT, OPEN_LANGUAGE_EVENT } from './languages.js'
@@ -7,7 +6,6 @@ import { getStoredLanguage, hasChosenLanguage, initLanguage, setLanguage } from 
 
 // Fixed top-right globe on every app, plus a "choose your language" sheet on first launch.
 export default function LanguageSwitcher() {
-  const { pathname } = useLocation()
   const [current, setCurrent] = useState(getStoredLanguage)
   const [open, setOpen] = useState(false)
   const [firstRun, setFirstRun] = useState(() => !hasChosenLanguage())
@@ -32,8 +30,6 @@ export default function LanguageSwitcher() {
   }
 
   // The Taxi admin header has its own language button (LanguageButton), so don't float one over it.
-  const isAdmin = pathname.startsWith('/admin')
-  const active = LANGUAGES.find((l) => l.code === current) || LANGUAGES[0]
 
   const list = (
     <div className="grid grid-cols-2 gap-2">
@@ -58,20 +54,6 @@ export default function LanguageSwitcher() {
 
   return (
     <div className="notranslate">
-      {isAdmin && (
-        <div className="fixed z-[9999]" style={{ top: 14, right: 280 }}>
-          <button
-            type="button"
-            aria-label="Change language"
-            onClick={() => setOpen(true)}
-            className="flex items-center gap-1.5 rounded-full border border-black/10 bg-white/95 px-3 py-1.5 text-xs font-bold text-neutral-800 shadow-md backdrop-blur"
-          >
-            <Globe size={14} />
-            {active.native}
-          </button>
-        </div>
-      )}
-
       {(firstRun || open) && (
         <div
           className="fixed inset-0 z-[10000] flex items-end justify-center bg-black/50 p-4 sm:items-center"

@@ -100,7 +100,7 @@ const BusServiceDetails = () => {
         <p className="text-sm font-semibold text-slate-500">This bus service may have been removed or the link is invalid.</p>
         <button
           type="button"
-          onClick={() => navigate('/taxi/admin/bus-service')}
+          onClick={() => navigate('/admin/bus-service')}
           className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-5 py-3 text-sm font-black text-white"
         >
           <ArrowLeft size={16} />
@@ -154,7 +154,7 @@ const BusServiceDetails = () => {
             ) : null}
             <button
               type="button"
-              onClick={() => navigate(`/taxi/admin/bus-service/edit/${bus.id}`)}
+              onClick={() => navigate(`/admin/bus-service/edit/${bus.id}`)}
               className="inline-flex items-center gap-2 rounded-2xl border border-white/20 bg-white/10 px-4 py-3 text-sm font-black text-white transition hover:bg-white/15"
             >
               <Pencil size={16} />
@@ -162,7 +162,7 @@ const BusServiceDetails = () => {
             </button>
             <button
               type="button"
-              onClick={() => navigate('/taxi/admin/bus-service')}
+              onClick={() => navigate('/admin/bus-service')}
               className="inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-black text-slate-900 shadow-lg transition hover:-translate-y-0.5"
             >
               <ArrowLeft size={16} />

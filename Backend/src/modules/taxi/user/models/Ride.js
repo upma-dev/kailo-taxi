@@ -657,6 +657,12 @@ const rideSchema = new mongoose.Schema(
         default: null,
       },
     },
+    // The driver's rating of the rider for this trip.
+    riderFeedback: {
+      rating: { type: Number, default: null, min: 1, max: 5 },
+      comment: { type: String, default: '', trim: true, maxlength: 300 },
+      submittedAt: { type: Date, default: null },
+    },
     previousCancellationFee: {
       type: Number,
       default: 0,
