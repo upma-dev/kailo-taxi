@@ -135,6 +135,11 @@ export default defineConfig({
         target: process.env.VITE_BACKEND_PROXY_TARGET || 'http://localhost:5000',
         changeOrigin: true,
       },
+      // Uploaded images (local development saves them on the backend's disk)
+      '/uploads': {
+        target: process.env.VITE_BACKEND_PROXY_TARGET || 'http://localhost:5000',
+        changeOrigin: true,
+      },
       // Proxy Socket.IO so frontend-origin socket connections are forwarded to backend in dev
       '/socket.io': {
         target: process.env.VITE_BACKEND_PROXY_TARGET || 'http://localhost:5000',

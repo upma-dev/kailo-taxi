@@ -17,6 +17,17 @@ const walletTransactionSchema = new mongoose.Schema(
       default: '',
       trim: true,
     },
+    // Where the money went / came from, e.g. "Bike - RNT-AB12CD" for a rental payment or refund.
+    description: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    // false = a record of an online (UPI/card) payment: it is shown in the history but did not move the wallet balance.
+    affectsBalance: {
+      type: Boolean,
+      default: true,
+    },
     counterpartyPhone: {
       type: String,
       default: '',

@@ -438,7 +438,10 @@ const resolveOwnerBusSeatPrice = (busService = {}, seat = {}) => {
   const variantPricing = busService?.variantPricing || {};
   const defaultPrice = Number(busService?.seatPrice || 0);
   const variantKey = String(seat?.variant || "seat").trim().toLowerCase();
-  const resolvedPrice = variantPricing?.[variantKey] ?? variantPricing?.seat ?? defaultPrice;
+  // A price of 0 means "not set": fall back to the plain seat price, then to the bus's base seat price.
+  const resolvedPrice = [variantPricing?.[variantKey], variantPricing?.seat, defaultPrice]
+    .map(Number)
+    .find((value) => Number.isFinite(value) && value > 0) ?? 0;
 
   return Number.isFinite(Number(resolvedPrice)) ? Number(resolvedPrice) : defaultPrice;
 };
@@ -670,17 +673,51 @@ const resolveOwnerScopedBusDriverDetails = async (owner, payload = {}, existing 
   };
 };
 
+// When a bus trip leaves and arrives (IST). A trip that arrives "earlier" than it leaves runs overnight.
+const getBusTripTiming = (travelDate, schedule = {}) => {
+  const departsAt = parseOwnerBusDateTime(travelDate, schedule?.departureTime);
+  let arrivesAt = parseOwnerBusDateTime(travelDate, schedule?.arrivalTime);
+  if (departsAt && arrivesAt && arrivesAt <= departsAt) {
+    arrivesAt = new Date(arrivesAt.getTime() + 24 * 60 * 60 * 1000);
+  }
+  return { departsAt, arrivesAt };
+};
+
+// Over = already arrived. Over trips (and their passengers) are not shown to the captain any more.
+const isBusTripOver = (travelDate, schedule, now = new Date()) => {
+  const { departsAt, arrivesAt } = getBusTripTiming(travelDate, schedule);
+  const end = arrivesAt || (departsAt ? new Date(departsAt.getTime() + 12 * 60 * 60 * 1000) : null);
+  return Boolean(end) && end <= now;
+};
+
 const buildBusDriverSeatLayout = async ({ busService, scheduleId, travelDate }) => {
   const activeHolds = await BusSeatHold.find({
     busServiceId: busService._id,
     scheduleId,
     travelDate,
-    status: { $in: ["held", "booked"] },
+    // "converted" = a confirmed booking (online or counter); "held" = payment in progress.
+    status: { $in: ["held", "converted"] },
   })
-    .select("seatId")
+    .select("seatId seatIds")
     .lean();
 
-  const reservedSeatIds = new Set(activeHolds.map((item) => String(item.seatId || "")));
+  // Price of each seat for this exact trip (set from the owner's seat / window / aisle / sleeper prices).
+  const inventoryRows = await TripSeatInventory.find({
+    busServiceId: busService._id,
+    scheduleId,
+    travelDate,
+  })
+    .select("seatId price status")
+    .lean();
+  const inventoryPriceBySeat = new Map(inventoryRows.map((row) => [String(row.seatId), Number(row.price || 0)]));
+
+  const reservedSeatIds = new Set(
+    inventoryRows.length > 0
+      ? inventoryRows.filter((row) => ["booked", "held"].includes(String(row.status || ""))).map((row) => String(row.seatId))
+      : activeHolds.flatMap((item) => [item.seatId, ...(Array.isArray(item.seatIds) ? item.seatIds : [])])
+        .map((id) => String(id || ""))
+        .filter(Boolean),
+  );
 
   const normalizeDeck = (deckRows = []) =>
     (Array.isArray(deckRows) ? deckRows : []).map((row) =>
@@ -702,6 +739,7 @@ const buildBusDriverSeatLayout = async ({ busService, scheduleId, travelDate }) 
         return {
           ...cell,
           status: isBlocked || isReserved ? "booked" : "available",
+          price: inventoryPriceBySeat.get(seatId) || resolveOwnerBusSeatPrice(busService, cell),
         };
       }),
     );
@@ -721,6 +759,7 @@ const buildBusDriverSeatLayout = async ({ busService, scheduleId, travelDate }) 
     scheduleId,
     travelDate,
     availableSeats,
+    currency: busService.fareCurrency || "INR",
     blueprint,
   };
 };
@@ -765,12 +804,61 @@ const serializeBusDriverProfile = async (busDriver) => {
       .lean()
     : [];
 
+  // Seats booked per upcoming trip (next 7 days), so the captain's home can show "N seats booked" for each trip.
+  const istToday = new Date(Date.now() + IST_OFFSET_MS);
+  const istLast = new Date(Date.now() + IST_OFFSET_MS + 7 * DAY_MS);
+  const tripSummary = assignedBusServiceId
+    ? await BusBooking.aggregate([
+      {
+        $match: {
+          busServiceId: new mongoose.Types.ObjectId(assignedBusServiceId),
+          status: { $in: ["pending", "confirmed", "boarded"] },
+          travelDate: { $gte: istToday.toISOString().slice(0, 10), $lte: istLast.toISOString().slice(0, 10) },
+        },
+      },
+      {
+        $group: {
+          _id: { travelDate: "$travelDate", scheduleId: "$scheduleId" },
+          bookings: { $sum: 1 },
+          seats: { $sum: { $size: { $ifNull: ["$seatIds", []] } } },
+        },
+      },
+    ]).then((rows) =>
+      rows
+        .filter((row) => {
+          const sched = (busService?.schedules || []).find((item) => String(item.id) === String(row._id.scheduleId));
+          return !isBusTripOver(row._id.travelDate, sched);
+        })
+        .map((row) => ({
+          travelDate: row._id.travelDate,
+          scheduleId: row._id.scheduleId,
+          bookings: row.bookings,
+          seats: row.seats,
+        })),
+    )
+    : [];
+
+  const blueprintSeatCount = ["lowerDeck", "upperDeck"]
+    .flatMap((deck) => (Array.isArray(busService?.blueprint?.[deck]) ? busService.blueprint[deck] : []))
+    .flatMap((row) => (Array.isArray(row) ? row : []))
+    .filter((cell) => cell?.kind === "seat").length;
+  const totalCapacity = Number(busService?.capacity || 0) || blueprintSeatCount;
+  const completedBookingsCount = assignedBusServiceId
+    ? await BusBooking.countDocuments({ busServiceId: assignedBusServiceId, status: "completed" })
+    : 0;
+  const route = busService?.route || {};
+  const routeLabel =
+    route.routeName ||
+    [route.originCity, route.destinationCity].filter(Boolean).join(" → ") ||
+    "";
+
   return {
     id: busDriver._id,
     accountType: "bus_driver",
     name: busDriver.name || "",
     phone: busDriver.phone || "",
     email: busDriver.email || "",
+    profileImage: busDriver.profileImage || "",
     approve: busDriver.approve,
     active: busDriver.active,
     status: busDriver.status || "approved",
@@ -791,16 +879,19 @@ const serializeBusDriverProfile = async (busDriver) => {
         route: busService.route || {},
         schedules: Array.isArray(busService.schedules) ? busService.schedules : [],
         amenities: Array.isArray(busService.amenities) ? busService.amenities : [],
-        capacity: Number(busService.capacity || 0),
+        capacity: totalCapacity,
         status: busService.status || "draft",
+        routeLabel,
       }
       : null,
     metrics: {
       upcomingBookings: upcomingBookingsCount,
+      completedBookings: completedBookingsCount,
       totalSchedules: Array.isArray(busService?.schedules) ? busService.schedules.length : 0,
-      totalCapacity: Number(busService?.capacity || 0),
+      totalCapacity,
     },
     recentBookings: recentBookings.map(serializeBusDriverBooking),
+    tripSummary,
   };
 };
 
@@ -1548,7 +1639,7 @@ const serializeOwnerProfile = (owner = {}) => ({
   name: owner.owner_name || owner.name || owner.company_name || "Owner",
   phone: owner.mobile || owner.phone || "",
   email: owner.email || "",
-  profileImage: "",
+  profileImage: owner.profileImage || "",
   gender: "",
   vehicleType: owner.transport_type || "taxi",
   vehicleTypeId: null,
@@ -3226,8 +3317,63 @@ export const deleteDriverEmergencyContact = async (req, res) => {
 };
 
 export const updateCurrentDriver = async (req, res) => {
-  if (String(req.auth?.role || "").toLowerCase() === "owner") {
-    throw new ApiError(403, "Owner profile editing is not available from this screen");
+  const accountRole = String(req.auth?.role || "").toLowerCase();
+
+  // Owner and bus captain accounts can change their name and email (nothing else is editable for them here).
+  if (accountRole === "owner" || accountRole === "bus_driver") {
+    const account =
+      accountRole === "owner"
+        ? await Owner.findById(req.auth.sub)
+        : await BusDriver.findById(req.auth.sub);
+
+    if (!account) {
+      throw new ApiError(404, accountRole === "owner" ? "Owner not found" : "Bus driver not found");
+    }
+
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, "name")) {
+      const name = String(req.body.name || "").trim();
+      if (!DRIVER_NAME_REGEX.test(name)) {
+        throw new ApiError(400, "Full name can contain alphabets only");
+      }
+      account.name = name;
+      if (accountRole === "owner") {
+        account.owner_name = name;
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, "email")) {
+      const email = String(req.body.email || "").trim().toLowerCase();
+      if (email && !EMAIL_REGEX.test(email)) {
+        throw new ApiError(400, "Enter a valid email address");
+      }
+      account.email = email;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, "profileImage")) {
+      const image = String(req.body.profileImage || "").trim();
+      if (image && !/^https?:\/\//i.test(image)) {
+        throw new ApiError(400, "Profile photo must be an uploaded image link");
+      }
+      account.profileImage = image;
+    }
+
+    try {
+      await account.save();
+    } catch (saveError) {
+      if (saveError?.code === 11000) {
+        throw new ApiError(409, "This email is already used by another account");
+      }
+      throw saveError;
+    }
+
+    res.json({
+      success: true,
+      data:
+        accountRole === "owner"
+          ? serializeOwnerProfile(account.toObject())
+          : await serializeBusDriverProfile(account),
+    });
+    return;
   }
 
   const driver = await Driver.findById(req.auth.sub);
@@ -4720,6 +4866,10 @@ export const getBusDriverSeatLayout = async (req, res) => {
     throw new ApiError(404, "Bus schedule not found for the selected date");
   }
 
+  if (isBusTripOver(travelDate, schedule)) {
+    throw new ApiError(409, "This trip is already over");
+  }
+
   res.json({
     success: true,
     data: {
@@ -4768,7 +4918,12 @@ export const listBusDriverBookings = async (req, res) => {
     query.status = status;
   }
 
-  const items = await BusBooking.find(query).sort({ travelDate: 1, createdAt: -1 }).lean();
+  const busServiceDoc = await BusService.findById(busDriver.assignedBusServiceId).select("schedules").lean();
+  const scheduleById = new Map((busServiceDoc?.schedules || []).map((item) => [String(item.id), item]));
+  const now = new Date();
+  const items = (await BusBooking.find(query).sort({ travelDate: 1, createdAt: -1 }).lean()).filter(
+    (item) => !isBusTripOver(item.travelDate, scheduleById.get(String(item.scheduleId)), now),
+  );
 
   res.json({
     success: true,
@@ -4823,6 +4978,11 @@ export const createBusDriverReservation = async (req, res) => {
     throw new ApiError(404, "Bus schedule not found for the selected date");
   }
 
+  const { departsAt } = getBusTripTiming(travelDate, schedule);
+  if (departsAt && departsAt <= new Date()) {
+    throw new ApiError(409, "This bus has already left. Seats can be booked only before departure.");
+  }
+
   const trip = await ensureTripInstance({ busService, scheduleId, travelDate });
   if (trip.status === "cancelled") {
     throw new ApiError(409, "This trip has been cancelled by the operator");
@@ -4849,9 +5009,22 @@ export const createBusDriverReservation = async (req, res) => {
 
   const availableSeatDocs = lockedSeatDocs;
   const seatCellMap = new Map(availableSeatDocs.map((doc) => [doc.seatId, doc]));
-  const amount = Math.round(
-    seatIds.reduce((sum, seatId) => sum + Number(seatCellMap.get(seatId)?.price || resolveBusSeatPrice(busService, { id: seatId })), 0) * 100,
-  ) / 100;
+  let amount;
+  try {
+    amount = Math.round(
+      seatIds.reduce((sum, seatId) => {
+        const seatDoc = seatCellMap.get(seatId) || {};
+        return sum + Number(seatDoc.price || resolveOwnerBusSeatPrice(busService, { id: seatId, variant: seatDoc.variant }));
+      }, 0) * 100,
+    ) / 100;
+  } catch (priceErr) {
+    // Never leave seats locked when the fare could not be worked out.
+    await TripSeatInventory.updateMany(
+      { tripId: trip._id, bookingId: bookingObjectId },
+      { $set: { status: "available", bookingId: null, holdId: null, holdExpiresAt: null, bookedBy: {} } },
+    );
+    throw priceErr;
+  }
 
   let booking;
   try {
@@ -6669,7 +6842,7 @@ export const getOwnerFleetDashboard = async (req, res) => {
   );
 
   const ownerBusServices = await BusService.find({ ownerId: owner._id })
-    .select("status")
+    .select("status busDriverId")
     .sort({ createdAt: -1 })
     .lean();
   const ownerBusServiceIds = ownerBusServices.map((item) => item._id);
@@ -6722,6 +6895,10 @@ export const getOwnerFleetDashboard = async (req, res) => {
     const busMetrics = busBookingMetrics[0] || {};
     busOverview = {
       totalBuses: ownerBusServices.length,
+      // Bus captains are a separate account type from taxi drivers, so they are counted here, not under Drivers.
+      totalBusDrivers: new Set(
+        ownerBusServices.map((item) => String(item.busDriverId || "")).filter(Boolean),
+      ).size,
       activeBuses: ownerBusServices.filter(
         (item) => String(item.status || "").toLowerCase() === "active",
       ).length,
@@ -6856,8 +7033,11 @@ export const createOwnerBusService = async (req, res) => {
   delete payload.adminCommissionPercentage;
   delete payload.commissionType;
   delete payload.commissionValue;
+  // Fields only the admin controls: an owner must not be able to send them (approval status, tax, links to other records).
+  ["serviceTaxPercentage", "rejectionReason", "busDriverId", "ownerId", "rating", "ratingCount", "totalRatingScore", "reviews"].forEach((key) => {
+    delete payload[key];
+  });
   payload.status = 'pending_approval';
-  payload.rejectionReason = '';
 
   const resolvedDriver = await resolveOwnerScopedBusDriverDetails(owner, payload);
 
@@ -6910,6 +7090,10 @@ export const updateOwnerBusService = async (req, res) => {
   delete payload.adminCommissionPercentage;
   delete payload.commissionType;
   delete payload.commissionValue;
+  // Fields only the admin controls: an owner must not be able to send them (approval status, tax, links to other records).
+  ["serviceTaxPercentage", "rejectionReason", "busDriverId", "ownerId", "rating", "ratingCount", "totalRatingScore", "reviews"].forEach((key) => {
+    delete payload[key];
+  });
 
   let isResubmitted = false;
   // If currently rejected, draft, or pending, resubmit as pending_approval
@@ -6917,6 +7101,9 @@ export const updateOwnerBusService = async (req, res) => {
     payload.status = 'pending_approval';
     payload.rejectionReason = '';
     isResubmitted = true;
+  } else {
+    // Live / paused / suspended buses keep the status the admin gave them. An owner cannot re-activate a suspended bus.
+    payload.status = existingBus.status;
   }
 
   const resolvedDriver = await resolveOwnerScopedBusDriverDetails(owner, payload, existingBus);
@@ -7363,11 +7550,22 @@ export const cancelOwnerBusBookingSeats = async (req, res) => {
   await booking.save();
   await syncBusBookingOwnerEarning(booking._id);
 
-  await BusSeatHold.deleteMany({
-    bookingId: booking._id,
-    status: { $in: ["held", "booked"] },
-    seatId: { $in: seatsToCancel.map((item) => item.seatId) },
-  });
+  // Give the cancelled seats back to sale. Without this they stay locked and nobody can book them again.
+  const releasedSeatIds = seatsToCancel.map((item) => item.seatId);
+  await TripSeatInventory.updateMany(
+    booking.tripId
+      ? { tripId: booking.tripId, seatId: { $in: releasedSeatIds } }
+      : { busServiceId: booking.busServiceId, scheduleId: booking.scheduleId, travelDate: booking.travelDate, seatId: { $in: releasedSeatIds } },
+    { $set: { status: "available", bookingId: null, holdId: null, holdExpiresAt: null, bookedBy: {} } },
+  );
+  if (remainingActiveSeatCount <= 0) {
+    await BusSeatHold.updateMany({ bookingId: booking._id }, { $set: { status: "released" } });
+  } else {
+    await BusSeatHold.updateMany(
+      { bookingId: booking._id },
+      { $pull: { seatIds: { $in: releasedSeatIds } } },
+    );
+  }
 
   const hydratedBooking = await BusBooking.findById(booking._id)
     .populate("userId", "name phone email")

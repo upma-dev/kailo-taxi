@@ -1100,6 +1100,9 @@ const AdminLayout = () => {
       else if (role === 'bus_driver') path = '/admin/bus-service/managers';
       else if (role === 'bus_pending' || role === 'bus_service') path = '/admin/bus-service?status=pending_approval';
       else if (role === 'refund') path = '/admin/drivers/wallet/withdrawals';
+      else if (role === 'rental') path = '/admin/pricing/rental-requests';
+      else if (role === 'rental_quote') path = '/admin/pricing/rental-quotes';
+      else if (role === 'rental_end' || role === 'rental_alert') path = '/admin/pricing/rental-tracking';
 
       if (path) {
         counts[path] = (counts[path] || 0) + 1;
@@ -1292,11 +1295,19 @@ const AdminLayout = () => {
 
   const fetchPendingRegistrationsAndRefunds = useCallback(async () => {
     try {
-      const [pendingDriversRes, withdrawalsRes, busesRes] = await Promise.allSettled([
+      const [pendingDriversRes, withdrawalsRes, busesRes, rentalRes, trackingRes, quoteRes] = await Promise.allSettled([
         adminService.getDrivers({ tab: 'pending', limit: 20 }),
         adminService.getDriverWithdrawalSummaries({ status: 'pending', limit: 20 }),
         adminService.listBusServices(),
+        adminService.getRentalBookingRequests(),
+        adminService.getRentalTrackingDashboard(),
+        adminService.getRentalQuoteRequests(),
       ]);
+
+      const quoteList =
+        quoteRes.status === 'fulfilled'
+          ? quoteRes.value?.data?.data?.results || quoteRes.value?.data?.results || quoteRes.value?.results || []
+          : [];
 
       const driversList =
         pendingDriversRes.status === 'fulfilled'
@@ -1311,6 +1322,16 @@ const AdminLayout = () => {
       const busesList =
         busesRes.status === 'fulfilled'
           ? busesRes.value?.data?.results || busesRes.value?.data?.data || busesRes.value?.results || busesRes.value?.data || (Array.isArray(busesRes.value) ? busesRes.value : [])
+          : [];
+
+      const rentalList =
+        rentalRes.status === 'fulfilled'
+          ? rentalRes.value?.data?.data?.results || rentalRes.value?.data?.results || rentalRes.value?.results || []
+          : [];
+
+      const trackingList =
+        trackingRes.status === 'fulfilled'
+          ? trackingRes.value?.data?.data?.results || trackingRes.value?.data?.results || trackingRes.value?.results || []
           : [];
 
       // Zone-scope: extract assigned service_location_ids / zone_ids from current adminProfile
@@ -1371,11 +1392,65 @@ const AdminLayout = () => {
           createdAt: b.createdAt || new Date().toISOString(),
         }));
 
+      // Rental work that still needs the admin: new requests to approve, and rides the rider wants to end.
+      const rentalName = (r) =>
+        `${r.userId?.name || r.contactName || 'Customer'} - ${r.vehicleName || 'Rental vehicle'} (${r.bookingReference || ''})`;
+      const mappedRentals = rentalList
+        .filter((r) => ['pending', 'end_requested'].includes(String(r.status || '')))
+        .map((r) => {
+          const isEnd = r.status === 'end_requested';
+          return {
+            id: `${isEnd ? 'pending_rental_end' : 'pending_rental'}:${r.id || r._id}`,
+            title: isEnd ? 'Rental End Requested' : 'New Rental Request',
+            name: rentalName(r),
+            phone: r.userId?.phone || r.contactPhone || '',
+            type: isEnd ? 'rental_end' : 'rental',
+            role: isEnd ? 'rental_end' : 'rental',
+            status: 'PENDING',
+            createdAt: (isEnd ? r.completionRequestedAt : r.createdAt) || r.createdAt || new Date().toISOString(),
+          };
+        });
+
+      // Custom quote requests the admin still has to price.
+      const mappedQuotes = quoteList
+        .filter((q) => ['pending', 'reviewing'].includes(String(q.status || '').toLowerCase()))
+        .map((q) => ({
+          id: `pending_rental_quote:${q.id || q._id}`,
+          title: 'New Custom Quote Request',
+          name: `${q.contactName || q.userId?.name || 'Customer'} - ${q.vehicleName || 'Rental vehicle'} (${q.requestedHours || 0}h)`,
+          phone: q.contactPhone || q.userId?.phone || '',
+          type: 'rental_quote',
+          role: 'rental_quote',
+          status: 'PENDING',
+          createdAt: q.createdAt || new Date().toISOString(),
+        }));
+
+      // Live tracking alerts (vehicle left the zone, location switched off ...) on running rentals.
+      const mappedTrackingAlerts = trackingList
+        .filter((t) => Array.isArray(t?.rentalTracking?.alerts) && t.rentalTracking.alerts.length > 0)
+        .map((t) => ({
+          id: `pending_rental_alert:${t.id}`,
+          title: 'Rental Tracking Alert',
+          name: `${t.user?.name || 'Customer'} - ${t.vehicle?.name || 'Rental vehicle'}: ${t.rentalTracking.alerts[0]?.message || 'Needs attention'}`,
+          phone: t.user?.phone || '',
+          type: 'rental_alert',
+          role: 'rental_alert',
+          status: 'ALERT',
+          createdAt: t.rentalTracking.lastLocationAt || t.updatedAt || new Date().toISOString(),
+        }));
+
       setRegistrationNotifications((prev) => {
         const socketOnlyItems = prev.filter(
-          (p) => !p.id.startsWith('pending_driver:') && !p.id.startsWith('pending_refund:') && !p.id.startsWith('pending_bus:')
+          (p) =>
+            !p.id.startsWith('pending_driver:') &&
+            !p.id.startsWith('pending_refund:') &&
+            !p.id.startsWith('pending_bus:') &&
+            !p.id.startsWith('pending_rental:') &&
+            !p.id.startsWith('pending_rental_end:') &&
+            !p.id.startsWith('pending_rental_quote:') &&
+            !p.id.startsWith('pending_rental_alert:')
         );
-        return [...mappedPendingDrivers, ...mappedWithdrawals, ...mappedPendingBuses, ...socketOnlyItems].slice(0, 50);
+        return [...mappedRentals, ...mappedQuotes, ...mappedTrackingAlerts, ...mappedPendingDrivers, ...mappedWithdrawals, ...mappedPendingBuses, ...socketOnlyItems].slice(0, 50);
       });
     } catch (err) {
       console.error('Failed to fetch pending drivers/refunds/buses:', err);
@@ -1384,6 +1459,19 @@ const AdminLayout = () => {
 
   useEffect(() => {
     fetchPendingRegistrationsAndRefunds();
+  }, [fetchPendingRegistrationsAndRefunds]);
+
+  // Rental requests change while the admin is on other pages: re-check every minute and right after a rental edit.
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === 'visible') fetchPendingRegistrationsAndRefunds();
+    };
+    const timer = window.setInterval(refresh, 60000);
+    window.addEventListener('admin-rental-changed', refresh);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('admin-rental-changed', refresh);
+    };
   }, [fetchPendingRegistrationsAndRefunds]);
 
   useEffect(() => {
@@ -1523,7 +1611,9 @@ const AdminLayout = () => {
 
       setRegistrationNotifications((prev) => {
         const item = {
-          id: `reg:${data.id || Date.now()}`,
+          // Ids that already start with "pending_" (rental/bus) match the polled list's ids, so the same
+          // request is not counted twice (once from the socket, once from the poll).
+          id: String(data.id || '').startsWith('pending_') ? String(data.id) : `reg:${data.id || Date.now()}`,
           title,
           name,
           phone,
@@ -1536,7 +1626,24 @@ const AdminLayout = () => {
       });
     };
 
+    const handleRentalTrackingAlert = (payload = {}) => {
+      if (!payload?.id) return;
+      const alertMessage = payload?.rentalTracking?.alerts?.[0]?.message || 'Needs attention';
+      const item = {
+        id: `pending_rental_alert:${payload.id}`,
+        title: 'Rental Tracking Alert',
+        name: `${payload.user?.name || 'Customer'} - ${payload.vehicle?.name || 'Rental vehicle'}: ${alertMessage}`,
+        phone: payload.user?.phone || '',
+        type: 'rental_alert',
+        role: 'rental_alert',
+        status: 'ALERT',
+        createdAt: new Date().toISOString(),
+      };
+      setRegistrationNotifications((prev) => [item, ...prev.filter((p) => p.id !== item.id)].slice(0, 50));
+    };
+
     socketService.on('new_registration_alert', handleRegistrationAlert);
+    socketService.on('rental:tracking:alert', handleRentalTrackingAlert);
     socketService.on('new_driver_registration', handleRegistrationAlert);
 
     const handleSupportChatNotification = (payload = {}) => {
@@ -1594,6 +1701,7 @@ const AdminLayout = () => {
     return () => {
       socketService.off('new_sos');
       socketService.off('new_registration_alert', handleRegistrationAlert);
+      socketService.off('rental:tracking:alert', handleRentalTrackingAlert);
       socketService.off('new_driver_registration', handleRegistrationAlert);
       socketService.off('chat:message', handleSupportChatNotification);
     };
@@ -1954,7 +2062,7 @@ const AdminLayout = () => {
                           {registrationNotifications.map((item) => {
                             const role = String(item.role || item.type || '').toLowerCase();
                             const badgeColor =
-                              role === 'refund'
+                              role === 'refund' || role === 'rental' || role === 'rental_quote' || role === 'rental_end' || role === 'rental_alert'
                                 ? 'bg-rose-50 text-rose-700 font-black border border-rose-200/80 shadow-xs'
                                 : role === 'owner'
                                 ? 'bg-indigo-50 text-indigo-700 font-bold'
@@ -1965,7 +2073,13 @@ const AdminLayout = () => {
                                 : 'bg-slate-100 text-slate-700 font-bold';
 
                             const targetPath =
-                              role === 'refund'
+                              role === 'rental'
+                                ? '/admin/pricing/rental-requests'
+                                : role === 'rental_quote'
+                                ? '/admin/pricing/rental-quotes'
+                                : role === 'rental_end' || role === 'rental_alert'
+                                ? '/admin/pricing/rental-tracking'
+                                : role === 'refund'
                                 ? '/admin/drivers/wallet/withdrawals'
                                 : role === 'owner'
                                 ? '/admin/owners'
@@ -1994,7 +2108,7 @@ const AdminLayout = () => {
                                     )}
                                   </div>
                                   <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider ${badgeColor}`}>
-                                    {role === 'refund' ? 'Refund Pending' : role.replace('_', ' ')}
+                                    {role === 'refund' ? 'Refund Pending' : role === 'rental' ? 'Rental Request' : role === 'rental_quote' ? 'Quote Request' : role === 'rental_end' ? 'End Requested' : role === 'rental_alert' ? 'Tracking Alert' : role.replace('_', ' ')}
                                   </span>
                                 </div>
                                 <div className="mt-2 flex items-center justify-between text-[10px] font-bold text-slate-400">

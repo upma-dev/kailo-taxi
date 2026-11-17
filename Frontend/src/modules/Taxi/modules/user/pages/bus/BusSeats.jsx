@@ -1,3 +1,4 @@
+import BusFlowSteps from './BusFlowSteps';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -63,7 +64,7 @@ const SeatDeck = ({ title, rows, selectedSeatIds, onToggle, bus }) => {
     <div className="w-full bg-white rounded-[28px] p-5 shadow-[0_8px_30px_rgba(15,23,42,0.06)] border border-slate-100">
       <div className="flex justify-between items-center mb-5 pb-4 border-b border-dashed border-slate-100">
         <div>
-          <span className="text-[11px] font-black text-slate-800 uppercase tracking-[0.16em] px-2.5 py-1 bg-slate-100 rounded-lg">
+          <span className="text-[11px] font-bold text-slate-800 uppercase tracking-wider px-2.5 py-1 bg-slate-100 rounded-lg">
             {title} ({isUpper ? 'Upper Berth' : 'Lower Berth'})
           </span>
           <p className="text-[10px] font-bold text-slate-400 mt-1">
@@ -103,10 +104,10 @@ const SeatDeck = ({ title, rows, selectedSeatIds, onToggle, bus }) => {
                     isBooked
                       ? 'cursor-not-allowed border-slate-300 bg-slate-200'
                       : isSelected
-                        ? 'border-slate-900 bg-slate-900 shadow-[0_6px_16px_rgba(2,6,23,0.22)]'
+                        ? 'border-[var(--app-primary,#0F766E)] bg-[var(--app-primary,#0F766E)] shadow-[0_6px_16px_rgba(2,6,23,0.22)]'
                         : isSleeper
                           ? 'border-blue-200 bg-blue-50 hover:border-blue-300'
-                          : 'border-slate-300 bg-white hover:border-orange-300'
+                          : 'border-slate-300 bg-white hover:border-[var(--app-primary,#0F766E)]/50'
                   }`}
                   style={{
                     minHeight: isSleeper ? '68px' : '58px',
@@ -119,12 +120,12 @@ const SeatDeck = ({ title, rows, selectedSeatIds, onToggle, bus }) => {
                     <>
                       <div
                         className={`absolute left-1.5 top-1/2 h-[72%] w-1.5 -translate-y-1/2 rounded-full transition-colors ${
-                          isBooked ? 'bg-slate-400' : isSelected ? 'bg-orange-400' : 'bg-blue-300'
+                          isBooked ? 'bg-slate-400' : isSelected ? 'bg-[#C6F432]' : 'bg-blue-300'
                         }`}
                       />
                       <div className="flex flex-col items-center justify-center pl-2">
                         <span
-                          className={`text-[10px] font-black leading-none ${
+                          className={`text-[10px] font-bold leading-none ${
                             isSelected ? 'text-white' : isBooked ? 'text-slate-500' : 'text-slate-800'
                           }`}
                         >
@@ -135,7 +136,7 @@ const SeatDeck = ({ title, rows, selectedSeatIds, onToggle, bus }) => {
                         </span>
                         <span
                           className={`text-[9px] font-bold mt-1 leading-none ${
-                            isSelected ? 'text-orange-300' : isBooked ? 'text-slate-400' : 'text-emerald-700'
+                            isSelected ? 'text-[#C6F432]' : isBooked ? 'text-slate-400' : 'text-emerald-700'
                           }`}
                         >
                           ₹{seatPrice}
@@ -144,14 +145,14 @@ const SeatDeck = ({ title, rows, selectedSeatIds, onToggle, bus }) => {
                     </>
                   ) : (
                     <>
-                      <div className={`absolute -top-1 h-2 w-full rounded-t-sm transition-colors ${isBooked ? 'bg-slate-400' : isSelected ? 'bg-orange-400' : 'bg-slate-200'}`} />
-                      <span className={`text-[10px] font-black leading-none ${isSelected ? 'text-white' : isBooked ? 'text-slate-500' : 'text-slate-800'}`}>
+                      <div className={`absolute -top-1 h-2 w-full rounded-t-sm transition-colors ${isBooked ? 'bg-slate-400' : isSelected ? 'bg-[#C6F432]' : 'bg-slate-200'}`} />
+                      <span className={`text-[10px] font-bold leading-none ${isSelected ? 'text-white' : isBooked ? 'text-slate-500' : 'text-slate-800'}`}>
                         {seat.label || seat.id}
                       </span>
                       <span className={`mt-0.5 text-[7px] font-bold uppercase leading-none tracking-wide ${isSelected ? 'text-white/70' : isBooked ? 'text-slate-400' : 'text-slate-500'}`}>
                         {describeSeat(seat)}
                       </span>
-                      <span className={`text-[8px] font-bold mt-0.5 leading-none ${isSelected ? 'text-orange-300' : isBooked ? 'text-slate-400' : 'text-emerald-700'}`}>
+                      <span className={`text-[8px] font-bold mt-0.5 leading-none ${isSelected ? 'text-[#C6F432]' : isBooked ? 'text-slate-400' : 'text-emerald-700'}`}>
                         ₹{seatPrice}
                       </span>
                     </>
@@ -226,7 +227,7 @@ const BusSeats = () => {
   const totalFare = selectedSeats.reduce((sum, seat) => sum + Number(seat.price || 0), 0);
 
   return (
-    <div className="min-h-screen bg-slate-50 max-w-lg mx-auto font-sans pb-32">
+    <div className="min-h-screen bg-slate-50 max-w-lg mx-auto font-booking pb-32">
       <div className="bg-white px-5 pt-10 pb-4 sticky top-0 z-20 border-b border-slate-100 shadow-sm">
         <div className="flex items-center gap-3">
           <button
@@ -242,6 +243,7 @@ const BusSeats = () => {
             </p>
           </div>
         </div>
+        <BusFlowSteps current={1} />
       </div>
 
       <div className="px-5 pt-6 space-y-6">
@@ -286,7 +288,7 @@ const BusSeats = () => {
                       item.key === 'available'
                         ? 'border-slate-200 bg-white'
                         : item.key === 'selected'
-                          ? 'border-slate-900 bg-slate-900'
+                          ? 'border-[var(--app-primary,#0F766E)] bg-[var(--app-primary,#0F766E)]'
                           : item.key === 'booked'
                             ? 'border-slate-200 bg-slate-200'
                             : ''
@@ -341,7 +343,7 @@ const BusSeats = () => {
           }
           className={`w-full py-4 rounded-2xl text-base font-bold flex items-center justify-center gap-2 transition-all ${
             selectedSeats.length > 0 && !error && !loading
-              ? 'bg-slate-900 text-white shadow-lg active:scale-95'
+              ? 'bg-[var(--app-primary,#0F766E)] text-white shadow-lg active:scale-95'
               : 'bg-slate-100 text-slate-400 cursor-not-allowed'
           }`}
         >

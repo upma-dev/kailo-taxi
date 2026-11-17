@@ -7,6 +7,7 @@ import SuperAppHero from '../components/SuperAppHero';
 import OurServices from '../components/OurServices';
 import HomeOffers from '../components/HomeOffers';
 import RecentTrips from '../components/RecentTrips';
+import MyQuoteRequests from '../components/MyQuoteRequests';
 import BottomNavbar from '../components/BottomNavbar';
 import carIcon from '../../../assets/icons/car.png';
 import bikeIcon from '../../../assets/icons/bike.png';
@@ -727,6 +728,7 @@ const Home = ({ embedded = false }) => {
           <div className="relative z-10 flex flex-col gap-5 pt-1 pb-6">
             <OurServices plain={true} />
             <HomeOffers plain={true} />
+            <MyQuoteRequests limit={2} className="mx-5" />
             <RecentTrips />
           </div>
         ) : (

@@ -8,6 +8,7 @@ import { ICON_KEYS } from '../../../shared/pages/landingShared';
 import { announceLandingUpdate } from '../../../../shared/hooks/useLandingContent';
 import sceneCab from '@/assets/landing/scenes/cab.webp';
 import sceneBike from '@/assets/landing/scenes/bike.webp';
+import sceneAuto from '@/assets/landing/scenes/auto.webp';
 import sceneBus from '@/assets/landing/scenes/bus.webp';
 import sceneParcel from '@/assets/landing/scenes/parcel.webp';
 import sceneTrip from '@/assets/landing/scenes/outstation.webp';
@@ -18,7 +19,7 @@ import cityIllu from '@/assets/images/mobility-illustration.webp';
 import mapImg from '@/assets/premium_grid_map.webp';
 
 // The photos the website shows when no custom image is set, so they can be seen and opened from here.
-const SCENES = { cab: sceneCab, bike: sceneBike, bus: sceneBus, parcel: sceneParcel, outstation: sceneTrip, flight: sceneFlight, hotel: sceneHotel, movers: sceneMovers };
+const SCENES = { cab: sceneCab, bike: sceneBike, auto: sceneAuto, bus: sceneBus, parcel: sceneParcel, outstation: sceneTrip, flight: sceneFlight, hotel: sceneHotel, movers: sceneMovers };
 
 const input =
   'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 bg-white focus:border-teal-600 focus:ring-1 focus:ring-teal-600 outline-none';
@@ -520,7 +521,7 @@ const CMSLanding = () => {
       {tab === 'Hero' && (
         <div className={card}>
           <p className="text-xs text-gray-500">
-            The hero shows one slide per vehicle tab. Text and vehicle image change together. Key picks the default vehicle image: cab, bike, bus, parcel or outstation.
+            The hero shows one slide per vehicle tab. Text and vehicle image change together. Key picks the default scene photo: cab, bike, auto, bus, parcel, outstation, flight, hotel or movers.
           </p>
           {img('hero.background', 'Default background photo', 'Night city photo behind the hero. Empty uses the built-in one. A slide can override it.', sceneCab)}
           <ListEditor
@@ -528,7 +529,7 @@ const CMSLanding = () => {
             items={data.hero?.slides}
             onChange={set('hero.slides')}
             fields={[
-              { key: 'key', label: 'Key (cab / bike / bus / parcel / outstation / flight / hotel / movers)' },
+              { key: 'key', label: 'Key (cab / bike / auto / bus / parcel / outstation / flight / hotel / movers)' },
               { key: 'tab', label: 'Tab name' },
               { key: 'badge', label: 'Small badge text' },
               { key: 'title', label: 'Headline (line 1)' },
@@ -774,7 +775,19 @@ const CMSLanding = () => {
         <div className={card}>
           {f('faq.eyebrow', 'Small label (default: FAQ)')}
           {f('faq.title', 'Title')}
-          <ListEditor title="Questions" items={data.faq?.items} onChange={set('faq.items')} fields={[{ key: 'question', label: 'Question' }, { key: 'answer', label: 'Answer', multiline: true }]} blank={{ question: '', answer: '' }} addText="Add question" />
+          <p className="text-[11px] text-gray-400">Each folder is a tab on the website (Rider, Driver, Fleet owner). Add, rename or remove folders and edit the questions in each.</p>
+          {(data.faq?.groups || []).map((g, i) => (
+            <div key={i} className="relative space-y-3 rounded-lg border border-gray-200 bg-gray-50/60 p-4">
+              <button type="button" onClick={() => set('faq.groups')(data.faq.groups.filter((_, idx) => idx !== i))} className="absolute right-3 top-3 text-gray-400 hover:text-red-500" aria-label="Remove folder">
+                <Trash2 size={15} />
+              </button>
+              <div className="pr-6">{f(`faq.groups.${i}.label`, 'Folder name')}</div>
+              <ListEditor title="Questions" items={g.items} onChange={set(`faq.groups.${i}.items`)} fields={[{ key: 'question', label: 'Question' }, { key: 'answer', label: 'Answer', multiline: true }]} blank={{ question: '', answer: '' }} addText="Add question" />
+            </div>
+          ))}
+          <button type="button" onClick={() => set('faq.groups')([...(data.faq?.groups || []), { label: '', items: [] }])} className="flex items-center gap-1 text-xs font-bold text-teal-700">
+            <Plus size={14} /> Add folder
+          </button>
         </div>
       )}
 

@@ -37,7 +37,6 @@ import {
   getDriverEarningsFilter,
   getPendingDriverDispatch,
   createBusDriverReservation,
-  updateBusDriverSchedules,
   getCurrentDriver,
   getBusDriverSeatLayout,
   listBusDriverBookings,
@@ -120,7 +119,7 @@ driverRouter.get(
 );
 driverRouter.patch(
   "/me",
-  authenticate(["driver", "owner"]),
+  authenticate(["driver", "owner", "bus_driver"]),
   asyncHandler(updateCurrentDriver),
 );
 driverRouter.get(
@@ -137,11 +136,6 @@ driverRouter.post(
   "/bus/reservations",
   authenticate(["bus_driver"]),
   asyncHandler(createBusDriverReservation),
-);
-driverRouter.patch(
-  "/bus/schedules",
-  authenticate(["bus_driver"]),
-  asyncHandler(updateBusDriverSchedules),
 );
 driverRouter.delete(
   "/me",

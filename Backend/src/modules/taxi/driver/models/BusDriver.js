@@ -75,6 +75,11 @@ const busDriverSchema = new mongoose.Schema(
       default: '',
       trim: true,
     },
+    profileImage: {
+      type: String,
+      default: '',
+      trim: true,
+    },
     lastLoginAt: {
       type: Date,
       default: null,

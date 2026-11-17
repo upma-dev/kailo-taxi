@@ -1,3 +1,4 @@
+import BusFlowSteps from './BusFlowSteps';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -280,7 +281,7 @@ const BusDetails = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 max-w-lg mx-auto font-sans pb-56">
+    <div className="min-h-screen bg-slate-50 max-w-lg mx-auto font-booking pb-56">
       <div className="bg-white px-5 pt-10 pb-4 sticky top-0 z-20 border-b border-slate-100 shadow-sm">
         <div className="flex items-center gap-3">
           <button
@@ -296,18 +297,19 @@ const BusDetails = () => {
             </p>
           </div>
         </div>
+        <BusFlowSteps current={2} />
       </div>
 
       <div className="px-5 pt-6 space-y-6">
-        <div className="bg-slate-900 rounded-3xl p-6 text-white shadow-xl shadow-slate-200">
+        <div className="bg-gradient-to-br from-[var(--app-primary,#0F766E)] to-[#0B5F58] rounded-3xl p-6 text-white shadow-xl shadow-[#0F766E]/20">
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">{formatTravelDate(date)} • {bus.departure}</p>
+              <p className="text-[10px] font-bold text-white/75 uppercase tracking-wider mb-2">{formatTravelDate(date)} • {bus.departure}</p>
               <h3 className="text-xl font-bold leading-tight">{bus.operator}</h3>
-              <p className="text-sm font-medium text-slate-400 mt-1">{bus.type}</p>
+              <p className="text-sm font-medium text-white/75 mt-1">{bus.type}</p>
             </div>
             <div className="text-right">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Seats</p>
+              <p className="text-[10px] font-bold text-white/75 uppercase tracking-wider mb-1">Seats</p>
               <p className="text-base font-bold">{selectedSeats.map((seat) => seat.label || seat.id).join(', ')}</p>
             </div>
           </div>
@@ -320,7 +322,7 @@ const BusDetails = () => {
               <p className="mt-1 text-xs font-semibold text-slate-500">Choose who is travelling, then confirm the details below.</p>
             </div>
             {profileLoading ? (
-              <div className="flex items-center gap-2 rounded-full bg-slate-50 px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
+              <div className="flex items-center gap-2 rounded-full bg-slate-50 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
                 <Loader2 size={12} className="animate-spin" /> Loading
               </div>
             ) : null}
@@ -332,12 +334,12 @@ const BusDetails = () => {
               onClick={applySelfProfile}
               className={`rounded-2xl border px-4 py-3 text-left transition-all ${
                 travellerMode === 'self'
-                  ? 'border-slate-900 bg-slate-900 text-white shadow-lg'
+                  ? 'border-[var(--app-primary,#0F766E)] bg-[var(--app-primary,#0F766E)] text-white shadow-lg'
                   : 'border-slate-200 bg-slate-50 text-slate-700'
               }`}
             >
-              <p className="text-[10px] font-black uppercase tracking-[0.18em]">Self</p>
-              <p className={`mt-1 text-sm font-black ${travellerMode === 'self' ? 'text-white' : 'text-slate-900'}`}>
+              <p className="text-[10px] font-bold uppercase tracking-wider">Self</p>
+              <p className={`mt-1 text-sm font-bold ${travellerMode === 'self' ? 'text-white' : 'text-slate-900'}`}>
                 Use my profile
               </p>
               <p className={`mt-1 text-[11px] font-semibold ${travellerMode === 'self' ? 'text-white/70' : 'text-slate-500'}`}>
@@ -349,12 +351,12 @@ const BusDetails = () => {
               onClick={switchToSomeoneElse}
               className={`rounded-2xl border px-4 py-3 text-left transition-all ${
                 travellerMode === 'other'
-                  ? 'border-slate-900 bg-slate-900 text-white shadow-lg'
+                  ? 'border-[var(--app-primary,#0F766E)] bg-[var(--app-primary,#0F766E)] text-white shadow-lg'
                   : 'border-slate-200 bg-slate-50 text-slate-700'
               }`}
             >
-              <p className="text-[10px] font-black uppercase tracking-[0.18em]">Other</p>
-              <p className={`mt-1 text-sm font-black ${travellerMode === 'other' ? 'text-white' : 'text-slate-900'}`}>
+              <p className="text-[10px] font-bold uppercase tracking-wider">Other</p>
+              <p className={`mt-1 text-sm font-bold ${travellerMode === 'other' ? 'text-white' : 'text-slate-900'}`}>
                 Book for someone else
               </p>
               <p className={`mt-1 text-[11px] font-semibold ${travellerMode === 'other' ? 'text-white/70' : 'text-slate-500'}`}>
@@ -484,7 +486,7 @@ const BusDetails = () => {
           whileTap={{ scale: 0.98 }}
           onClick={handleContinue}
           disabled={isPaying}
-          className="w-full bg-slate-900 text-white py-4 rounded-2xl text-base font-bold flex items-center justify-center gap-2 shadow-lg disabled:opacity-70 transition-all"
+          className="w-full bg-[var(--app-primary,#0F766E)] text-white py-4 rounded-2xl text-base font-bold flex items-center justify-center gap-2 shadow-lg disabled:opacity-70 transition-all"
         >
           {isPaying ? <Loader2 size={20} className="animate-spin" /> : 'Pay Now'}
           {!isPaying && <ChevronRight size={18} />}

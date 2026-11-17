@@ -155,7 +155,7 @@ const OwnerHome = () => {
             icon: Bus,
             title: 'Bus Services',
             hint: dashboard
-              ? `${busOverview.totalBuses || 0} buses · ${busOverview.activeBuses || 0} active`
+              ? `${busOverview.totalBuses || 0} buses · ${busOverview.activeBuses || 0} active · ${busOverview.totalBusDrivers || 0} bus driver${busOverview.totalBusDrivers === 1 ? '' : 's'}`
               : 'Routes, seats and prices',
             tone: 'emerald',
             path: 'bus-service',

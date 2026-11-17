@@ -291,3 +291,9 @@ iframe.skiptranslate,
     backdrop-filter: none !important;
   }
 }
+
+/* Booking screens (bus tickets and similar) use Poppins with calmer weights. */
+.font-booking {
+  font-family: 'Poppins', 'Inter', system-ui, sans-serif;
+  letter-spacing: 0;
+}

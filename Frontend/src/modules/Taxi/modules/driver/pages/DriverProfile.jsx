@@ -379,7 +379,12 @@ const DriverProfile = () => {
                         </div>
                     </div>
                     {/* Integrated Profile Image */}
-                    <div className="relative">
+                    <button
+                        type="button"
+                        onClick={() => navigate(`${routePrefix}/edit-profile`)}
+                        aria-label="Edit profile"
+                        className="relative block rounded-2xl active:scale-95 transition-transform"
+                    >
                         <div className={`w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg relative overflow-hidden group ${
                             hasProfileImage ? 'bg-slate-900' : 'bg-slate-100 border border-slate-200'
                         }`}>
@@ -398,7 +403,7 @@ const DriverProfile = () => {
                                  <Check size={12} className="text-white" strokeWidth={4} />
                             </div>
                         ) : null}
-                    </div>
+                    </button>
                 </div>
                 <div className="mt-4 rounded-2xl bg-slate-50 px-4 py-3 border border-slate-100">
                     {error ? (

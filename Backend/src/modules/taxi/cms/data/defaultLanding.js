@@ -3,13 +3,13 @@
 // Added in layout version 3; also appended to hero content that was saved earlier.
 export const NEW_SLIDES = [
   {
-    key: 'flight', tab: 'Flight', badge: 'AIRPORT RIDES', title: 'Never miss', highlight: 'your flight.',
-    subtitle: 'Book an airport pickup or drop, see the fare before you confirm and reach on time.',
+    key: 'flight', tab: 'Flight', badge: 'FLIGHT BOOKING + AIRPORT RIDE', title: 'Book your flight,', highlight: 'get your ride.',
+    subtitle: 'Plan your air travel in the same app. Book your flight, then book the airport pickup or drop with the fare shown upfront, so you reach on time.',
     ctaText: 'Book Airport Cab', ctaTarget: '/taxi/user/cab/airport', image: '', image2: '', video: '', background: '',
   },
   {
-    key: 'hotel', tab: 'Hotel', badge: 'HOTEL TRANSFERS', title: 'Reach your hotel', highlight: 'in comfort.',
-    subtitle: 'Book a cab to or from your hotel. The fare is shown upfront and your driver is verified.',
+    key: 'hotel', tab: 'Hotel', badge: 'HOTEL BOOKING + RIDE', title: 'Book your stay,', highlight: 'ride to the door.',
+    subtitle: 'Find and book a hotel in the app, then get a verified cab to or from it. Stay and ride, both from one place, with the fare shown upfront.',
     ctaText: 'Book a Cab', ctaTarget: '/taxi/user', image: '', image2: '', video: '', background: '',
   },
   {
@@ -19,9 +19,23 @@ export const NEW_SLIDES = [
   },
 ];
 
+// Layout version 10 split the old "Bike & Auto" slide into one slide per vehicle, each with its own picture.
+export const BIKE_AUTO_SLIDES = [
+  {
+    key: 'bike', tab: 'Bike', badge: 'BIKE RIDES', title: 'Beat the traffic.', highlight: 'Bike rides.',
+    subtitle: 'Hop on a bike and zip through the jam. The cheapest and quickest way across town, with a helmet for every rider.',
+    ctaText: 'Book a Bike', ctaTarget: '/taxi/user', image: '', image2: '', video: '', background: '',
+  },
+  {
+    key: 'auto', tab: 'Auto', badge: 'AUTO RICKSHAW', title: 'Hop in an auto.', highlight: 'Fixed fares, no haggling.',
+    subtitle: 'Book an auto rickshaw at a fare shown before you confirm. No bargaining, no waiting at the corner.',
+    ctaText: 'Book an Auto', ctaTarget: '/taxi/user', image: '', image2: '', video: '', background: '',
+  },
+];
+
 export const DEFAULT_LANDING = {
   theme: { primary: '#0F766E', dark: '#052E2B', accent: '#C6F432', ink: '#14213D' },
-  layoutVersion: 9,
+  layoutVersion: 12,
   header: {
     brandName: 'Kailo Taxi',
     logo: '',
@@ -53,7 +67,7 @@ export const DEFAULT_LANDING = {
     badge: 'SAFE, FAST & AFFORDABLE RIDES',
     title: 'Every ride,',
     highlight: 'under control.',
-    subtitle: 'City rides, rentals, parcels and intercity trips in one app, with fair fares and verified drivers.',
+    subtitle: 'City cabs, bikes and autos, airport cabs for your flight, hotel transfers, bus seats, parcels and outstation trips in one app, with fair fares and verified drivers.',
     primaryText: 'Book a Ride',
     primaryTarget: '/taxi/user',
     secondaryText: 'Become a Driver',
@@ -61,22 +75,18 @@ export const DEFAULT_LANDING = {
     image: '',
     stats: [],
     background: '',
-    // One slide per vehicle tab. `key` picks the bundled vehicle image (cab, bike, bus, parcel, outstation) when `image` is empty.
+    // One slide per vehicle tab. `key` picks the bundled scene photo (cab, bike, auto, bus, parcel, outstation, flight, hotel, movers) when `background` is empty.
     slides: [
       {
         key: 'cab', tab: 'Cab', badge: 'CITY CAB RIDES', title: 'Move fast.', highlight: 'City cab rides.',
         subtitle: 'Comfortable cabs at fair, upfront fares, with a verified driver at your door in minutes.',
         ctaText: 'Book a Cab', ctaTarget: '/taxi/user', image: '', background: '',
       },
+      ...BIKE_AUTO_SLIDES,
       {
-        key: 'bike', tab: 'Bike & Auto', badge: 'BIKE AND AUTO', title: 'Beat the traffic.', highlight: 'Bike and auto rides.',
-        subtitle: 'The quickest way across town. Low fares, short waits.',
-        ctaText: 'Book a Bike', ctaTarget: '/taxi/user', image: '', background: '',
-      },
-      {
-        key: 'bus', tab: 'Bus', badge: 'BUS AND POOLING', title: 'Travel together.', highlight: 'Save on every trip.',
-        subtitle: 'Share rides and book bus seats on popular routes for the best price.',
-        ctaText: 'Book a Seat', ctaTarget: '/taxi/user', image: '', background: '',
+        key: 'bus', tab: 'Bus', badge: 'BUS BOOKING + RIDE', title: 'Book your seat,', highlight: 'ride to the stop.',
+        subtitle: 'Choose a route, pick your seat and pay in the app. Need to reach the bus stand? Book a cab or auto from the same app.',
+        ctaText: 'Book a Seat', ctaTarget: '/taxi/user/bus', image: '', background: '',
       },
       {
         key: 'parcel', tab: 'Parcel', badge: 'PARCEL DELIVERY', title: 'Send it today.', highlight: 'Parcels, delivered.',
@@ -95,13 +105,17 @@ export const DEFAULT_LANDING = {
     eyebrow: 'WHO WE ARE',
     title: 'About Kailo Taxi',
     description:
-      'Kailo Taxi is a ride app made in Bangalore. You book a cab, auto or bike, see the fare before you confirm, and know who is driving you. Drivers and vehicle owners get regular work and fair pay, and every driver is checked before their first trip.',
+      'Kailo Taxi is a ride app made in Bangalore. You book a cab, auto or bike, see the fare before you confirm, and know who is driving you. The same app also books your airport cab for a flight, a hotel transfer, a bus seat on popular routes, parcel delivery and outstation trips. Drivers and vehicle owners get regular work and fair pay, and every driver is checked before their first trip.',
     image: '',
     cards: [
       { icon: 'shield', title: 'Checked drivers and cars', description: 'We verify the licence, ID and vehicle papers before a driver can take rides.' },
       { icon: 'userCheck', title: 'Background checks', description: 'Every partner goes through identity and background verification with our team.' },
       { icon: 'mapPin', title: 'Live trip tracking', description: 'Follow your ride on the map and share the trip with someone at home.' },
       { icon: 'receipt', title: 'Fare shown upfront', description: 'You see the price before you book. No bargaining when you get in.' },
+      { icon: 'plane', title: 'Airport and flight rides', description: 'Book a cab to or from the airport around your flight time and reach with time to spare.' },
+      { icon: 'hotel', title: 'Hotel transfers', description: 'Get picked up at your hotel or dropped at the door, with the fare fixed in advance.' },
+      { icon: 'bus', title: 'Bus booking', description: 'Pick a route, choose your seat and pay in the app. Your ticket is saved in your profile.' },
+      { icon: 'package', title: 'Parcels and movers', description: 'Send a parcel across the city, or book a truck with loaders when you shift house.' },
     ],
   },
   services: {
@@ -289,9 +303,38 @@ export const DEFAULT_LANDING = {
   },
   faq: {
     title: 'Frequently asked questions',
-    items: [
-      { question: 'How do I book a ride?', answer: 'Download the app, enter your pickup and drop, choose a vehicle and confirm.' },
-      { question: 'How do I become a driver?', answer: 'Use the registration form on this page or the driver app, upload your documents and get verified.' },
+    // Three folders (tabs). Admin can add, rename or remove folders and questions in Landing Page > FAQ.
+    groups: [
+      {
+        label: 'Rider',
+        items: [
+          { question: 'How do I book a ride?', answer: 'Open the app, enter your pickup and drop, choose a cab, auto or bike and confirm. You see the fare before you book and can track your driver on the map.' },
+          { question: 'Can I book a bus, hotel or flight in the app?', answer: 'Yes. Bus seats can be booked in the app, and hotel and flight bookings are available too. You can also book a cab for the airport, your hotel or the bus stand from the same app.' },
+          { question: 'How can I pay for my trip?', answer: 'You can pay in cash, from your in-app wallet or online, depending on what is available in your city.' },
+          { question: 'Is my ride safe?', answer: 'Every driver is checked before their first trip. You can follow the ride live, share the trip with someone at home and use the SOS button if you need help.' },
+          { question: 'What if I need to cancel a ride?', answer: 'You can cancel from the ride screen before the driver arrives. Any cancellation charge is shown in the app and covered in our Refunds and Cancel policy.' },
+        ],
+      },
+      {
+        label: 'Driver',
+        items: [
+          { question: 'How do I become a driver?', answer: 'Sign up in the driver app with your phone number, add your city and vehicle details, and upload your documents. Our team checks them and you can go online once approved.' },
+          { question: 'Which documents do I need?', answer: 'Your driving licence, an ID proof and the vehicle papers such as registration and insurance. Photos of the vehicle may also be asked for.' },
+          { question: 'How and when do I get paid?', answer: 'Your earnings show in the app after every trip. You can withdraw them to your bank account from the wallet section.' },
+          { question: 'Can I choose my working hours?', answer: 'Yes. Switch the app online when you want to drive and offline when you want to stop. You decide which ride requests to accept.' },
+          { question: 'What if I have a problem during a trip?', answer: 'Use the support option in the app or call our helpline. Support is available every day, and the SOS button works during a trip.' },
+        ],
+      },
+      {
+        label: 'Fleet owner',
+        items: [
+          { question: 'What is a fleet owner account?', answer: 'It lets you add one or many vehicles, assign drivers to them and watch trips and earnings from a single dashboard.' },
+          { question: 'How do I add my vehicles and drivers?', answer: 'Register as an owner, add each vehicle with its papers and photos, then assign a verified driver to every vehicle. You can change the driver anytime.' },
+          { question: 'Can I see what each vehicle earns?', answer: 'Yes. The dashboard shows which vehicle is on a trip, free or offline, and the earnings of every vehicle and driver.' },
+          { question: 'How do I receive my payouts?', answer: 'Your share is shown in the payout statement. You can check it and withdraw to your bank account whenever you want.' },
+          { question: 'I run a large fleet. Can you help me get set up?', answer: 'Yes. Tell us how many vehicles and drivers you have using the contact form, and our team will help you onboard everyone together.' },
+        ],
+      },
     ],
   },
   footer: {

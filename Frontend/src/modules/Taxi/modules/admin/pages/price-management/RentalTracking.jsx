@@ -155,6 +155,31 @@ const RentalTracking = () => {
     };
   }, []);
 
+  const [endingId, setEndingId] = useState('');
+
+  // Admin closes the rental: the rider gets the final summary (and a push) and the ride leaves this queue.
+  const handleEndRide = async (item) => {
+    const bookingId = String(item?.id || '');
+    if (!bookingId || endingId) return;
+
+    const confirmed = window.confirm(
+      `End the rental ${item.bookingReference || ''} for ${item.user?.name || 'the customer'}? The final bill is calculated from the running time.`,
+    );
+    if (!confirmed) return;
+
+    setEndingId(bookingId);
+    try {
+      await adminService.updateRentalBookingRequest(bookingId, { status: 'completed' });
+      setItems((current) => (Array.isArray(current) ? current : []).filter((entry) => String(entry?.id) !== bookingId));
+      window.dispatchEvent(new Event('admin-rental-changed'));
+      toast.success('Rental ride ended. The customer can now see the final summary.');
+    } catch (error) {
+      toast.error(error?.message || 'Could not end this rental ride.');
+    } finally {
+      setEndingId('');
+    }
+  };
+
   const derivedStats = useMemo(() => {
     if (items.length === 0) {
       return stats;
@@ -336,13 +361,28 @@ const RentalTracking = () => {
                           )}
                         </td>
                         <td className="px-4 py-4 text-right">
-                          <button
-                            type="button"
-                            onClick={() => navigate(`/admin/pricing/rental-tracking/${item.id}`, { state: { item } })}
-                            className="inline-flex items-center rounded-xl bg-slate-900 px-4 py-2.5 text-[11px] font-black uppercase tracking-[0.14em] text-white shadow-sm transition hover:bg-black"
-                          >
-                            Track
-                          </button>
+                          <div className="inline-flex items-center gap-2">
+                            {item.status === 'end_requested' ? (
+                              <span className="rounded-full bg-rose-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-rose-700">
+                                Rider asked to end
+                              </span>
+                            ) : null}
+                            <button
+                              type="button"
+                              onClick={() => navigate(`/admin/pricing/rental-tracking/${item.id}`, { state: { item } })}
+                              className="inline-flex items-center rounded-xl bg-slate-900 px-4 py-2.5 text-[11px] font-black uppercase tracking-[0.14em] text-white shadow-sm transition hover:bg-black"
+                            >
+                              Track
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleEndRide(item)}
+                              disabled={endingId === String(item.id)}
+                              className="inline-flex items-center rounded-xl bg-rose-600 px-4 py-2.5 text-[11px] font-black uppercase tracking-[0.14em] text-white shadow-sm transition hover:bg-rose-700 disabled:opacity-60"
+                            >
+                              {endingId === String(item.id) ? 'Ending...' : 'End Ride'}
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );

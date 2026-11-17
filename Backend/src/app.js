@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import cors from 'cors';
 import helmet from 'helmet';
-import './services/localStorage.service.js';
+import { isLocalStorageEnabled } from './services/localStorage.service.js';
 import morgan from 'morgan';
 import mongoSanitize from 'mongo-sanitize';
 import xssClean from 'xss-clean';
@@ -115,6 +115,14 @@ app.use(xssClean());
 // Built-in vehicle pictures (Bike, Auto, Car, SUV ...), used as the default Preview Image of vehicle types.
 // Under /api/v1 so it goes through the same proxy rule as the API (Vite dev proxy and nginx).
 app.use('/api/v1/static/vehicle-art', express.static(path.join(path.dirname(fileURLToPath(import.meta.url)), 'assets', 'vehicle-art'), { maxAge: '7d' }));
+
+// Local-disk uploads. On the VPS Nginx serves /uploads/ itself, so this only matters for local development.
+if (isLocalStorageEnabled()) {
+  app.use('/uploads', express.static(path.resolve(process.env.UPLOAD_STORAGE_ROOT), {
+    maxAge: '7d',
+    setHeaders: (res) => res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin'),
+  }));
+}
 
 // Global rate limiting for API routes
 app.use('/api', apiRateLimiter);

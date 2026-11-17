@@ -1,7 +1,6 @@
-import { useSyncExternalStore } from 'react';
-import { getRentalEnabled, subscribeRentalEnabled } from '../featureFlags';
+import { RENTAL_ENABLED } from '../featureFlags';
 
-/** Whether the Rental service is on. Re-renders the component when the admin's setting changes. */
+/** Whether the Rental service is on. It is a code-level switch (see featureFlags.js), so this never changes at runtime. */
 export default function useRentalEnabled() {
-  return useSyncExternalStore(subscribeRentalEnabled, getRentalEnabled, getRentalEnabled);
+  return RENTAL_ENABLED;
 }

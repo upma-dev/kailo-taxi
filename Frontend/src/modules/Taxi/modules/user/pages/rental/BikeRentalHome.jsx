@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import MyQuoteRequests from '../../components/MyQuoteRequests';
 import { ArrowLeft, Fuel, Shield, ChevronRight, Star, Info, Car, Search, X } from 'lucide-react';
 import { userService } from '../../services/userService';
+import { resolveAssetUrl } from '../../components/useVehicleTiles';
 
 const DURATION_TABS = ['Hourly', 'Half-Day', 'Daily'];
 const RENTAL_SELECTED_VEHICLE_STORAGE_KEY = 'selectedRentalVehicleDetail';
@@ -109,7 +111,7 @@ const normalizeRentalVehicle = (item = {}, index = 0) => {
     tag,
     tagColor,
     tagBg,
-    image: item.image || '',
+    image: resolveAssetUrl(item.image || ''),
     rating: '4.8',
     fuel: isBike ? 'Self-drive · License required' : 'Self-drive · Clean and sanitized',
     prices,
@@ -126,6 +128,11 @@ const normalizeRentalVehicle = (item = {}, index = 0) => {
     luggageCapacity,
     capacity,
     vehicleCategory: item.vehicleCategory || 'Vehicle',
+    safetyMoney: {
+      enabled: Boolean(item.safetyMoney?.enabled),
+      amount: Number(item.safetyMoney?.amount || 0),
+      notes: item.safetyMoney?.notes || '',
+    },
     advancePayment: {
       enabled: Boolean(item.advancePayment?.enabled),
       paymentMode: 'fixed',
@@ -143,6 +150,7 @@ const BikeRentalHome = () => {
   const [errorMessage, setErrorMessage] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [searchFocused, setSearchFocused] = useState(false);
   const navigate = useNavigate();
 
   const openVehicleDetail = (vehicle) => {
@@ -157,7 +165,7 @@ const BikeRentalHome = () => {
       // Ignore storage failures and continue with navigation state.
     }
 
-    navigate('/rental/vehicle', { state: payload });
+    navigate('/taxi/user/rental/vehicle', { state: payload });
   };
 
   useEffect(() => {
@@ -227,12 +235,14 @@ const BikeRentalHome = () => {
   const visibleSuggestions = useMemo(() => {
     const query = normalizeSearchValue(searchQuery);
 
-    if (!query) {
-      return rentalSuggestions.slice(0, 6);
-    }
+    // Suggestions appear only while the rider is typing.
+    if (!query) return [];
 
     return rentalSuggestions
-      .filter((item) => normalizeSearchValue(item).includes(query))
+      .filter((item) => {
+        const value = normalizeSearchValue(item);
+        return value.includes(query) && value !== query;
+      })
       .slice(0, 6);
   }, [rentalSuggestions, searchQuery]);
 
@@ -289,7 +299,11 @@ const BikeRentalHome = () => {
         <div className="flex items-center gap-3 mb-4">
           <motion.button
             whileTap={{ scale: 0.9 }}
-            onClick={() => navigate(-1)}
+            onClick={() => {
+              // navigate(-1) does nothing when there is no history (refresh / new tab): fall back to home.
+              if ((window.history.state?.idx ?? 0) > 0) navigate(-1);
+              else navigate('/taxi/user', { replace: true });
+            }}
             className="w-9 h-9 rounded-[12px] border border-white/80 bg-white/90 flex items-center justify-center shadow-[0_4px_12px_rgba(15,23,42,0.07)] shrink-0"
           >
             <ArrowLeft size={18} className="text-slate-900" strokeWidth={2.5} />
@@ -320,12 +334,14 @@ const BikeRentalHome = () => {
           ))}
         </div>
 
-        <div className="mt-3 space-y-2">
+        <div className="relative mt-3">
           <div className="flex items-center gap-3 rounded-[16px] border border-slate-200 bg-white px-4 py-3 shadow-[0_4px_14px_rgba(15,23,42,0.04)]">
             <Search size={16} className="text-slate-400 shrink-0" strokeWidth={2.6} />
             <input
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
+              onFocus={() => setSearchFocused(true)}
+              onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
               placeholder="Search rental vehicle, category, seats or amenity"
               className="w-full bg-transparent text-[13px] font-bold text-slate-900 placeholder:text-slate-400 focus:outline-none"
             />
@@ -340,19 +356,25 @@ const BikeRentalHome = () => {
             ) : null}
           </div>
 
-          {visibleSuggestions.length ? (
-            <div className="flex flex-wrap gap-2">
+          {searchFocused && visibleSuggestions.length ? (
+            <ul className="absolute left-0 right-0 top-full z-30 mt-1.5 overflow-hidden rounded-[14px] border border-slate-200 bg-white shadow-[0_12px_28px_rgba(15,23,42,0.14)]">
               {visibleSuggestions.map((suggestion) => (
-                <button
-                  key={suggestion}
-                  type="button"
-                  onClick={() => setSearchQuery(suggestion)}
-                  className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500 shadow-sm"
-                >
-                  {suggestion}
-                </button>
+                <li key={suggestion}>
+                  <button
+                    type="button"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => {
+                      setSearchQuery(suggestion);
+                      setSearchFocused(false);
+                    }}
+                    className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-[12px] font-bold text-slate-700 active:bg-slate-50"
+                  >
+                    <Search size={12} className="shrink-0 text-slate-300" strokeWidth={2.6} />
+                    {suggestion}
+                  </button>
+                </li>
               ))}
-            </div>
+            </ul>
           ) : null}
         </div>
       </motion.header>
@@ -373,6 +395,8 @@ const BikeRentalHome = () => {
             <p className="text-[12px] font-black text-slate-700">{infoBanner[selectedDuration]}</p>
           </motion.div>
         </AnimatePresence>
+
+        <MyQuoteRequests limit={5} />
 
         <div>
           <p className="text-[10px] font-black uppercase tracking-[0.26em] text-slate-400">Available Rentals</p>

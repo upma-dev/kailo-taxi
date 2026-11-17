@@ -13,6 +13,7 @@ import { socketService } from '../../../shared/api/socket';
 import api from '../../../shared/api/axiosInstance';
 import { syncThemeForPath } from '@/shared/utils/theme.js';
 import LanguageRow from '@/shared/language/LanguageRow'
+import MyQuoteRequests from '../components/MyQuoteRequests';
 
 const MotionDiv = motion.div;
 const MotionButton = motion.button;
@@ -285,6 +286,7 @@ const Profile = () => {
           animate="visible"
           className="px-4 space-y-4"
         >
+          <MyQuoteRequests limit={5} />
           {menuSections.map((section, sIdx) => (
             <motion.div key={sIdx} variants={itemVariants} className="space-y-2">
               <h3 className=" text-[12px] font-semibold text-slate-400 uppercase tracking-wider ml-1">

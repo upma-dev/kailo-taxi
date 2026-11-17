@@ -1,10 +1,9 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { GoogleMap, MarkerF } from '@react-google-maps/api';
 import {
   ArrowLeft,
-  Calendar,
   Car,
   CheckCircle2,
   ChevronLeft,
@@ -28,254 +27,14 @@ import { userService } from '../../services/userService';
 
 const MAP_CONTAINER_STYLE = { width: '100%', height: '100%' };
 const RENTAL_SELECTED_VEHICLE_STORAGE_KEY = 'selectedRentalVehicleDetail';
-const WEEK_DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const TIME_OPTIONS = [
-  '06:00',
-  '07:00',
-  '08:00',
-  '09:00',
-  '10:00',
-  '11:00',
-  '12:00',
-  '13:00',
-  '14:00',
-  '15:00',
-  '16:00',
-  '17:00',
-  '18:00',
-  '19:00',
-  '20:00',
-  '21:00',
-];
-
 const inputClass =
   'w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition-all focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100/60';
-const pickerTriggerClass =
-  'w-full rounded-[18px] border border-slate-200 bg-white px-4 py-3.5 text-left text-sm text-slate-800 shadow-[0_4px_12px_rgba(15,23,42,0.04)] transition-all';
-
 const pad = (n) => String(n).padStart(2, '0');
-const startOfDay = (date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
-const getMonthStart = (date) => new Date(date.getFullYear(), date.getMonth(), 1);
-const addMonths = (date, amount) => new Date(date.getFullYear(), date.getMonth() + amount, 1);
-const isSameDay = (left, right) =>
-  Boolean(left) &&
-  Boolean(right) &&
-  left.getFullYear() === right.getFullYear() &&
-  left.getMonth() === right.getMonth() &&
-  left.getDate() === right.getDate();
-const buildCalendarDays = (monthDate) => {
-  const year = monthDate.getFullYear();
-  const month = monthDate.getMonth();
-  const firstDayIndex = new Date(year, month, 1).getDay();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const cells = [];
-
-  for (let index = 0; index < firstDayIndex; index += 1) {
-    cells.push(null);
-  }
-
-  for (let day = 1; day <= daysInMonth; day += 1) {
-    cells.push(new Date(year, month, day));
-  }
-
-  return cells;
-};
-const formatTimeLabel = (time) => {
-  const [hours, minutes] = String(time || '00:00').split(':').map(Number);
-  const displayHour = hours % 12 || 12;
-  const suffix = hours >= 12 ? 'PM' : 'AM';
-  return `${displayHour}:${pad(minutes)} ${suffix}`;
-};
 const formatDateTimeValue = (date, time) => {
   const [hours, minutes] = String(time || '00:00').split(':');
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${hours}:${minutes}`;
 };
-const parseDateTimeValue = (value) => {
-  if (!value) return null;
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
-};
-const splitDateTimeValue = (value, fallbackDate = new Date(), fallbackTime = '10:00') => {
-  const parsed = parseDateTimeValue(value);
-  if (!parsed) {
-    return {
-      date: new Date(fallbackDate.getFullYear(), fallbackDate.getMonth(), fallbackDate.getDate()),
-      time: fallbackTime,
-    };
-  }
-
-  return {
-    date: new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate()),
-    time: `${pad(parsed.getHours())}:${pad(parsed.getMinutes())}`,
-  };
-};
-const formatPickerSummary = (value) => {
-  const parsed = parseDateTimeValue(value);
-  if (!parsed) return 'Choose date and time';
-  return parsed.toLocaleString('en-IN', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-};
-
-const DateTimePickerModal = ({
-  open,
-  title,
-  monthDate,
-  selectedDate,
-  selectedTime,
-  minDate,
-  minTime,
-  onMonthChange,
-  onDateSelect,
-  onTimeSelect,
-  onClose,
-  onApply,
-}) => {
-  const days = useMemo(() => buildCalendarDays(monthDate), [monthDate]);
-  const minDay = startOfDay(minDate);
-
-  if (!open) return null;
-
-  return (
-    <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="fixed inset-0 z-50 flex items-end bg-slate-950/45"
-        onClick={onClose}
-      >
-        <motion.div
-          initial={{ opacity: 0, y: 32 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: 32 }}
-          transition={{ type: 'spring', damping: 26, stiffness: 260 }}
-          className="w-full rounded-t-[28px] bg-[#f8fafc] px-5 pb-6 pt-4 shadow-[0_-20px_60px_rgba(15,23,42,0.25)]"
-          onClick={(event) => event.stopPropagation()}
-        >
-          <div className="mx-auto mb-4 h-1.5 w-14 rounded-full bg-slate-300" />
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">
-                Pick Schedule
-              </p>
-              <h3 className="mt-1 text-lg font-black text-slate-900">{title}</h3>
-            </div>
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-black text-slate-600"
-            >
-              Close
-            </button>
-          </div>
-
-          <div className="mt-5 rounded-[24px] border border-white/80 bg-white p-4 shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
-            <div className="flex items-center justify-between">
-              <button
-                type="button"
-                onClick={() => onMonthChange(-1)}
-                className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-slate-600"
-              >
-                <ChevronLeft size={16} />
-              </button>
-              <p className="text-[14px] font-black text-slate-900">
-                {monthDate.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}
-              </p>
-              <button
-                type="button"
-                onClick={() => onMonthChange(1)}
-                className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-slate-600"
-              >
-                <ChevronRight size={16} />
-              </button>
-            </div>
-
-            <div className="mt-4 grid grid-cols-7 gap-2 text-center">
-              {WEEK_DAYS.map((day) => (
-                <div key={day} className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-                  {day}
-                </div>
-              ))}
-              {days.map((day, index) => {
-                if (!day) {
-                  return <div key={`empty-${index}`} className="h-10" />;
-                }
-
-                const disabled = startOfDay(day) < minDay;
-                const selected = isSameDay(day, selectedDate);
-
-                return (
-                  <button
-                    key={day.toISOString()}
-                    type="button"
-                    disabled={disabled}
-                    onClick={() => onDateSelect(day)}
-                    className={`h-10 rounded-[12px] text-[12px] font-black transition-all ${
-                      selected
-                        ? 'bg-[#2e3c78] text-white shadow-[0_10px_24px_rgba(46,60,120,0.28)]'
-                        : disabled
-                          ? 'bg-slate-100 text-slate-300'
-                          : 'border border-slate-200 bg-white text-slate-700'
-                    }`}
-                  >
-                    {day.getDate()}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="mt-4 rounded-[24px] border border-white/80 bg-white p-4 shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
-            <div className="mb-3 flex items-center gap-2">
-              <Clock size={15} className="text-slate-400" />
-              <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">
-                Select Time
-              </p>
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              {TIME_OPTIONS.map((time) => {
-                const disabled =
-                  isSameDay(selectedDate, minDate) && String(time) < String(minTime || '00:00');
-                const selected = selectedTime === time;
-
-                return (
-                  <button
-                    key={time}
-                    type="button"
-                    disabled={disabled}
-                    onClick={() => onTimeSelect(time)}
-                    className={`rounded-[12px] px-3 py-2.5 text-[11px] font-black transition-all ${
-                      selected
-                        ? 'bg-[#2e3c78] text-white'
-                        : disabled
-                          ? 'bg-slate-100 text-slate-300'
-                          : 'border border-slate-200 bg-slate-50 text-slate-700'
-                    }`}
-                  >
-                    {formatTimeLabel(time)}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={onApply}
-            className="mt-5 w-full rounded-[18px] bg-[#2e3c78] px-5 py-3.5 text-sm font-black text-white shadow-[0_10px_26px_rgba(46,60,120,0.28)]"
-          >
-            Apply Date & Time
-          </button>
-        </motion.div>
-      </motion.div>
-    </AnimatePresence>
-  );
-};
+const isCompleteDateTime = (value) => /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(String(value || ''));
 
 const SeatPreview = ({ blueprint }) => {
   const rows = blueprint?.lowerDeck || [];
@@ -465,6 +224,27 @@ const RentalVehicleDetail = () => {
     vehicle?.gallery?.[0] || vehicle?.galleryImages?.[0] || vehicle?.coverImage || vehicle?.image || '',
   );
   const [showQuoteForm, setShowQuoteForm] = useState(false);
+  const quoteFormRef = useRef(null);
+  const [myQuotes, setMyQuotes] = useState([]);
+
+  const loadMyQuotes = useCallback(async () => {
+    try {
+      const response = await userService.getMyRentalQuoteRequests();
+      const payload = response?.data?.data || response?.data || response || {};
+      setMyQuotes(Array.isArray(payload.results) ? payload.results : []);
+    } catch {
+      // The status list is a convenience; the form keeps working without it.
+    }
+  }, []);
+
+  // While the Custom Quote tab is open, show the admin's decision and refresh it every 30 seconds.
+  useEffect(() => {
+    if (!showQuoteForm) return undefined;
+    loadMyQuotes();
+    const timer = window.setInterval(loadMyQuotes, 30000);
+    return () => window.clearInterval(timer);
+  }, [showQuoteForm, loadMyQuotes]);
+
   const [selectedPackageId, setSelectedPackageId] = useState('');
   const [selectionStep, setSelectionStep] = useState('package');
   const [serviceLocations, setServiceLocations] = useState([]);
@@ -489,10 +269,6 @@ const RentalVehicleDetail = () => {
     specialRequirements: '',
   });
   const [submittingQuote, setSubmittingQuote] = useState(false);
-  const [activeQuotePicker, setActiveQuotePicker] = useState(null);
-  const [quotePickerMonth, setQuotePickerMonth] = useState(() => getMonthStart(new Date()));
-  const [quotePickerDate, setQuotePickerDate] = useState(() => startOfDay(new Date()));
-  const [quotePickerTime, setQuotePickerTime] = useState('10:00');
 
   useEffect(() => {
     setVehicle(initialVehicle);
@@ -569,7 +345,7 @@ const RentalVehicleDetail = () => {
   }, [duration, vehicle]);
 
   if (!vehicle) {
-    navigate('/rental');
+    navigate('/taxi/user/rental');
     return null;
   }
 
@@ -934,13 +710,31 @@ const RentalVehicleDetail = () => {
       return;
     }
 
-    if (!quoteForm.pickupDateTime || !quoteForm.returnDateTime) {
-      toast.error('Select the full date range');
+    if (!isCompleteDateTime(quoteForm.pickupDateTime) || !isCompleteDateTime(quoteForm.returnDateTime)) {
+      toast.error('Select both date and time for start and end');
+      return;
+    }
+
+    if (new Date(quoteForm.pickupDateTime) < new Date()) {
+      toast.error('Start date and time cannot be in the past');
       return;
     }
 
     if (new Date(quoteForm.returnDateTime) <= new Date(quoteForm.pickupDateTime)) {
       toast.error('End date and time must be after the start');
+      return;
+    }
+
+    // The chosen start-to-end window must match the hours the user asked for.
+    const rangeMinutes = Math.round(
+      (new Date(quoteForm.returnDateTime) - new Date(quoteForm.pickupDateTime)) / 60000,
+    );
+    const hoursMinutes = Math.round(Number(quoteForm.requestedHours) * 60);
+    if (Math.abs(rangeMinutes - hoursMinutes) > 1) {
+      const fmt = (mins) => `${Math.floor(mins / 60)}h${mins % 60 ? ` ${mins % 60}m` : ''}`;
+      toast.error(
+        `Selected time is ${fmt(rangeMinutes)} but you asked for ${fmt(hoursMinutes)}. Make the start and end match the hours needed.`,
+      );
       return;
     }
 
@@ -966,8 +760,8 @@ const RentalVehicleDetail = () => {
         returnDateTime: quoteForm.returnDateTime || null,
         specialRequirements: quoteForm.specialRequirements,
       });
-      toast.success('Custom quote request sent to admin for review');
-      setShowQuoteForm(false);
+      toast.success('Custom quote request sent. You can track its status below.');
+      loadMyQuotes();
       setQuoteForm((current) => ({
         ...current,
         requestedHours: '',
@@ -981,69 +775,35 @@ const RentalVehicleDetail = () => {
     }
   };
 
-  const openQuotePicker = (field) => {
-    const now = new Date();
-    const fallbackDate =
-      field === 'returnDateTime' && quoteForm.pickupDateTime
-        ? parseDateTimeValue(quoteForm.pickupDateTime) || now
-        : now;
-    const fallbackTime = field === 'returnDateTime' ? '12:00' : '10:00';
-    const { date, time } = splitDateTimeValue(quoteForm[field], fallbackDate, fallbackTime);
-
-    setActiveQuotePicker(field);
-    setQuotePickerDate(date);
-    setQuotePickerTime(time);
-    setQuotePickerMonth(getMonthStart(date));
+  // Start / end are two plain inputs each: a date (native calendar) and a time (native time picker).
+  const splitQuoteParts = (value) => {
+    const [date = '', time = ''] = String(value || '').split('T');
+    return { date, time: time.slice(0, 5) };
   };
-
-  const closeQuotePicker = () => {
-    setActiveQuotePicker(null);
-  };
-
-  const applyQuotePicker = () => {
-    if (!activeQuotePicker) return;
-
-    const nextValue = formatDateTimeValue(quotePickerDate, quotePickerTime);
+  const setQuotePart = (field, part, value) => {
     setQuoteForm((current) => {
-      const nextForm = {
-        ...current,
-        [activeQuotePicker]: nextValue,
-      };
-
-      if (
-        activeQuotePicker === 'pickupDateTime' &&
-        current.returnDateTime &&
-        new Date(nextForm.returnDateTime) <= new Date(nextValue)
-      ) {
-        nextForm.returnDateTime = '';
+      const parts = splitQuoteParts(current[field]);
+      parts[part] = value;
+      const next = { ...current, [field]: parts.date || parts.time ? `${parts.date}T${parts.time}` : '' };
+      if (field === 'pickupDateTime' && isCompleteDateTime(next.returnDateTime) && isCompleteDateTime(next.pickupDateTime)) {
+        if (new Date(next.returnDateTime) <= new Date(next.pickupDateTime)) next.returnDateTime = '';
       }
-
-      return nextForm;
+      return next;
     });
-    setActiveQuotePicker(null);
   };
+  const todayValue = formatDateTimeValue(new Date(), '00:00').slice(0, 10);
 
-  const pickerMinDate = useMemo(() => {
-    if (activeQuotePicker === 'returnDateTime' && quoteForm.pickupDateTime) {
-      const pickup = parseDateTimeValue(quoteForm.pickupDateTime);
-      if (pickup) {
-        return pickup;
-      }
+  // Back: from the location step go back to the package step; otherwise return to the rental list.
+  // navigate(-1) does nothing when this page was opened with no history (refresh / new tab), so fall back to the list.
+  const handleBack = () => {
+    if (selectionStep === 'location') {
+      setSelectionStep('package');
+      return;
     }
-
-    return new Date();
-  }, [activeQuotePicker, quoteForm.pickupDateTime]);
-
-  const pickerMinTime = useMemo(() => {
-    const minDate = pickerMinDate;
-    if (!isSameDay(quotePickerDate, minDate)) {
-      return '06:00';
-    }
-
-    const currentTime = `${pad(minDate.getHours())}:${pad(minDate.getMinutes())}`;
-    const nearest = TIME_OPTIONS.find((time) => String(time) >= currentTime);
-    return nearest || TIME_OPTIONS[TIME_OPTIONS.length - 1];
-  }, [pickerMinDate, quotePickerDate]);
+    const hasHistory = (window.history.state?.idx ?? 0) > 0;
+    if (hasHistory) navigate(-1);
+    else navigate('/taxi/user/rental', { replace: true });
+  };
 
   const handleProceed = () => {
     if (!selectedPackage) {
@@ -1061,7 +821,7 @@ const RentalVehicleDetail = () => {
       return;
     }
 
-    navigate('/rental/schedule', {
+    navigate('/taxi/user/rental/schedule', {
       state: {
         vehicle,
         duration,
@@ -1084,7 +844,7 @@ const RentalVehicleDetail = () => {
         <div className="flex items-center gap-3">
           <motion.button
             whileTap={{ scale: 0.9 }}
-            onClick={() => navigate(-1)}
+            onClick={handleBack}
             className="w-9 h-9 rounded-[12px] border border-white/80 bg-white/90 flex items-center justify-center shadow-[0_4px_12px_rgba(15,23,42,0.07)] shrink-0"
           >
             <ArrowLeft size={18} className="text-slate-900" strokeWidth={2.5} />
@@ -1177,6 +937,157 @@ const RentalVehicleDetail = () => {
           </div>
         </motion.div>
 
+        <div className="grid grid-cols-2 gap-1.5 rounded-[18px] border border-slate-200 bg-white p-1.5 shadow-[0_4px_14px_rgba(15,23,42,0.05)]">
+          {[
+            { key: false, label: 'Package' },
+            { key: true, label: 'Custom Quote' },
+          ].map((option) => (
+            <button
+              key={option.label}
+              type="button"
+              onClick={() => setShowQuoteForm(option.key)}
+              className={`rounded-[14px] py-3 text-[13px] font-black transition-all ${
+                showQuoteForm === option.key ? 'bg-slate-900 text-white shadow-md' : 'text-slate-500'
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+
+        <AnimatePresence>
+          {showQuoteForm ? (
+            <motion.div
+              ref={quoteFormRef}
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 16 }}
+              className="scroll-mt-24 rounded-[24px] border border-slate-200 bg-white p-5 shadow-[0_8px_24px_rgba(15,23,42,0.08)] space-y-4"
+            >
+              <div className="flex items-center gap-2">
+                <ImageIcon size={15} className="text-slate-400" />
+                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
+                  Custom Quote Request
+                </p>
+              </div>
+              <p className="text-[12px] font-semibold text-slate-500">
+                Share just the rental hours and your date range. The admin team can review and send back a custom price.
+              </p>
+              <div className="grid gap-4">
+                <div className="space-y-2">
+                  <label className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">
+                    Hours needed
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={quoteForm.requestedHours}
+                    onChange={(event) =>
+                      setQuoteForm((current) => ({
+                        ...current,
+                        requestedHours: event.target.value,
+                      }))
+                    }
+                    className={inputClass}
+                    placeholder="Enter rental hours"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">
+                    Start date and time
+                  </label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <input
+                      type="date"
+                      min={todayValue}
+                      value={splitQuoteParts(quoteForm.pickupDateTime).date}
+                      onChange={(event) => setQuotePart('pickupDateTime', 'date', event.target.value)}
+                      className={`${inputClass} min-w-0`}
+                    />
+                    <input
+                      type="time"
+                      value={splitQuoteParts(quoteForm.pickupDateTime).time}
+                      onChange={(event) => setQuotePart('pickupDateTime', 'time', event.target.value)}
+                      className={`${inputClass} min-w-0`}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">
+                    End date and time
+                  </label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <input
+                      type="date"
+                      min={splitQuoteParts(quoteForm.pickupDateTime).date || todayValue}
+                      value={splitQuoteParts(quoteForm.returnDateTime).date}
+                      onChange={(event) => setQuotePart('returnDateTime', 'date', event.target.value)}
+                      className={`${inputClass} min-w-0`}
+                    />
+                    <input
+                      type="time"
+                      value={splitQuoteParts(quoteForm.returnDateTime).time}
+                      onChange={(event) => setQuotePart('returnDateTime', 'time', event.target.value)}
+                      className={`${inputClass} min-w-0`}
+                    />
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={submitQuote}
+                  disabled={submittingQuote}
+                  className="w-full rounded-[16px] bg-[#2e3c78] px-5 py-3 text-sm font-black text-white disabled:opacity-60"
+                >
+                  {submittingQuote ? 'Sending Request...' : 'Send To Admin For Review'}
+                </button>
+              </div>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
+
+        {showQuoteForm && myQuotes.length > 0 ? (
+          <div className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-[0_8px_24px_rgba(15,23,42,0.08)] space-y-3">
+            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
+              Your quote requests
+            </p>
+            {myQuotes.map((quote) => {
+              const status = String(quote.status || 'pending').toLowerCase();
+              const view =
+                status === 'quoted'
+                  ? { label: 'Approved', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' }
+                  : status === 'rejected'
+                    ? { label: 'Rejected', cls: 'bg-rose-50 text-rose-700 border-rose-200' }
+                    : status === 'reviewing'
+                      ? { label: 'Under review', cls: 'bg-amber-50 text-amber-700 border-amber-200' }
+                      : { label: 'Waiting for admin', cls: 'bg-slate-50 text-slate-600 border-slate-200' };
+              return (
+                <div key={quote.id} className="rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3 space-y-1.5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-[13px] font-black text-slate-900">{quote.vehicleName || 'Rental vehicle'}</p>
+                      <p className="text-[11px] font-semibold text-slate-500">
+                        {quote.requestedHours}h
+                        {quote.pickupDateTime
+                          ? ` - ${new Date(quote.pickupDateTime).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: 'numeric', minute: '2-digit' })}`
+                          : ''}
+                      </p>
+                    </div>
+                    <span className={`shrink-0 rounded-full border px-2.5 py-0.5 text-[10px] font-black ${view.cls}`}>
+                      {view.label}
+                    </span>
+                  </div>
+                  {status === 'quoted' && Number(quote.adminQuotedAmount) > 0 ? (
+                    <p className="text-[13px] font-black text-emerald-700">Quoted price: Rs.{quote.adminQuotedAmount}</p>
+                  ) : null}
+                  {quote.adminNote && (status === 'quoted' || status === 'rejected') ? (
+                    <p className="text-[11px] font-semibold text-slate-500">Admin note: {quote.adminNote}</p>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        ) : null}
+
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -1218,6 +1129,8 @@ const RentalVehicleDetail = () => {
           ) : null}
         </motion.div>
 
+        {showQuoteForm ? null : (
+        <>
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -1468,6 +1381,8 @@ const RentalVehicleDetail = () => {
             </motion.div>
           ) : null}
         </AnimatePresence>
+        </>
+        )}
 
         <motion.div
           initial={{ opacity: 0, y: 12 }}
@@ -1494,127 +1409,9 @@ const RentalVehicleDetail = () => {
             Valid driving license required. Refundable security deposit collected at booking.
           </p>
         </motion.div>
-
-        <motion.button
-          whileTap={{ scale: 0.98 }}
-          onClick={() => setShowQuoteForm((current) => !current)}
-          className="w-full rounded-[18px] border border-slate-200 bg-white px-5 py-4 text-[14px] font-black text-slate-900 shadow-[0_8px_24px_rgba(15,23,42,0.08)]"
-        >
-          Request Custom Quote
-        </motion.button>
-
-        <AnimatePresence>
-          {showQuoteForm ? (
-            <motion.div
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 16 }}
-              className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-[0_8px_24px_rgba(15,23,42,0.08)] space-y-4"
-            >
-              <div className="flex items-center gap-2">
-                <ImageIcon size={15} className="text-slate-400" />
-                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
-                  Custom Quote Request
-                </p>
-              </div>
-              <p className="text-[12px] font-semibold text-slate-500">
-                Share just the rental hours and your date range. The admin team can review and send back a custom price.
-              </p>
-              <div className="grid gap-4">
-                <div className="space-y-2">
-                  <label className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">
-                    Hours needed
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={quoteForm.requestedHours}
-                    onChange={(event) =>
-                      setQuoteForm((current) => ({
-                        ...current,
-                        requestedHours: event.target.value,
-                      }))
-                    }
-                    className={inputClass}
-                    placeholder="Enter rental hours"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">
-                    Start date and time
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => openQuotePicker('pickupDateTime')}
-                    className={pickerTriggerClass}
-                  >
-                    <span className="flex items-center gap-3">
-                      <span className="flex h-10 w-10 items-center justify-center rounded-[14px] bg-indigo-50 text-indigo-700">
-                        <Calendar size={18} />
-                      </span>
-                      <span className="min-w-0">
-                        <span className="block text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">
-                          Tap to choose
-                        </span>
-                        <span className="mt-1 block truncate text-sm font-bold text-slate-800">
-                          {formatPickerSummary(quoteForm.pickupDateTime)}
-                        </span>
-                      </span>
-                    </span>
-                  </button>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">
-                    End date and time
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => openQuotePicker('returnDateTime')}
-                    className={pickerTriggerClass}
-                  >
-                    <span className="flex items-center gap-3">
-                      <span className="flex h-10 w-10 items-center justify-center rounded-[14px] bg-sky-50 text-sky-700">
-                        <Clock size={18} />
-                      </span>
-                      <span className="min-w-0">
-                        <span className="block text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">
-                          Tap to choose
-                        </span>
-                        <span className="mt-1 block truncate text-sm font-bold text-slate-800">
-                          {formatPickerSummary(quoteForm.returnDateTime)}
-                        </span>
-                      </span>
-                    </span>
-                  </button>
-                </div>
-                <button
-                  type="button"
-                  onClick={submitQuote}
-                  disabled={submittingQuote}
-                  className="w-full rounded-[16px] bg-[#2e3c78] px-5 py-3 text-sm font-black text-white disabled:opacity-60"
-                >
-                  {submittingQuote ? 'Sending Request...' : 'Send To Admin For Review'}
-                </button>
-              </div>
-            </motion.div>
-          ) : null}
-        </AnimatePresence>
-        <DateTimePickerModal
-          open={Boolean(activeQuotePicker)}
-          title={activeQuotePicker === 'returnDateTime' ? 'Select End Date & Time' : 'Select Start Date & Time'}
-          monthDate={quotePickerMonth}
-          selectedDate={quotePickerDate}
-          selectedTime={quotePickerTime}
-          minDate={pickerMinDate}
-          minTime={pickerMinTime}
-          onMonthChange={(amount) => setQuotePickerMonth((current) => addMonths(current, amount))}
-          onDateSelect={setQuotePickerDate}
-          onTimeSelect={setQuotePickerTime}
-          onClose={closeQuotePicker}
-          onApply={applyQuotePicker}
-        />
       </div>
 
+      {showQuoteForm ? null : (
       <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-lg px-5 pb-6 pt-3 bg-gradient-to-t from-[#EEF2F7] via-[#F3F4F6]/95 to-transparent pointer-events-none z-30">
         <motion.button
           whileTap={{ scale: 0.98 }}
@@ -1635,6 +1432,7 @@ const RentalVehicleDetail = () => {
           <ChevronRight size={17} strokeWidth={3} className="opacity-50" />
         </motion.button>
       </div>
+      )}
     </div>
   );
 };

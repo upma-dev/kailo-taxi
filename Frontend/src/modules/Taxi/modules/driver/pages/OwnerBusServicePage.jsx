@@ -246,35 +246,86 @@ const BusDetails = ({ bus, onBack, onEdit, onDelete, onBookings, deleting }) => 
   const stops = bus.route?.stops || [];
 
   return (
-    <Screen
-      footer={
-        <StickyActions>
-          <SecondaryButton onClick={onDelete} disabled={deleting} className="h-12 w-14 shrink-0 text-rose-600">
-            {deleting ? <Loader2 size={17} className="animate-spin" /> : <Trash2 size={17} />}
-          </SecondaryButton>
-          <SecondaryButton onClick={onBookings} className="h-12 text-[14px]">
-            <Ticket size={17} /> Bookings
-          </SecondaryButton>
-          <PrimaryButton onClick={onEdit} className="h-12 text-[14px]">
-            <Pencil size={16} /> Edit
-          </PrimaryButton>
-        </StickyActions>
-      }
-    >
+    <Screen>
       <TopBar title={bus.busName || 'Bus'} subtitle={bus.operatorName || 'Bus service'} onBack={onBack} />
 
-      <div className="relative h-44 overflow-hidden rounded-[1.75rem] bg-slate-900">
+      <div className="overflow-hidden rounded-[1.75rem] border border-white/80 bg-white shadow-sm">
         {bus.coverImage || bus.image ? (
-          <img src={bus.coverImage || bus.image} alt="" className="h-full w-full object-cover opacity-90" />
-        ) : (
-          <div className="flex h-full items-center justify-center text-slate-600">
-            <Bus size={56} />
+          <img src={bus.coverImage || bus.image} alt="" className="h-36 w-full object-cover" />
+        ) : null}
+
+        <div className="p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
+                <Bus size={22} />
+              </div>
+              <div className="min-w-0">
+                <p className="truncate text-[17px] font-black text-slate-900">{bus.busName || 'Bus'}</p>
+                <p className="truncate text-[12px] font-bold text-slate-400">
+                  {[bus.coachType, bus.registrationNumber].filter(Boolean).join(' · ') || 'No details yet'}
+                </p>
+              </div>
+            </div>
+            <StatusPill status={bus.status} />
           </div>
-        )}
-        <div className="absolute left-3 top-3"><StatusPill status={bus.status} /></div>
-        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-4">
-          <p className="text-[18px] font-black text-white">{routeLabel(bus)}</p>
-          <p className="text-[12px] font-bold text-white/70">{bus.coachType} · {bus.registrationNumber || 'No reg. number'}</p>
+
+          <div className="mt-4 flex items-center gap-3 rounded-2xl bg-slate-50 px-4 py-3">
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[15px] font-black text-slate-900">{bus.route?.originCity || 'Origin'}</p>
+              <p className="text-[11px] font-bold text-slate-400">{bus.schedules?.[0]?.departureTime || '--'}</p>
+            </div>
+            <div className="flex shrink-0 items-center gap-1">
+              <span className="h-2 w-2 rounded-full border-2 border-emerald-500" />
+              <span className="h-px w-6 bg-slate-300" />
+              <Bus size={14} className="text-slate-400" />
+              <span className="h-px w-6 bg-slate-300" />
+              <span className="h-2 w-2 rounded-full bg-emerald-500" />
+            </div>
+            <div className="min-w-0 flex-1 text-right">
+              <p className="truncate text-[15px] font-black text-slate-900">{bus.route?.destinationCity || 'Destination'}</p>
+              <p className="text-[11px] font-bold text-slate-400">{bus.schedules?.[0]?.arrivalTime || '--'}</p>
+            </div>
+          </div>
+
+          <div className="mt-3 grid grid-cols-3 divide-x divide-slate-100 text-center">
+            {[
+              ['Seats', bus.capacity || countTotalSeats(bus.blueprint)],
+              ['Fare', formatMoney(bus.seatPrice, bus.fareCurrency)],
+              ['Trips', bus.schedules?.length || 0],
+            ].map(([label, value]) => (
+              <div key={label} className="px-2 py-1">
+                <p className="truncate text-[16px] font-black text-slate-900">{value}</p>
+                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">{label}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-4 grid grid-cols-[1fr_1fr_auto] items-center gap-2.5 border-t border-slate-100 pt-4">
+            <button
+              type="button"
+              onClick={onEdit}
+              className="flex h-12 min-w-0 items-center justify-center gap-1.5 rounded-2xl bg-slate-950 px-3 text-[14px] font-black text-white transition active:scale-[0.98]"
+            >
+              <Pencil size={16} className="shrink-0" /> <span className="truncate">Edit</span>
+            </button>
+            <button
+              type="button"
+              onClick={onBookings}
+              className="flex h-12 min-w-0 items-center justify-center gap-1.5 rounded-2xl border border-slate-200 bg-white px-3 text-[14px] font-black text-slate-800 transition active:scale-[0.98]"
+            >
+              <Ticket size={16} className="shrink-0" /> <span className="truncate">Bookings</span>
+            </button>
+            <button
+              type="button"
+              onClick={onDelete}
+              disabled={deleting}
+              aria-label="Delete bus"
+              className="flex h-12 w-12 items-center justify-center rounded-2xl border border-rose-100 bg-rose-50 text-rose-600 transition active:scale-[0.98] disabled:opacity-50"
+            >
+              {deleting ? <Loader2 size={17} className="animate-spin" /> : <Trash2 size={17} />}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -288,19 +339,6 @@ const BusDetails = ({ bus, onBack, onEdit, onDelete, onBookings, deleting }) => 
           Waiting for admin approval. It will show to passengers once approved.
         </div>
       ) : null}
-
-      <div className="mt-4 grid grid-cols-3 gap-2">
-        {[
-          ['Seats', bus.capacity || countTotalSeats(bus.blueprint)],
-          ['From', formatMoney(bus.seatPrice, bus.fareCurrency)],
-          ['Trips', bus.schedules?.length || 0],
-        ].map(([label, value]) => (
-          <div key={label} className="rounded-2xl border border-white/80 bg-white px-3 py-3 text-center shadow-sm">
-            <p className="truncate text-[17px] font-black leading-none text-slate-900">{value}</p>
-            <p className="mt-1 text-[9px] font-black uppercase tracking-wider text-slate-400">{label}</p>
-          </div>
-        ))}
-      </div>
 
       <SectionLabel>Route & stops</SectionLabel>
       <Card>

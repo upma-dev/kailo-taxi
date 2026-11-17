@@ -17,6 +17,10 @@ export const userService = {
     const response = await api.post('/users/rental-quote-requests', payload);
     return response;
   },
+  getMyRentalQuoteRequests: async () => {
+    const response = await api.get('/users/rental-quote-requests');
+    return response;
+  },
   createRentalAdvanceOrder: async (payload) => {
     const response = await api.post('/users/rental-advance/razorpay/order', payload);
     return response;

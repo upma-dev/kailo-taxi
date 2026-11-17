@@ -9,6 +9,7 @@ import {
   payRentalAdvanceWithWallet,
   createRentalBookingRequest,
   createRentalQuoteRequest,
+  listMyRentalQuoteRequests,
   createRazorpayWalletTopupOrder,
   createPhonePeWalletTopupOrder,
   getBusSeatLayout,
@@ -74,7 +75,8 @@ userRouter.get('/vehicle-types', asyncHandler(getPublicVehicleTypeCatalog));
 userRouter.get('/rental-vehicles', requireRentalEnabled, asyncHandler(getPublicRentalVehicleCatalog));
 userRouter.get('/service-locations', asyncHandler(listPublicServiceLocations));
 userRouter.get('/service-stores', asyncHandler(listPublicServiceStores));
-userRouter.post('/rental-quote-requests', requireRentalEnabled, asyncHandler(createRentalQuoteRequest));
+userRouter.post('/rental-quote-requests', requireRentalEnabled, authenticateOrResolveUser(['user']), asyncHandler(createRentalQuoteRequest));
+userRouter.get('/rental-quote-requests', requireRentalEnabled, authenticateOrResolveUser(['user']), asyncHandler(listMyRentalQuoteRequests));
 userRouter.post('/rental-bookings', requireRentalEnabled, authenticateOrResolveUser(['user']), asyncHandler(createRentalBookingRequest));
 userRouter.get('/rental-bookings', requireRentalEnabled, authenticateOrResolveUser(['user']), asyncHandler(listMyRentalBookings));
 userRouter.get('/rental-bookings/active', requireRentalEnabled, authenticateOrResolveUser(['user']), asyncHandler(getMyActiveRentalBooking));

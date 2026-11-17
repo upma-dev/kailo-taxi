@@ -106,6 +106,17 @@ const rentalVehicleAdvancePaymentSchema = new mongoose.Schema(
   { _id: false },
 );
 
+// Refundable safety money: the rider can pay this instead of the small advance. At the end of the
+// rental the final bill is deducted from it and the rest goes back to the rider's wallet.
+const rentalVehicleSafetyMoneySchema = new mongoose.Schema(
+  {
+    enabled: { type: Boolean, default: false },
+    amount: { type: Number, default: 0, min: 0 },
+    notes: { type: String, default: '', trim: true },
+  },
+  { _id: false },
+);
+
 const rentalVehicleTypeSchema = new mongoose.Schema(
   {
     transport_type: {
@@ -203,6 +214,10 @@ const rentalVehicleTypeSchema = new mongoose.Schema(
         label: 'Advance booking payment',
         notes: '',
       }),
+    },
+    safetyMoney: {
+      type: rentalVehicleSafetyMoneySchema,
+      default: () => ({ enabled: false, amount: 0, notes: '' }),
     },
     status: {
       type: String,

@@ -10,12 +10,14 @@ import {
   MapPin,
   Phone,
   Search,
+  CheckCircle2,
   ShieldCheck,
   User2,
   X,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { adminService } from '../../services/adminService';
+import { resolveAssetUrl } from '../../../user/components/useVehicleTiles';
 
 const inputClass =
   'w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition-all focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100/60';
@@ -66,7 +68,97 @@ const toRentalRequestList = (response) => {
   return Array.isArray(firstArray) ? firstArray : [];
 };
 
+const formatElapsed = (totalSeconds) => {
+  const seconds = Math.max(0, Math.floor(Number(totalSeconds) || 0));
+  return `${Math.floor(seconds / 3600)}h ${String(Math.floor((seconds % 3600) / 60)).padStart(2, '0')}m ${String(seconds % 60).padStart(2, '0')}s`;
+};
+
+// Running time and bill of a rental that has started. It ticks every second while the rental is on;
+// once the rider asked to end it (or it is completed) the numbers are frozen.
+const LiveBilling = ({ request, loadedAt }) => {
+  const metrics = request?.rideMetrics;
+  const [now, setNow] = useState(() => Date.now());
+  const isRunning = ['confirmed', 'assigned'].includes(String(request?.status || ''));
+
+  useEffect(() => {
+    if (!isRunning) return undefined;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [isRunning]);
+
+  if (!metrics || !['confirmed', 'assigned', 'end_requested', 'completed'].includes(String(request?.status || ''))) {
+    return null;
+  }
+
+  const baseSeconds = Number(metrics.elapsedSeconds ?? Number(metrics.elapsedMinutes || 0) * 60);
+  const elapsedSeconds = isRunning ? baseSeconds + Math.max(0, (now - loadedAt) / 1000) : baseSeconds;
+  const elapsedHours = elapsedSeconds / 3600;
+  const includedHours = Math.max(1, Number(metrics.includedHours || 1));
+  const hourlyRate = Number(metrics.hourlyRate || 0);
+  const overtimeRate = Number(metrics.extraHourRate || 0) > 0 ? Number(metrics.extraHourRate) : hourlyRate;
+  const isSafety = request.paymentOption === 'safety_money';
+  const paid = Number(request.payableNow || 0);
+  // A plain advance is also the minimum bill; safety money is refundable so it is not.
+  const advance = isSafety ? 0 : paid;
+  const running = elapsedHours <= includedHours
+    ? (isSafety ? Number(metrics.basePrice || 0) : hourlyRate * elapsedHours)
+    : Number(metrics.basePrice || 0) + (elapsedHours - includedHours) * overtimeRate;
+  const charge = isRunning
+    ? Math.max(advance, running)
+    : Number(request.finalCharge || metrics.currentCharge || 0);
+  const due = Math.max(0, charge - (isSafety ? paid : advance));
+  const settled = request.safetyMoney?.status === 'settled';
+  const deducted = settled ? Number(request.safetyMoney.deductedAmount || 0) : Math.min(charge, paid);
+  const refund = settled ? Number(request.safetyMoney.refundedAmount || 0) : Math.max(0, paid - charge);
+
+  return (
+    <div className="rounded-[24px] border border-orange-200 bg-orange-50/60 p-5">
+      <p className="text-[11px] font-black uppercase tracking-[0.2em] text-orange-500">
+        {isRunning ? 'Live billing' : 'Final billing'}
+      </p>
+      <div className="mt-4 grid gap-4 md:grid-cols-3">
+        <div className="rounded-2xl bg-white px-4 py-4">
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Time elapsed</p>
+          <p className="mt-3 text-lg font-black text-slate-900">{formatElapsed(elapsedSeconds)}</p>
+        </div>
+        <div className="rounded-2xl bg-white px-4 py-4">
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Bill till now</p>
+          <p className="mt-3 text-lg font-black text-slate-900">Rs.{charge.toFixed(2)}</p>
+        </div>
+        <div className="rounded-2xl bg-white px-4 py-4">
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{isSafety ? 'Extra to collect' : 'Due at drop-off'}</p>
+          <p className="mt-3 text-lg font-black text-slate-900">Rs.{due.toFixed(2)}</p>
+        </div>
+      </div>
+      {isSafety ? (
+        <div className="mt-4 rounded-2xl bg-white px-4 py-4">
+          <p className="text-xs font-bold uppercase tracking-wide text-emerald-600">Rental + safety money</p>
+          <div className="mt-2 grid gap-2 text-sm font-semibold text-slate-600 md:grid-cols-3">
+            <p>Paid: <span className="font-black text-slate-900">Rs.{paid.toFixed(2)}</span></p>
+            <p>Bill deducted: <span className="font-black text-slate-900">Rs.{deducted.toFixed(2)}</span></p>
+            <p>
+              {settled ? 'Refunded to wallet' : 'To refund'}: <span className="font-black text-emerald-600">Rs.{refund.toFixed(2)}</span>
+            </p>
+          </div>
+          <p className="mt-2 text-xs font-semibold text-slate-400">
+            {settled
+              ? 'Settled: the refund was credited to the rider wallet.'
+              : 'When you end the ride the bill is deducted and the balance is credited to the rider wallet automatically.'}
+          </p>
+        </div>
+      ) : null}
+      <p className="mt-3 text-xs font-semibold text-slate-500">
+        {isSafety
+          ? `Rental package Rs.${Number(metrics.basePrice || 0).toFixed(0)} is always charged in full; after ${includedHours} hr, Rs.${overtimeRate.toFixed(2)}/hr extra.`
+          : `Rs.${hourlyRate.toFixed(2)}/hr for the first ${includedHours} hr, then Rs.${overtimeRate.toFixed(2)}/hr.`}{' '}
+        {isSafety ? `Rs.${paid.toFixed(0)} (rental + safety money) paid.` : `Advance Rs.${advance.toFixed(0)} already paid.`}
+      </p>
+    </div>
+  );
+};
+
 const RentalBookingRequests = () => {
+  const [loadedAt, setLoadedAt] = useState(() => Date.now());
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState('');
@@ -83,7 +175,10 @@ const RentalBookingRequests = () => {
       try {
         const response = await adminService.getRentalBookingRequests();
         const results = toRentalRequestList(response);
-        if (mounted) setItems(results);
+        if (mounted) {
+          setItems(results);
+          setLoadedAt(Date.now());
+        }
       } catch (error) {
         if (mounted) toast.error(error?.message || 'Could not load rental requests.');
       } finally {
@@ -163,9 +258,31 @@ const RentalBookingRequests = () => {
       });
       const payload = updated?.data?.data || updated?.data || updated;
       updateLocal(id, payload);
+      setLoadedAt(Date.now());
+      window.dispatchEvent(new Event('admin-rental-changed'));
       toast.success('Rental request updated');
     } catch (error) {
       toast.error(error?.message || 'Could not update rental request.');
+    } finally {
+      setSavingId('');
+    }
+  };
+
+  // One-click approval from the list: the rider is told right away (push) and the rental starts.
+  const approveRequest = async (item) => {
+    const id = String(item?.id || item?._id || '');
+    if (!id || savingId) return;
+
+    setSavingId(id);
+    try {
+      const updated = await adminService.updateRentalBookingRequest(id, { status: 'confirmed' });
+      const payload = updated?.data?.data || updated?.data || updated;
+      updateLocal(id, payload);
+      setLoadedAt(Date.now());
+      window.dispatchEvent(new Event('admin-rental-changed'));
+      toast.success(`Request ${item.bookingReference || ''} approved. The rider has been notified.`);
+    } catch (error) {
+      toast.error(error?.message || 'Could not approve this request.');
     } finally {
       setSavingId('');
     }
@@ -287,7 +404,18 @@ const RentalBookingRequests = () => {
                           </div>
                         </td>
                         <td className="px-4 py-4">
-                          <div className="flex justify-end">
+                          <div className="flex flex-wrap justify-end gap-2">
+                            {item.status === 'pending' ? (
+                              <button
+                                type="button"
+                                onClick={() => approveRequest(item)}
+                                disabled={Boolean(savingId)}
+                                className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-3 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-60"
+                              >
+                                <CheckCircle2 size={15} />
+                                {savingId === id ? 'Approving...' : 'Approve'}
+                              </button>
+                            ) : null}
                             <button
                               type="button"
                               onClick={() => setSelectedId(id)}
@@ -438,7 +566,7 @@ const RentalBookingRequests = () => {
                         </p>
                       </div>
                       <div className="rounded-2xl bg-slate-50 px-4 py-4">
-                        <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Advance Now</p>
+                        <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{selectedRequest.paymentOption === 'safety_money' ? 'Paid (rental + safety)' : 'Advance Now'}</p>
                         <p className="mt-3 text-lg font-black text-slate-900">{formatAmount(selectedRequest.payableNow)}</p>
                       </div>
                       <div className="rounded-2xl bg-slate-50 px-4 py-4">
@@ -447,6 +575,28 @@ const RentalBookingRequests = () => {
                       </div>
                     </div>
                   </div>
+                  {selectedRequest.conditionPhoto?.imageUrl ? (
+                    <div className="rounded-[24px] border border-slate-200 bg-white p-5">
+                      <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Vehicle condition photo (taken by the rider before paying)</p>
+                      <a
+                        href={resolveAssetUrl(selectedRequest.conditionPhoto.imageUrl)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-4 block overflow-hidden rounded-2xl border border-slate-100"
+                      >
+                        <img
+                          src={resolveAssetUrl(selectedRequest.conditionPhoto.imageUrl)}
+                          alt="Vehicle condition"
+                          className="max-h-72 w-full object-cover"
+                        />
+                      </a>
+                      <p className="mt-2 text-xs font-semibold text-slate-400">
+                        Uploaded {formatDateTime(selectedRequest.conditionPhoto.uploadedAt)}. Compare it at return inspection.
+                      </p>
+                    </div>
+                  ) : null}
+
+                  <LiveBilling request={selectedRequest} loadedAt={loadedAt} />
                 </div>
 
                 <div className="space-y-5">
@@ -467,6 +617,18 @@ const RentalBookingRequests = () => {
                           ))}
                         </select>
                       </div>
+
+                      {selectedRequest.status === 'pending' ? (
+                        <button
+                          type="button"
+                          onClick={() => approveRequest(selectedRequest)}
+                          disabled={Boolean(savingId)}
+                          className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-black text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-60"
+                        >
+                          <CheckCircle2 size={16} />
+                          Approve Request
+                        </button>
+                      ) : null}
 
                       <div className="flex flex-wrap gap-2">
                         <span className={`inline-flex rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-wide ${statusClasses[selectedRequest.status] || statusClasses.pending}`}>

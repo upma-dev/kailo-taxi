@@ -117,8 +117,9 @@ export const authenticate = (allowedRoles = [], options = {}) => async (req, _re
     if (
       normalizedRole === 'bus_driver' &&
       (entity.active === false ||
-        entity.approve === false ||
-        ['pending', 'blocked'].includes(String(entity.status || '').toLowerCase()))
+        String(entity.status || '').toLowerCase() === 'blocked' ||
+        (!allowPending &&
+          (entity.approve === false || String(entity.status || '').toLowerCase() === 'pending')))
     ) {
       throw new ApiError(403, 'Bus driver account is pending approval');
     }

@@ -13,6 +13,10 @@ export const TINTS = ['#FFF3D6', '#E3F6F2', '#E6EEFB', '#EAF0FF', '#F1EAFB', '#F
 export const resolveAssetUrl = (value = '') => {
   const raw = String(value || '').trim();
   if (!raw) return '';
+  // A picture saved while developing (http://localhost:5000/uploads/...) only exists on that machine;
+  // the same file is served from this site's /uploads, so point it there.
+  const local = raw.match(/^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?(\/.*)$/i);
+  if (local) return `${BACKEND_ORIGIN}${local[1]}`;
   if (/^(https?:|data:image\/|blob:)/i.test(raw)) return raw;
   return `${BACKEND_ORIGIN}${raw.startsWith('/') ? '' : '/'}${raw}`;
 };

@@ -138,6 +138,11 @@ const ownerSchema = new mongoose.Schema(
       default: 'pending',
       trim: true,
     },
+    profileImage: {
+      type: String,
+      default: '',
+      trim: true,
+    },
     fcmTokenWeb: {
       type: String,
       default: '',

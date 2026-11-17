@@ -140,7 +140,7 @@ const BusBookings = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 max-w-lg mx-auto font-sans pb-32">
+    <div className="min-h-screen bg-slate-50 max-w-lg mx-auto font-booking pb-32">
       {/* Header */}
       <div className="bg-white px-5 pt-10 pb-4 sticky top-0 z-20 border-b border-slate-100 shadow-sm">
         <div className="flex items-center gap-4">
@@ -223,9 +223,9 @@ const BusBookings = () => {
                 <div className="px-4 py-2 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
                   <div className="flex items-center gap-2">
                     <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">PNR</p>
-                    <p className="text-[11px] font-black tracking-widest text-slate-900">{booking.bookingCode}</p>
+                    <p className="text-[11px] font-bold tracking-widest text-slate-900">{booking.bookingCode}</p>
                   </div>
-                  <div className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border ${statusTone[booking.status] || 'bg-white text-slate-400 border-slate-200'}`}>
+                  <div className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider border ${statusTone[booking.status] || 'bg-white text-slate-400 border-slate-200'}`}>
                     {booking.status}
                   </div>
                 </div>
@@ -234,7 +234,7 @@ const BusBookings = () => {
                   {/* Route & Times */}
                   <div className="flex items-center justify-between gap-3 mb-4">
                     <div className="flex-1">
-                      <p className="text-sm font-black text-slate-900 truncate">{booking.bus?.fromCity || 'From'}</p>
+                      <p className="text-sm font-bold text-slate-900 truncate">{booking.bus?.fromCity || 'From'}</p>
                       <p className="text-[10px] font-bold text-slate-500 mt-0.5">{booking.bus?.departure || '--:--'}</p>
                     </div>
                     <div className="flex flex-col items-center px-1">
@@ -244,7 +244,7 @@ const BusBookings = () => {
                       <BusFront size={12} className="text-slate-300 mt-1" />
                     </div>
                     <div className="flex-1 text-right">
-                      <p className="text-sm font-black text-slate-900 truncate">{booking.bus?.toCity || 'To'}</p>
+                      <p className="text-sm font-bold text-slate-900 truncate">{booking.bus?.toCity || 'To'}</p>
                       <p className="text-[10px] font-bold text-slate-500 mt-0.5">{booking.bus?.arrival || '--:--'}</p>
                     </div>
                   </div>
@@ -253,16 +253,16 @@ const BusBookings = () => {
                   <div className="flex items-center justify-between gap-2 p-2.5 bg-slate-50 rounded-xl border border-slate-100">
                     <div className="flex items-center gap-1.5">
                       <CalendarDays size={12} className="text-slate-400" />
-                      <p className="text-[10px] font-black text-slate-900">{booking.travelDate || 'NA'}</p>
+                      <p className="text-[10px] font-bold text-slate-900">{booking.travelDate || 'NA'}</p>
                     </div>
                     <div className="w-[1px] h-3 bg-slate-200" />
                     <div className="flex items-center gap-1.5">
                       <Ticket size={12} className="text-slate-400" />
-                      <p className="text-[10px] font-black text-slate-900">{(booking.activeSeatLabels || []).join(', ') || 'NA'}</p>
+                      <p className="text-[10px] font-bold text-slate-900">{(booking.activeSeatLabels || []).join(', ') || 'NA'}</p>
                     </div>
                     <div className="w-[1px] h-3 bg-slate-200" />
                     <div className="flex items-center gap-1.5">
-                      <p className="text-[10px] font-black text-slate-900">{formatMoney(booking.amount, booking.currency)}</p>
+                      <p className="text-[10px] font-bold text-slate-900">{formatMoney(booking.amount, booking.currency)}</p>
                     </div>
                   </div>
 
@@ -321,7 +321,7 @@ const BusBookings = () => {
             >
               <ChevronLeft size={16} />
             </button>
-            <p className="text-[10px] font-black text-slate-900 uppercase">
+            <p className="text-[10px] font-bold text-slate-900 uppercase">
               Page {pagination.page} / {pagination.totalPages}
             </p>
             <button

@@ -5,6 +5,7 @@ import apiClient from '../../../shared/api/axiosInstance';
 import { API_BASE_URL } from '../../../shared/api/runtimeConfig';
 import { getLocalDriverToken, getAuthenticatedDriverRole } from '../../driver/services/registrationService';
 import { isModuleAuthenticated } from '@/shared/utils/auth';
+import CancellationPolicyView from './CancellationPolicyView';
 
 const vehiclePricing = [
   { type: 'Bike', capacity: 'Up to 2 riders', price: 'Starts at Rs 49', cancellationCut: 'Admin cut up to Rs 10', note: 'Best for quick solo rides and short-distance travel.' },
@@ -233,6 +234,15 @@ const LegalPage = ({ role: propRole }) => {
       setLoading(true);
       let targetKey = '';
 
+      // Cancellation and refund pages are built live from the admin settings for both riders and drivers.
+      if (activeDoc === 'cancellation' || (activeDoc === 'refund' && activeAudience === 'driver')) {
+        if (isMounted) {
+          setPageTitle(legalContent[activeDoc]?.title || 'Cancellation Policy');
+          setCmsContent('');
+        }
+        return;
+      }
+
       if (activeAudience === 'driver') {
         targetKey = activeDoc === 'terms' ? 'driver-terms' : 'driver-privacy';
       } else {
@@ -346,6 +356,12 @@ const LegalPage = ({ role: propRole }) => {
   };
 
   const defaultContent = legalContent[activeDoc] || legalContent.terms;
+  // Cancellation charges are read live from the admin settings on both the Cancellation and the Refund pages.
+  const isPolicyDoc = activeDoc === 'cancellation' || activeDoc === 'refund';
+  const showPolicy = isPolicyDoc && (activeAudience === 'user' || activeAudience === 'driver');
+  const hideBody = showPolicy && (activeDoc === 'cancellation' || activeAudience === 'driver');
+  // Cancellation and refund pages use a light, simple look.
+  const light = isPolicyDoc;
   const Icon = activeDoc === 'privacy' ? ShieldCheck : (activeDoc === 'terms' ? ScrollText : (defaultContent.icon || FileText));
 
   return (
@@ -401,32 +417,32 @@ const LegalPage = ({ role: propRole }) => {
       </header>
 
       {/* Hero Banner */}
-      <section className="bg-[#0F172A] text-white px-4 sm:px-6 pt-10 pb-12 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-r from-orange-500/10 via-transparent to-transparent pointer-events-none" />
+      <section className={`px-4 sm:px-6 pt-10 pb-12 relative overflow-hidden ${light ? 'bg-gradient-to-b from-[#D7E8E7] via-[#E9F3F2] to-white text-slate-900 border-b border-[#0F766E]/10' : 'bg-[#0F172A] text-white'}`}>
+        <div className={`absolute inset-0 bg-gradient-to-r via-transparent to-transparent pointer-events-none ${light ? 'from-[#C6F432]/20' : 'from-orange-500/10'}`} />
         <div className="mx-auto max-w-5xl relative z-10">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
             <div className="flex items-center gap-3">
-              <div className="h-12 w-12 rounded-2xl bg-gradient-to-tr from-[#F38F24] to-[#FBBF24] text-slate-950 flex items-center justify-center shadow-lg shadow-orange-500/20">
+              <div className="h-12 w-12 rounded-2xl bg-gradient-to-tr from-[#0F766E] to-[#14A398] text-white flex items-center justify-center shadow-lg shadow-orange-500/20">
                 <Icon size={24} strokeWidth={2.2} />
               </div>
               <div>
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-white/10 text-orange-300 border border-white/10">
+                <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${light ? 'bg-[#0F766E]/10 text-[#0F766E] border-[#0F766E]/20' : 'bg-white/10 text-orange-300 border-white/10'}`}>
                   <Sparkles size={11} />
                   Official Policy Document
                 </span>
-                <p className="text-xs text-slate-400 mt-0.5">Last updated: October 2026</p>
+                <p className={`text-xs mt-0.5 ${light ? 'text-slate-500' : 'text-slate-400'}`}>{light ? 'Always up to date with our current charges' : 'Last updated: October 2026'}</p>
               </div>
             </div>
 
             {/* Audience Toggle (Driver Captain vs User Passenger) */}
-            <div className="flex items-center gap-2 bg-slate-800/90 p-1.5 rounded-2xl border border-slate-700/80 self-start sm:self-auto">
+            <div className={`flex items-center gap-2 p-1.5 rounded-2xl border self-start sm:self-auto ${light ? 'bg-white border-slate-200 shadow-xs' : 'bg-slate-800/90 border-slate-700/80'}`}>
               <button
                 type="button"
                 onClick={() => setActiveAudience('driver')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                   activeAudience === 'driver'
-                    ? 'bg-orange-500 text-white shadow-md shadow-orange-500/30'
-                    : 'text-slate-400 hover:text-white'
+                    ? 'bg-[#0F766E] text-white shadow-md shadow-[#0F766E]/30'
+                    : light ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-white'
                 }`}
               >
                 <Car size={13} />
@@ -437,8 +453,8 @@ const LegalPage = ({ role: propRole }) => {
                 onClick={() => setActiveAudience('user')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                   activeAudience === 'user'
-                    ? 'bg-orange-500 text-white shadow-md shadow-orange-500/30'
-                    : 'text-slate-400 hover:text-white'
+                    ? 'bg-[#0F766E] text-white shadow-md shadow-[#0F766E]/30'
+                    : light ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-white'
                 }`}
               >
                 <User size={13} />
@@ -447,13 +463,15 @@ const LegalPage = ({ role: propRole }) => {
             </div>
           </div>
 
-          <h1 className="text-2xl sm:text-4xl font-black tracking-tight text-white leading-tight">
+          <h1 className={`text-2xl sm:text-4xl font-black tracking-tight leading-tight ${light ? 'text-slate-900' : 'text-white'}`}>
             {pageTitle || (activeAudience === 'driver'
               ? (activeDoc === 'terms' ? 'Driver Partner Terms and Conditions' : 'Taxi Driver App Privacy Policy')
               : defaultContent.title)}
           </h1>
-          <p className="mt-3 text-sm sm:text-base text-slate-300 max-w-3xl leading-relaxed">
-            {activeAudience === 'driver'
+          <p className={`mt-3 text-sm sm:text-base max-w-3xl leading-relaxed ${light ? 'text-slate-600' : 'text-slate-300'}`}>
+            {isPolicyDoc && activeAudience === 'driver'
+              ? 'How cancellations work for driver partners: the waiting time before a no-show, the charge for cancelling a ride, and your share of the rider cancellation fee.'
+              : activeAudience === 'driver'
               ? (activeDoc === 'terms'
                 ? 'These contractual terms govern driver partners operating vehicle transit services on the Kailo Taxi Captain platform.'
                 : 'This Privacy Policy explains how Kailo Taxi collects, uses, and safeguards partner personal and location data on the Captain Driver App.')
@@ -466,7 +484,11 @@ const LegalPage = ({ role: propRole }) => {
       <main className="flex-1 px-4 sm:px-6 py-8 sm:py-12">
         <div className="mx-auto max-w-5xl">
           <div className="bg-white rounded-3xl border border-slate-200/80 shadow-xs p-6 sm:p-10">
-            {loading ? (
+            {showPolicy && <CancellationPolicyView audience={activeAudience} />}
+            {showPolicy && !hideBody && (
+              <div className="mt-10 border-t border-slate-100 pt-8" />
+            )}
+            {hideBody ? null : loading ? (
               <div className="py-24 flex flex-col items-center justify-center gap-4 text-slate-400">
                 <Loader2 size={36} className="animate-spin text-[color:var(--app-primary,#F38F24)]" />
                 <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Loading document...</p>
@@ -543,7 +565,7 @@ const LegalPage = ({ role: propRole }) => {
             <button
               type="button"
               onClick={handleBack}
-              className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-slate-900 hover:bg-black text-white text-xs font-bold shadow-sm transition-all cursor-pointer flex items-center justify-center gap-2"
+              className={`w-full sm:w-auto px-6 py-2.5 rounded-xl text-white text-xs font-bold shadow-sm transition-all cursor-pointer flex items-center justify-center gap-2 ${light ? 'bg-[#0F766E] hover:bg-[#0B5F58]' : 'bg-slate-900 hover:bg-black'}`}
             >
               <ArrowLeft size={14} />
               Return to Previous Screen

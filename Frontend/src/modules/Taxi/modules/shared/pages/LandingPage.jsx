@@ -22,6 +22,7 @@ import {
   Plane,
   Hotel,
   Truck,
+  CarTaxiFront,
 } from 'lucide-react';
 import mapImg from '@/assets/premium_grid_map.webp';
 import aboutCab from '@/assets/modern_cab_cutout.png';
@@ -31,6 +32,7 @@ import sceneFlight from '@/assets/landing/scenes/flight.webp';
 import sceneMovers from '@/assets/landing/scenes/movers.webp';
 import sceneCab from '@/assets/landing/scenes/cab.webp';
 import sceneBike from '@/assets/landing/scenes/bike.webp';
+import sceneAuto from '@/assets/landing/scenes/auto.webp';
 import sceneBus from '@/assets/landing/scenes/bus.webp';
 import sceneParcel from '@/assets/landing/scenes/parcel.webp';
 import sceneTrip from '@/assets/landing/scenes/outstation.webp';
@@ -47,7 +49,7 @@ const FALLBACK = {
   hero: {
     title: 'Every ride,',
     highlight: 'under control.',
-    subtitle: 'City rides, rentals, parcels and intercity trips in one app.',
+    subtitle: 'Cabs, bikes, autos, airport cabs, hotel transfers, bus seats and parcels in one app.',
     primaryText: 'Book a Ride',
     primaryTarget: '/taxi/user',
   },
@@ -60,6 +62,7 @@ const AUDIENCE_ICONS = { user: Users, driver: Car, owner: KeyRound };
 const SCENE_IMG = {
   cab: sceneCab,
   bike: sceneBike,
+  auto: sceneAuto,
   bus: sceneBus,
   parcel: sceneParcel,
   outstation: sceneTrip,
@@ -67,8 +70,8 @@ const SCENE_IMG = {
   hotel: sceneHotel,
   movers: sceneMovers,
 };
-const ACCENT = { cab: '#C6F432', bike: '#FFB347', bus: '#38D0F8', parcel: '#B79CFF', outstation: '#FB923C', flight: '#5EEAD4', hotel: '#F9A8D4', movers: '#FCD34D' };
-const VEHICLE_ICON = { cab: Car, bike: Bike, bus: Bus, parcel: Package, outstation: Route, flight: Plane, hotel: Hotel, movers: Truck };
+const ACCENT = { cab: '#C6F432', bike: '#FFB347', auto: '#4ADE80', bus: '#38D0F8', parcel: '#B79CFF', outstation: '#FB923C', flight: '#5EEAD4', hotel: '#F9A8D4', movers: '#FCD34D' };
+const VEHICLE_ICON = { cab: Car, bike: Bike, auto: CarTaxiFront, bus: Bus, parcel: Package, outstation: Route, flight: Plane, hotel: Hotel, movers: Truck };
 
 // Foreground of a slide: only an admin video or photo(s). By default the background picture carries the slide on its own.
 function SlideMedia({ slide, accent }) {
@@ -549,11 +552,6 @@ function Audiences({ data, download }) {
             return (
               <Reveal key={i} delay={i * 0.12}>
                 <Tilt className={`group relative flex h-full flex-col overflow-hidden rounded-[2rem] shadow-[0_40px_70px_-35px_rgba(5,46,43,0.75)] ${t.card}`} max={7}>
-                  {/* decorative depth */}
-                  <div className={`pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full blur-2xl max-sm:hidden ${t.glow}`} />
-                  <div className="pointer-events-none absolute -bottom-24 -left-10 h-60 w-60 rounded-full border-[24px] border-white/10" />
-                  <Icon className="pointer-events-none absolute -bottom-8 -right-6 h-48 w-48 opacity-[0.09]" strokeWidth={1.2} />
-
                   {it.image && <img src={it.image} alt="" className="relative h-44 w-full object-cover" />}
                   <div className="relative flex flex-1 flex-col p-8" style={{ transform: 'translateZ(30px)' }}>
                     <span className={`mb-5 flex h-14 w-14 items-center justify-center rounded-2xl shadow-lg ${t.icon}`}>
@@ -613,12 +611,39 @@ function StoreButton({ href, label, store, children }) {
 
 function Faq({ data }) {
   const [open, setOpen] = useState(0);
-  const items = arr(data.items);
-  if (!items.length) return null;
+  const [group, setGroup] = useState(0);
+  // Folders (Rider / Driver / Fleet owner). Older saved content has one flat list, shown as a single folder.
+  const groups = useMemo(() => {
+    const g = arr(data.groups).filter((x) => x && arr(x.items).length);
+    if (g.length) return g;
+    return arr(data.items).length ? [{ label: '', items: data.items }] : [];
+  }, [data]);
+  if (!groups.length) return null;
+  const current = groups[Math.min(group, groups.length - 1)];
+  const items = arr(current.items);
   return (
     <section id="faq" className="bg-gradient-to-b from-lp-mint-3 to-lp-mint-4 px-4 py-10 sm:px-6 sm:py-14 lg:px-8">
       <div className="mx-auto max-w-3xl">
         <SectionHead eyebrow={data.eyebrow ?? 'FAQ'} title={data.title} />
+        {groups.length > 1 && (
+          <div className="-mx-4 mb-6 flex justify-center overflow-x-auto px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div className="flex gap-1 rounded-2xl border border-lp-primary/10 bg-white/70 p-1.5">
+              {groups.map((g, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => {
+                    setGroup(i);
+                    setOpen(0);
+                  }}
+                  className={`shrink-0 rounded-xl px-5 py-2.5 text-sm font-bold transition ${i === group ? 'bg-lp-primary text-white shadow' : 'text-lp-ink/70 hover:bg-lp-primary/10'}`}
+                >
+                  {g.label || `Folder ${i + 1}`}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="space-y-3">
           {items.map((f, i) => (
             <div key={i} className="overflow-hidden rounded-2xl border border-white/60 bg-white/70 shadow-[0_14px_30px_-22px_rgba(5,46,43,0.5)]">

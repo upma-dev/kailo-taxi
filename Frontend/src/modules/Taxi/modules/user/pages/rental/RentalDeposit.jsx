@@ -1,9 +1,18 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, ChevronRight, ShieldCheck, CreditCard, Wallet, Smartphone } from 'lucide-react';
+import { ArrowLeft, Camera, CheckCircle2, ChevronRight, ShieldCheck, CreditCard, Upload, Wallet, Smartphone } from 'lucide-react';
 import { userService } from '../../services/userService';
 import { userAuthService } from '../../services/authService';
+import { uploadService } from '../../../../shared/services/uploadService';
+
+const fileToDataUrl = (file) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('Unable to read selected image'));
+    reader.readAsDataURL(file);
+  });
 
 const PAYMENT_METHODS = [
   { id: 'upi', label: 'UPI', icon: Smartphone },
@@ -31,11 +40,13 @@ const buildRentalBookingPayload = ({
   vehicle,
   payableNow,
   advancePaymentLabel,
+  paymentOption,
   paymentStatus,
   paymentMethod,
   paymentMethodLabel,
   payment,
   bookingReference,
+  conditionPhoto,
 }) => ({
   bookingReference,
   vehicleTypeId: vehicle.id || vehicle._id,
@@ -44,12 +55,14 @@ const buildRentalBookingPayload = ({
   totalCost: Number(state.totalCost || 0),
   payableNow: Number(payableNow || 0),
   advancePaymentLabel,
+  paymentOption: paymentOption || 'advance',
   paymentStatus,
   paymentMethod,
   paymentMethodLabel,
   payment,
   kycCompleted: true,
   kycDocuments: state.rentalKyc?.documents || null,
+  conditionPhoto: conditionPhoto || null,
   selectedPackage: state.selectedPackage
     ? {
         id: state.selectedPackage.id || state.selectedPackage._id || '',
@@ -116,16 +129,48 @@ const RentalDeposit = () => {
   const { totalCost, selectedPackage, serviceLocation } = state;
   const vehicle = vehicleSnapshot || {};
   const advancePayment = vehicle.advancePayment || {};
+  const safetyMoney = vehicle.safetyMoney || {};
+  const safetyAmount = Math.max(0, Number(safetyMoney.amount || 0));
+  const hasSafetyOption = Boolean(safetyMoney.enabled) && safetyAmount > 0;
+  // One payment only: a vehicle with refundable safety money takes just that (the final bill is deducted
+  // from it and the balance is refunded). The small advance is used only when no safety money is set.
+  const paymentOption = hasSafetyOption ? 'safety_money' : 'advance';
   const payableNow = useMemo(
-    () => (advancePayment.enabled ? Number(advancePayment.amount || 0) : 0),
-    [advancePayment.amount, advancePayment.enabled],
+    // Safety money option: rental cost + refundable safety money are paid together.
+    () =>
+      paymentOption === 'safety_money'
+        ? Number(totalCost || 0) + safetyAmount
+        : advancePayment.enabled
+          ? Number(advancePayment.amount || 0)
+          : 0,
+    [paymentOption, safetyAmount, totalCost, advancePayment.amount, advancePayment.enabled],
   );
-  const advancePaymentLabel = advancePayment.label || 'Advance booking payment';
+  const advancePaymentLabel =
+    paymentOption === 'safety_money' ? 'Refundable safety money' : advancePayment.label || 'Advance booking payment';
   const bookingReference = useMemo(
     () => state.bookingReference || `RNT-${Date.now().toString(36).slice(-6).toUpperCase()}`,
     [state.bookingReference],
   );
   const [method, setMethod] = useState('upi');
+  // The vehicle condition photo is required before paying: no photo, no payment and no rental request.
+  const [conditionPhotoFile, setConditionPhotoFile] = useState(null);
+  const [conditionPhotoPreview, setConditionPhotoPreview] = useState('');
+  const conditionPhotoRef = useRef(null);
+  const conditionInputRef = useRef(null);
+  const conditionCardRef = useRef(null);
+  const [photoMissing, setPhotoMissing] = useState(false);
+
+  const handleConditionPhoto = (file) => {
+    if (!file) return;
+    setPhotoMissing(false);
+    conditionPhotoRef.current = null;
+    setConditionPhotoFile(file);
+    setConditionPhotoPreview((previous) => {
+      if (previous) URL.revokeObjectURL(previous);
+      return URL.createObjectURL(file);
+    });
+    setPaymentError('');
+  };
   const [paying, setPaying] = useState(false);
   const [paymentError, setPaymentError] = useState('');
   const [walletBalance, setWalletBalance] = useState(0);
@@ -161,7 +206,7 @@ const RentalDeposit = () => {
   }, []);
 
   if (!vehicleSnapshot) {
-    navigate('/rental');
+    navigate('/taxi/user/rental');
     return null;
   }
 
@@ -178,11 +223,13 @@ const RentalDeposit = () => {
         vehicle,
         payableNow,
         advancePaymentLabel,
+        paymentOption,
         paymentStatus,
         paymentMethod,
         paymentMethodLabel,
         payment,
         bookingReference,
+        conditionPhoto: conditionPhotoRef.current,
       }),
     );
 
@@ -193,6 +240,28 @@ const RentalDeposit = () => {
     if (paying) return;
 
     setPaymentError('');
+
+    if (!conditionPhotoFile) {
+      setPaymentError('Please upload the vehicle condition photo before paying.');
+      setPhotoMissing(true);
+      conditionCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+
+    if (!conditionPhotoRef.current) {
+      setPaying(true);
+      try {
+        const upload = await uploadService.uploadImage(await fileToDataUrl(conditionPhotoFile), 'rental-condition');
+        const imageUrl = upload?.url || upload?.secureUrl || '';
+        if (!imageUrl) throw new Error('Condition photo upload failed');
+        conditionPhotoRef.current = { imageUrl, fileName: conditionPhotoFile.name || 'condition-photo', uploadedAt: new Date().toISOString() };
+      } catch (uploadError) {
+        setPaymentError(uploadError?.message || 'Could not upload the condition photo. Please try again.');
+        setPaying(false);
+        return;
+      }
+      setPaying(false);
+    }
 
     if (payableNow <= 0) {
       try {
@@ -209,11 +278,14 @@ const RentalDeposit = () => {
           bookingReference,
         });
 
-        navigate('/rental/confirmed', {
+        navigate('/taxi/user/rental/confirmed', {
           state: {
             ...state,
             vehicle,
             deposit: payableNow,
+            paymentOption,
+deposit: payableNow,
+            conditionPhoto: conditionPhotoRef.current,
             paymentMethod: method,
             paymentStatus: 'not_required',
             bookingReference: bookingRequest.bookingReference || '',
@@ -239,6 +311,7 @@ const RentalDeposit = () => {
           bookingReference,
           vehicleId: vehicle.id || vehicle._id,
           vehicleName: vehicle.name,
+          paymentOption,
         });
         const payment = walletResponse?.data || walletResponse || {};
         const bookingRequest = await submitBookingRequest({
@@ -249,12 +322,15 @@ const RentalDeposit = () => {
           bookingReference,
         });
         setWalletBalance(Number(payment.balance || 0));
-        navigate('/rental/confirmed', {
+        navigate('/taxi/user/rental/confirmed', {
           replace: true,
           state: {
             ...state,
             vehicle,
             deposit: payableNow,
+            paymentOption,
+deposit: payableNow,
+            conditionPhoto: conditionPhotoRef.current,
             paymentMethod: 'wallet',
             paymentMethodLabel: 'Wallet',
             paymentStatus: 'paid',
@@ -323,12 +399,15 @@ const RentalDeposit = () => {
               payment,
               bookingReference: order.bookingReference || '',
             });
-            navigate('/rental/confirmed', {
+            navigate('/taxi/user/rental/confirmed', {
               replace: true,
               state: {
                 ...state,
                 vehicle,
                 deposit: payableNow,
+                paymentOption,
+deposit: payableNow,
+                conditionPhoto: conditionPhotoRef.current,
                 paymentMethod: method,
                 paymentMethodLabel: methodLabel,
                 paymentStatus: 'paid',
@@ -418,14 +497,16 @@ const RentalDeposit = () => {
               <span>
                 {advancePaymentLabel}
               </span>
-              <span>Rs.{payableNow}</span>
+              <span>Rs.{paymentOption === 'safety_money' ? safetyAmount : payableNow}</span>
             </div>
             <div className="flex justify-between text-[14px] font-black text-slate-900 pt-1 border-t border-slate-50">
               <span>Total now</span>
               <span>Rs.{payableNow}</span>
             </div>
             <p className="text-[10px] font-bold text-slate-400">
-              Rental cost Rs.{totalCost} is paid at pickup.
+              {paymentOption === 'safety_money'
+                ? 'The final bill is deducted from this total when the ride ends. The rest is refunded to your wallet.'
+                : `Rental cost Rs.${totalCost} is paid at pickup.`}
             </p>
           </div>
         </motion.div>
@@ -440,8 +521,62 @@ const RentalDeposit = () => {
             <ShieldCheck size={15} className="text-emerald-500" strokeWidth={2} />
           </div>
           <p className="text-[12px] font-bold text-slate-500 leading-relaxed">
-            You are paying Rs.{payableNow} right now as the booking advance. The remaining rental cost is paid at pickup.
+            {paymentOption === 'safety_money'
+              ? `You are paying Rs.${payableNow} right now (rental Rs.${totalCost} + refundable safety money Rs.${safetyAmount}). At the end of the ride your final bill is deducted from it and the balance is refunded to your wallet. If the bill is more, you pay the difference.`
+              : `You are paying Rs.${payableNow} right now as the booking advance. The remaining rental cost is paid at pickup.`}
           </p>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.12 }}
+          ref={conditionCardRef}
+          className={`rounded-[20px] border bg-white/90 shadow-[0_4px_14px_rgba(15,23,42,0.05)] px-5 py-4 space-y-3 ${
+            photoMissing && !conditionPhotoFile ? 'border-rose-400 ring-2 ring-rose-200' : 'border-white/80'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-[9px] bg-orange-50 flex items-center justify-center">
+              <Camera size={13} className="text-orange-500" strokeWidth={2.5} />
+            </div>
+            <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">Vehicle condition photo</p>
+          </div>
+          <p className="text-[12px] font-bold text-slate-400">
+            Take a photo of the vehicle's condition. This protects you during return inspection.{' '}
+            <span className="font-black text-rose-500">Required to pay and book.</span>
+          </p>
+          {conditionPhotoPreview ? (
+            <div className="relative rounded-[14px] overflow-hidden">
+              <img src={conditionPhotoPreview} alt="Vehicle condition" className="w-full h-40 object-cover" />
+              <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
+                <CheckCircle2 size={28} className="text-white" strokeWidth={2} />
+              </div>
+              <button
+                type="button"
+                onClick={() => conditionInputRef.current?.click()}
+                className="absolute bottom-2 right-2 rounded-full bg-white/90 px-3 py-1 text-[11px] font-black text-slate-700"
+              >
+                Retake
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => conditionInputRef.current?.click()}
+              className="w-full flex items-center justify-center gap-2 py-3.5 rounded-[14px] border-2 border-dashed border-slate-200 text-[12px] font-black text-slate-500 active:bg-slate-50 transition-all"
+            >
+              <Upload size={14} strokeWidth={2.5} /> Upload Condition Photo
+            </button>
+          )}
+          <input
+            ref={conditionInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={(event) => handleConditionPhoto(event.target.files?.[0])}
+          />
         </motion.div>
 
         <motion.div

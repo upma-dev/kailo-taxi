@@ -6,7 +6,7 @@ import { ArrowLeft } from 'lucide-react';
 
 export const Screen = ({ children, footer = null }) => (
   <div
-    className="min-h-screen bg-[linear-gradient(180deg,#f6efe4_0%,#fcfaf6_28%,#ffffff_100%)] pb-36"
+    className="min-h-screen bg-[linear-gradient(180deg,#f6efe4_0%,#fcfaf6_28%,#ffffff_100%)] pb-52"
     style={{ fontFamily: "'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" }}
   >
     <div className="mx-auto w-full max-w-md px-5 pt-6">{children}</div>
@@ -122,7 +122,7 @@ export const SecondaryButton = ({ children, className = '', ...props }) => (
 /** Sticky action bar that sits above the bottom navigation. */
 export const StickyActions = ({ children }) => (
   <div className="fixed inset-x-0 bottom-[84px] z-30 px-5">
-    <div className="mx-auto flex max-w-md gap-3 rounded-[1.75rem] border border-white/80 bg-white/95 p-2.5 shadow-[0_-10px_40px_rgba(15,23,42,0.12)] backdrop-blur-xl">
+    <div className="mx-auto flex max-w-md items-stretch gap-3 rounded-[1.75rem] border border-slate-200/80 bg-white p-2.5 shadow-[0_-10px_40px_rgba(15,23,42,0.12)] [&>*]:w-auto [&>*]:min-w-0 [&>*]:flex-1 [&>.shrink-0]:w-14 [&>.shrink-0]:flex-none">
       {children}
     </div>
   </div>

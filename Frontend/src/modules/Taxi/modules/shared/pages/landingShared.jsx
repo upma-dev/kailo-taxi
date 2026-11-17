@@ -21,6 +21,8 @@ import {
   Award,
   Building2,
   Wallet,
+  Plane,
+  Hotel,
 } from 'lucide-react';
 import api from '../../../shared/api/axiosInstance';
 
@@ -86,6 +88,8 @@ export const ICONS = {
   award: Award,
   building: Building2,
   wallet: Wallet,
+  plane: Plane,
+  hotel: Hotel,
 };
 export const ICON_KEYS = Object.keys(ICONS);
 export const iconFor = (key, fallback = Star) => ICONS[key] || fallback;

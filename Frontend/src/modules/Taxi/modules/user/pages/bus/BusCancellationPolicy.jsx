@@ -56,7 +56,7 @@ const BusCancellationPolicy = ({ bus, className = '' }) => {
 
   return (
     <div className={`rounded-[24px] border border-slate-100 bg-white p-4 shadow-sm ${className}`}>
-      <p className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">
+      <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-slate-500">
         <ShieldCheck size={15} className="text-emerald-600" /> Cancellation policy
       </p>
       {text ? <p className="mt-2 text-[13px] font-semibold leading-relaxed text-slate-600">{text}</p> : null}
@@ -68,7 +68,7 @@ const BusCancellationPolicy = ({ bus, className = '' }) => {
                 <p className="text-[12px] font-bold text-slate-700">{line.when}</p>
                 {line.notes ? <p className="mt-0.5 text-[11px] font-semibold text-slate-400">{line.notes}</p> : null}
               </div>
-              <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${TONES[line.tone]}`}>
+              <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${TONES[line.tone]}`}>
                 {line.refund}
               </span>
             </div>

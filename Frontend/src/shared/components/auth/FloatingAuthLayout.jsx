@@ -115,13 +115,13 @@ export default function FloatingAuthLayout({
         <div className="mb-8 text-center">
           <h1
             className="text-[29px] font-extrabold uppercase leading-tight tracking-[0.01em] text-[#0B3B36]"
-            style={{ fontFamily: "'Cinzel', 'Playfair Display', Georgia, serif" }}
+            style={{ fontFamily: "'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" }}
           >
             {title}
           </h1>
           <span className="mx-auto mb-3 mt-1 block h-[5px] w-14 rounded-full" style={{ background: accent }} />
           {subtitle ? (
-            <p className="mx-auto max-w-[30ch] text-[13px] font-medium leading-relaxed text-gray-500" style={{ fontFamily: "'Poppins', system-ui, sans-serif" }}>
+            <p className="mx-auto max-w-[30ch] text-[13px] font-medium leading-relaxed text-gray-500" style={{ fontFamily: "'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" }}>
               {subtitle}
             </p>
           ) : null}

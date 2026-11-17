@@ -12,6 +12,7 @@ import { createDefaultBusinessSettings } from '../data/defaultBusinessSettings.j
 import { createDefaultAppSettings } from '../data/defaultAppSettings.js';
 import { Airport } from '../models/Airport.js';
 import { BusService } from '../models/BusService.js';
+import { BusBooking } from '../../user/models/BusBooking.js';
 import { DriverNeededDocument } from '../models/DriverNeededDocument.js';
 import { GoodsType } from '../models/GoodsType.js';
 import { OwnerNeededDocument } from '../models/OwnerNeededDocument.js';
@@ -64,6 +65,7 @@ import {
   notifyUserAccountDeleted,
 } from '../../services/dispatchService.js';
 import { buildRentalTrackingSnapshot, listActiveRentalTrackingBookings } from '../../services/rentalTrackingService.js';
+import { sendPushNotificationToEntities } from '../../services/pushNotificationService.js';
 import { sendEmail } from '../../services/mailService.js';
 import { getTransportRideSettings, invalidateTransportSettingsCache } from '../../services/transportSettingsService.js';
 import { createTaxiPayout } from '../../services/withdrawalPayout.service.js';
@@ -857,13 +859,29 @@ const syncBusDriverForBusService = async (busService, normalizedPayload = {}) =>
     (existingDriverId && await BusDriver.findById(existingDriverId)) ||
     (await BusDriver.findOne({ phone: driverPhone }));
 
+  // A phone number can captain only one bus. Do not silently take a driver away from another live bus.
+  const otherBusId = existingDriver?.assignedBusServiceId;
+  if (otherBusId && String(otherBusId) !== String(busService._id)) {
+    const otherBusExists = await BusService.exists({ _id: otherBusId });
+    if (otherBusExists) {
+      throw new ApiError(409, 'This phone number is already assigned as driver on another bus');
+    }
+  }
+
+  // Phone owned by a different bus driver record than the one linked to this bus.
+  if (existingDriver && existingDriverId && String(existingDriver._id) !== String(existingDriverId)) {
+    await BusDriver.findByIdAndDelete(existingDriverId);
+  }
+
   const driver = existingDriver || new BusDriver();
+  // The captain can work only once admin has approved the bus.
+  const busIsLive = String(busService.status || '') === 'active';
 
   driver.name = driverName;
   driver.phone = driverPhone;
-  driver.approve = true;
+  driver.approve = busIsLive;
   driver.active = true;
-  driver.status = 'approved';
+  driver.status = busIsLive ? 'approved' : 'pending';
   driver.assignedBusServiceId = busService._id;
   driver.operatorName = busService.operatorName || '';
   driver.busName = busService.busName || '';
@@ -1010,6 +1028,12 @@ const normalizeRentalAdvancePayment = (value = {}, existing = {}) => {
   };
 };
 
+const normalizeRentalSafetyMoney = (value = {}, existing = {}) => ({
+  enabled: normalizeBoolean(value?.enabled ?? existing?.enabled ?? false),
+  amount: Math.max(0, sanitizeBusSeatPrice(value?.amount, existing?.amount ?? 0)),
+  notes: sanitizeBusText(value?.notes, existing?.notes || ''),
+});
+
 const normalizeRentalVehiclePayload = (payload = {}, existing = {}) => {
   const fallbackBlueprint = existing.blueprint?.lowerDeck?.length
     ? {
@@ -1073,6 +1097,7 @@ const normalizeRentalVehiclePayload = (payload = {}, existing = {}) => {
       payload.advancePayment,
       existing.advancePayment,
     ),
+    safetyMoney: normalizeRentalSafetyMoney(payload.safetyMoney, existing.safetyMoney),
     status: payload.status
       ? (payload.status === 'inactive' ? 'inactive' : 'active')
       : normalizeBoolean(payload.active ?? existing.active ?? true)
@@ -1233,6 +1258,7 @@ const serializeRentalVehicleType = (item = {}) => ({
     : [],
   poolingEnabled: Boolean(item.poolingEnabled),
   advancePayment: normalizeRentalAdvancePayment(item.advancePayment),
+  safetyMoney: normalizeRentalSafetyMoney(item.safetyMoney),
   blueprint: {
     templateKey: item.blueprint?.templateKey || 'compact_4',
     lowerDeck: normalizeBusDeck(item.blueprint?.lowerDeck || []),
@@ -1397,6 +1423,20 @@ const serializeRentalBookingRequest = (item = {}) => ({
   totalCost: Number(item.totalCost || 0),
   payableNow: Number(item.payableNow || 0),
   advancePaymentLabel: item.advancePaymentLabel || '',
+  conditionPhoto: {
+    imageUrl: item.conditionPhoto?.imageUrl || '',
+    fileName: item.conditionPhoto?.fileName || '',
+    uploadedAt: item.conditionPhoto?.uploadedAt || null,
+  },
+  paymentOption: item.paymentOption === 'safety_money' ? 'safety_money' : 'advance',
+  safetyMoney: {
+    amount: Number(item.safetyMoney?.amount || 0),
+    status: item.safetyMoney?.status || 'none',
+    deductedAmount: Number(item.safetyMoney?.deductedAmount || 0),
+    refundedAmount: Number(item.safetyMoney?.refundedAmount || 0),
+    dueAmount: Number(item.safetyMoney?.dueAmount || 0),
+    settledAt: item.safetyMoney?.settledAt || null,
+  },
   paymentStatus: item.paymentStatus || 'pending',
   paymentMethod: item.paymentMethod || '',
   paymentMethodLabel: item.paymentMethodLabel || '',
@@ -1499,47 +1539,51 @@ const resolveRentalSelectedPackagePricing = (item = {}) => {
 };
 
 const computeRentalRideMetrics = (item = {}, endedAt = null) => {
-  const startDate = item.assignedAt || item.pickupDateTime || item.createdAt;
+  const startDate = item.assignedAt || item.reviewedAt || item.createdAt;
   const startMs = startDate ? new Date(startDate).getTime() : NaN;
   const endMs = endedAt ? new Date(endedAt).getTime() : Date.now();
   const { includedHours, basePrice, extraHourPrice } = resolveRentalSelectedPackagePricing(item);
   const hourlyRate = includedHours > 0 ? basePrice / includedHours : 0;
+  const round2 = (value) => Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
 
-  if (!Number.isFinite(startMs)) {
-    return {
-      hourlyRate: Math.max(0, hourlyRate),
-      includedHours,
-      basePrice,
-      extraHourRate: extraHourPrice,
-      elapsedMinutes: 0,
-      elapsedHours: 0,
-      currentCharge: Math.max(basePrice, Number(item.payableNow || 0)),
-      remainingDue: Math.max(0, Math.max(basePrice, Number(item.payableNow || 0)) - Number(item.payableNow || 0)),
-    };
-  }
+  // Two ways to pay at booking: a small advance (it is also the minimum bill) or refundable safety money
+  // (no minimum: the final bill is deducted from it and the balance is refunded).
+  const isSafetyMoney = item.paymentOption === 'safety_money';
+  const paidNow = Number(item.payableNow || 0);
+  const safetyAmount = isSafetyMoney ? Number(item.safetyMoney?.amount || paidNow) : 0;
+  const minimumCharge = isSafetyMoney ? 0 : paidNow;
 
-  const elapsedMs = Math.max(0, endMs - startMs);
+  const hasStart = Number.isFinite(startMs);
+  const elapsedMs = hasStart ? Math.max(0, endMs - startMs) : 0;
   const elapsedMinutes = Math.max(0, Math.ceil(elapsedMs / 60000));
   const elapsedHours = elapsedMs / 3600000;
-  const elapsedChargeWithinPackage = elapsedHours <= includedHours
+  // The bill grows with the running time (per minute): hourly rate while inside the package,
+  // then the extra-hour rate.
+  const overtimeRate = extraHourPrice > 0 ? extraHourPrice : hourlyRate;
+  // Safety money option: the rental package is always charged in full (even if the ride is returned early);
+  // only time beyond the package adds to the bill. Advance option: the bill grows with the running time.
+  const runningCharge = !hasStart
     ? basePrice
-    : basePrice + Math.ceil(Math.max(0, elapsedHours - includedHours)) * extraHourPrice;
-  const uncappedCharge = Math.max(Number(item.payableNow || 0), elapsedChargeWithinPackage);
-  const currentCharge = Math.round((uncappedCharge + Number.EPSILON) * 100) / 100;
-  const remainingDue = Math.max(
-    0,
-    Math.round((currentCharge - Number(item.payableNow || 0) + Number.EPSILON) * 100) / 100,
-  );
+    : elapsedHours <= includedHours
+      ? (isSafetyMoney ? basePrice : hourlyRate * elapsedHours)
+      : basePrice + (elapsedHours - includedHours) * overtimeRate;
+  const currentCharge = round2(Math.max(minimumCharge, runningCharge));
+  const dueAmount = isSafetyMoney ? round2(Math.max(0, currentCharge - safetyAmount)) : round2(Math.max(0, currentCharge - paidNow));
 
   return {
-    hourlyRate: Math.max(0, Math.round((hourlyRate + Number.EPSILON) * 100) / 100),
+    hourlyRate: Math.max(0, round2(hourlyRate)),
     includedHours,
-    basePrice: Math.round((basePrice + Number.EPSILON) * 100) / 100,
-    extraHourRate: Math.round((extraHourPrice + Number.EPSILON) * 100) / 100,
+    basePrice: round2(basePrice),
+    extraHourRate: round2(extraHourPrice),
     elapsedMinutes,
-    elapsedHours: Math.round((elapsedHours + Number.EPSILON) * 100) / 100,
+    elapsedSeconds: Math.floor(elapsedMs / 1000),
+    elapsedHours: round2(elapsedHours),
     currentCharge,
-    remainingDue,
+    remainingDue: dueAmount,
+    paymentOption: isSafetyMoney ? 'safety_money' : 'advance',
+    safetyMoneyAmount: round2(safetyAmount),
+    safetyDeducted: isSafetyMoney ? round2(Math.min(currentCharge, safetyAmount)) : 0,
+    safetyRefund: isSafetyMoney ? round2(Math.max(0, safetyAmount - currentCharge)) : 0,
   };
 };
 
@@ -9026,8 +9070,14 @@ export const createBusService = async (payload = {}, options = {}) => {
     ...normalizedPayload,
     ownerId,
   });
-  await syncBusDriverForBusService(item, normalizedPayload);
-  await item.save();
+  try {
+    await syncBusDriverForBusService(item, normalizedPayload);
+    await item.save();
+  } catch (error) {
+    // Do not leave a bus behind when its driver could not be linked.
+    await BusService.findByIdAndDelete(item._id);
+    throw error;
+  }
   return serializeBusService(item.toObject());
 };
 
@@ -9071,6 +9121,25 @@ export const updateBusService = async (id, payload = {}, options = {}) => {
 
   export const deleteBusService = async (id, options = {}) => {
     const scopedOwnerId = toObjectId(options.ownerId);
+    const target = scopedOwnerId
+      ? await BusService.findOne({ _id: id, ownerId: scopedOwnerId }).select('_id')
+      : await BusService.findById(id).select('_id');
+    if (!target) throw new ApiError(404, 'Bus service not found');
+
+    // Passengers have paid for these seats: cancel/refund them first instead of deleting the bus under them.
+    const istToday = new Date(Date.now() + 330 * 60 * 1000).toISOString().slice(0, 10);
+    const liveBookings = await BusBooking.countDocuments({
+      busServiceId: target._id,
+      status: { $in: ['pending', 'confirmed', 'boarded', 'partially_cancelled'] },
+      travelDate: { $gte: istToday },
+    });
+    if (liveBookings > 0) {
+      throw new ApiError(
+        409,
+        `This bus has ${liveBookings} upcoming booking${liveBookings === 1 ? '' : 's'}. Cancel them first, then delete the bus.`,
+      );
+    }
+
     const item = scopedOwnerId
       ? await BusService.findOneAndDelete({ _id: id, ownerId: scopedOwnerId })
       : await BusService.findByIdAndDelete(id);
@@ -9087,6 +9156,9 @@ export const updateBusService = async (id, payload = {}, options = {}) => {
     item.status = 'active';
     item.rejectionReason = '';
     await item.save();
+    if (item.busDriverId) {
+      await BusDriver.findByIdAndUpdate(item.busDriverId, { approve: true, status: 'approved' });
+    }
     return serializeBusService(item.toObject());
   };
 
@@ -9096,6 +9168,9 @@ export const updateBusService = async (id, payload = {}, options = {}) => {
     item.status = 'rejected';
     item.rejectionReason = String(reason || 'Bus registration requires details update').trim();
     await item.save();
+    if (item.busDriverId) {
+      await BusDriver.findByIdAndUpdate(item.busDriverId, { approve: false, status: 'pending' });
+    }
     return serializeBusService(item.toObject());
   };
 
@@ -9410,8 +9485,10 @@ export const getRentalTrackingDashboard = async () => {
       throw new ApiError(404, 'Rental booking request not found');
     }
 
+    const previousRentalStatus = String(item.status || '');
+
     if (payload.status !== undefined) {
-      if (!['pending', 'confirmed', 'assigned', 'end_requested', 'completed', 'cancelled'].includes(String(payload.status))) {
+      if (!['pending', 'confirmed','assigned', 'end_requested', 'completed', 'cancelled'].includes(String(payload.status))) {
         throw new ApiError(400, 'Invalid rental booking request status');
       }
       item.status = String(payload.status);
@@ -9504,9 +9581,91 @@ export const getRentalTrackingDashboard = async () => {
       item.completedAt = null;
     }
 
+    // Safety money: when the ride is completed deduct the final bill from it and refund the rest to the rider's wallet.
+    if (
+      item.status === 'completed' &&
+      item.paymentOption === 'safety_money' &&
+      item.safetyMoney?.status === 'held'
+    ) {
+      const heldAmount = Number(item.safetyMoney.amount || item.payableNow || 0);
+      const finalBill = Math.max(0, Number(item.finalCharge || 0));
+      const deducted = Math.min(finalBill, heldAmount);
+      const refund = Math.round((heldAmount - deducted + Number.EPSILON) * 100) / 100;
+      const due = Math.round((Math.max(0, finalBill - heldAmount) + Number.EPSILON) * 100) / 100;
+
+      if (refund > 0 && item.userId) {
+        let wallet = await UserWallet.findOne({ userId: item.userId });
+        if (!wallet) {
+          wallet = new UserWallet({ userId: item.userId, balance: 0, refundWallet: 0, transactions: [] });
+        }
+        const referenceKey = `rental_safety_refund_${item.bookingReference}`;
+        const alreadyRefunded = (wallet.transactions || []).some((entry) => String(entry?.referenceKey || '') === referenceKey);
+        if (!alreadyRefunded) {
+          wallet.balance = Math.round((Number(wallet.balance || 0) + refund + Number.EPSILON) * 100) / 100;
+          wallet.transactions.push({
+            kind: 'credit',
+            amount: refund,
+            title: 'Rental refund (safety money)',
+            description: `${item.assignedVehicle?.name || item.vehicleName || 'Rental vehicle'} - ${item.bookingReference} - final bill Rs.${finalBill.toFixed(2)} deducted`,
+            provider: 'wallet',
+            providerPaymentId: String(item.bookingReference || ''),
+            referenceKey,
+          });
+          if (wallet.transactions.length > 50) {
+            wallet.transactions = wallet.transactions.slice(-50);
+          }
+          await wallet.save();
+        }
+      }
+
+      item.safetyMoney.status = 'settled';
+      item.safetyMoney.deductedAmount = deducted;
+      item.safetyMoney.refundedAmount = refund;
+      item.safetyMoney.dueAmount = due;
+      item.safetyMoney.settledAt = new Date();
+    }
+
+    // The rental clock starts once, when the admin first approves it (later edits must not restart it).
+    if (['confirmed', 'assigned'].includes(String(item.status)) && !item.assignedAt) {
+      item.assignedAt = new Date();
+    }
+
     item.reviewedAt = new Date();
     item.reviewedBy = adminId || null;
     await item.save();
+
+    // Tell the rider when the admin approves (or declines) the rental request.
+    const newRentalStatus = String(item.status || '');
+    if (newRentalStatus !== previousRentalStatus && item.userId) {
+      const vehicleLabel = item.assignedVehicle?.name || item.vehicleName || 'rental vehicle';
+      const messages = {
+        confirmed: ['Rental request accepted', `Your rental request for ${vehicleLabel} (${item.bookingReference}) has been accepted.`],
+        assigned: ['Rental request accepted', `Your rental request for ${vehicleLabel} (${item.bookingReference}) has been accepted. A vehicle is assigned to you.`],
+        completed: [
+          'Rental ride completed',
+          item.paymentOption === 'safety_money'
+            ? `Final bill Rs.${Number(item.finalCharge || 0).toFixed(0)}. Rs.${Number(item.safetyMoney?.deductedAmount || 0).toFixed(0)} deducted from your safety money, Rs.${Number(item.safetyMoney?.refundedAmount || 0).toFixed(0)} refunded to your wallet${Number(item.safetyMoney?.dueAmount || 0) > 0 ? `, Rs.${Number(item.safetyMoney.dueAmount).toFixed(0)} still due` : ''}.`
+            : `Your rental ride (${item.bookingReference}) has been completed. Final total is Rs.${Number(item.finalCharge || 0).toFixed(0)}.`,
+        ],
+        cancelled: ['Rental request cancelled', `Your rental request (${item.bookingReference}) was cancelled${item.cancelReason ? `: ${item.cancelReason}` : '.'}`],
+      };
+      const message = messages[newRentalStatus];
+      if (message) {
+        sendPushNotificationToEntities({
+          userIds: [String(item.userId)],
+          title: message[0],
+          body: message[1],
+          data: {
+            type: 'rental_request_status',
+            status: newRentalStatus,
+            bookingReference: String(item.bookingReference || ''),
+            link: '/taxi/user/activity',
+          },
+        }).catch((error) => {
+          console.error('Failed to send rental request status push', error);
+        });
+      }
+    }
 
     const populated = await RentalBookingRequest.findById(item._id)
       .populate('userId', 'name phone email')

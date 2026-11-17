@@ -277,6 +277,27 @@ const rentalBookingRequestSchema = new mongoose.Schema(
       default: '',
       trim: true,
     },
+    // 'advance' = small booking advance (rest paid at the end); 'safety_money' = refundable deposit,
+    // the final bill is deducted from it and the balance is refunded to the rider's wallet.
+    // Photo of the vehicle's condition taken by the rider before paying (required to create a request).
+    conditionPhoto: {
+      imageUrl: { type: String, default: '', trim: true },
+      fileName: { type: String, default: '', trim: true },
+      uploadedAt: { type: Date, default: null },
+    },
+    paymentOption: {
+      type: String,
+      enum: ['advance', 'safety_money'],
+      default: 'advance',
+    },
+    safetyMoney: {
+      amount: { type: Number, default: 0, min: 0 },
+      status: { type: String, enum: ['none', 'held', 'settled'], default: 'none' },
+      deductedAmount: { type: Number, default: 0, min: 0 },
+      refundedAmount: { type: Number, default: 0, min: 0 },
+      dueAmount: { type: Number, default: 0, min: 0 },
+      settledAt: { type: Date, default: null },
+    },
     paymentStatus: {
       type: String,
       enum: ['pending', 'paid', 'not_required', 'failed'],
