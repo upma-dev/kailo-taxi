@@ -9,9 +9,9 @@ const DEFAULT_CONTACT = {
   contact_heading: "We're Here to",
   contact_highlight: 'Help',
   contact_intro: 'Got a question or need assistance? Reach out to our dedicated support team available 24/7.',
-  contact_phone: '7409129517',
+  contact_phone: '',
   contact_email: 'support@kailotaxi.com',
-  contact_address: 'Office No. 110,\nB. K Tower, H-65, Sec-63,\nNoida 201301',
+  contact_address: 'Bengaluru, Karnataka, India',
   contact_hours: 'Our platform operates 24 hours a day, 7 days a week. Support is always online.',
 };
 
@@ -61,6 +61,7 @@ const ContactPage = () => {
       {/* Main Content */}
       <div className="max-w-5xl mx-auto px-6 py-20">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            {content.contact_phone ? (
             <div className="bg-white p-10 rounded-3xl shadow-sm border border-gray-100 flex flex-col items-center text-center">
                 <div className="w-16 h-16 bg-yellow-50 rounded-2xl flex items-center justify-center mb-6">
                     <Phone className="text-[#FFB300]" size={32} />
@@ -71,6 +72,7 @@ const ContactPage = () => {
                 </p>
                 <p className="text-3xl font-black text-[#1a1a1a]">{content.contact_phone}</p>
             </div>
+            ) : null}
 
             <div className="bg-white p-10 rounded-3xl shadow-sm border border-gray-100 flex flex-col items-center text-center">
                 <div className="w-16 h-16 bg-gray-50 rounded-2xl flex items-center justify-center mb-6">

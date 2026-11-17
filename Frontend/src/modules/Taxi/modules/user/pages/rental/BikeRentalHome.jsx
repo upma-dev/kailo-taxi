@@ -2,13 +2,28 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import MyQuoteRequests from '../../components/MyQuoteRequests';
-import { ArrowLeft, Fuel, Shield, ChevronRight, Star, Info, Car, Search, X } from 'lucide-react';
+import DriverRentalList from '../../components/DriverRentalList';
+import { ArrowLeft, Fuel, Shield, ChevronRight, Star, Info, Car, Search, X, KeyRound, UserRound, MessageSquareQuote } from 'lucide-react';
 import { userService } from '../../services/userService';
 import { resolveAssetUrl } from '../../components/useVehicleTiles';
 
 const DURATION_TABS = ['Hourly', 'Half-Day', 'Daily'];
 const RENTAL_SELECTED_VEHICLE_STORAGE_KEY = 'selectedRentalVehicleDetail';
 const RENTAL_PAGE_SIZE = 10;
+const RENTAL_SERVICE_MODE_STORAGE_KEY = 'selectedRentalServiceMode';
+
+const SERVICE_MODES = [
+  { key: 'self_drive', label: 'Rental Vehicle', note: 'You drive it yourself', icon: KeyRound },
+  { key: 'with_driver', label: 'Rental with Driver', note: 'A driver comes with it', icon: UserRound },
+];
+
+const readStoredServiceMode = () => {
+  try {
+    return window.sessionStorage.getItem(RENTAL_SERVICE_MODE_STORAGE_KEY) === 'with_driver' ? 'with_driver' : 'self_drive';
+  } catch {
+    return 'self_drive';
+  }
+};
 
 const infoBanner = {
   Hourly: 'Short rentals for quick city use.',
@@ -151,12 +166,25 @@ const BikeRentalHome = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [searchFocused, setSearchFocused] = useState(false);
+  const [serviceMode, setServiceModeState] = useState(readStoredServiceMode);
   const navigate = useNavigate();
 
-  const openVehicleDetail = (vehicle) => {
+  const setServiceMode = (mode) => {
+    setServiceModeState(mode);
+    try {
+      window.sessionStorage.setItem(RENTAL_SERVICE_MODE_STORAGE_KEY, mode);
+    } catch {
+      // The choice still applies for this visit.
+    }
+  };
+
+  // `openQuote` opens the vehicle page straight on its Custom Quote tab.
+  const openVehicleDetail = (vehicle, { openQuote = false } = {}) => {
     const payload = {
       vehicle,
       duration: selectedDuration,
+      serviceMode,
+      openQuote,
     };
 
     try {
@@ -309,14 +337,45 @@ const BikeRentalHome = () => {
             <ArrowLeft size={18} className="text-slate-900" strokeWidth={2.5} />
           </motion.button>
           <div className="flex-1 min-w-0">
-            <p className="text-[9px] font-black uppercase tracking-[0.26em] text-slate-400">Self-drive · No driver needed</p>
+            <p className="text-[9px] font-black uppercase tracking-[0.26em] text-slate-400">
+              {serviceMode === 'with_driver' ? 'Driver included · Sit back and relax' : 'Self-drive · No driver needed'}
+            </p>
             <h1 className="text-[19px] font-black tracking-tight text-slate-900 leading-tight">Rental Vehicles</h1>
           </div>
-          <div className="rounded-full border border-white/80 bg-white/90 px-3 py-1.5 text-[10px] font-black text-slate-600 shadow-sm shrink-0">
-            {availableCountLabel}
-          </div>
+          {serviceMode !== 'with_driver' ? (
+            <div className="rounded-full border border-white/80 bg-white/90 px-3 py-1.5 text-[10px] font-black text-slate-600 shadow-sm shrink-0">
+              {availableCountLabel}
+            </div>
+          ) : null}
         </div>
 
+        <div className="mb-3 grid grid-cols-2 gap-2">
+          {SERVICE_MODES.map((mode) => {
+            const ModeIcon = mode.icon;
+            const on = serviceMode === mode.key;
+            return (
+              <motion.button
+                key={mode.key}
+                type="button"
+                whileTap={{ scale: 0.97 }}
+                onClick={() => setServiceMode(mode.key)}
+                className={`flex items-center gap-2.5 rounded-[16px] border px-3 py-2.5 text-left transition-all ${
+                  on ? 'border-slate-900 bg-slate-900 text-white shadow-[0_8px_20px_rgba(15,23,42,0.18)]' : 'border-slate-200 bg-white text-slate-600'
+                }`}
+              >
+                <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] ${on ? 'bg-white/15' : 'bg-slate-100'}`}>
+                  <ModeIcon size={16} strokeWidth={2.4} />
+                </span>
+                <span className="min-w-0">
+                  <span className="block truncate text-[12px] font-black leading-tight">{mode.label}</span>
+                  <span className={`block truncate text-[10px] font-bold ${on ? 'text-white/70' : 'text-slate-400'}`}>{mode.note}</span>
+                </span>
+              </motion.button>
+            );
+          })}
+        </div>
+
+        {serviceMode !== 'with_driver' ? (
         <div className="flex gap-1.5 bg-slate-100/80 p-1.5 rounded-[16px]">
           {DURATION_TABS.map((tab) => (
             <motion.button
@@ -333,6 +392,7 @@ const BikeRentalHome = () => {
             </motion.button>
           ))}
         </div>
+        ) : null}
 
         <div className="relative mt-3">
           <div className="flex items-center gap-3 rounded-[16px] border border-slate-200 bg-white px-4 py-3 shadow-[0_4px_14px_rgba(15,23,42,0.04)]">
@@ -380,6 +440,7 @@ const BikeRentalHome = () => {
       </motion.header>
 
       <div className="px-5 pt-4 space-y-4">
+        {serviceMode !== 'with_driver' ? (
         <AnimatePresence mode="wait">
           <motion.div
             key={selectedDuration}
@@ -395,9 +456,14 @@ const BikeRentalHome = () => {
             <p className="text-[12px] font-black text-slate-700">{infoBanner[selectedDuration]}</p>
           </motion.div>
         </AnimatePresence>
+        ) : null}
 
         <MyQuoteRequests limit={5} />
 
+        {serviceMode === 'with_driver' ? (
+          <DriverRentalList searchQuery={searchQuery} />
+        ) : (
+          <>
         <div>
           <p className="text-[10px] font-black uppercase tracking-[0.26em] text-slate-400">Available Rentals</p>
           <div className="mt-0.5 flex items-end justify-between gap-3">
@@ -490,13 +556,22 @@ const BikeRentalHome = () => {
                       <span className="text-[11px] font-bold text-slate-400 ml-0.5">{durationSuffix[selectedDuration]}</span>
                     </div>
                   </div>
-                  <motion.button
-                    whileTap={{ scale: 0.96 }}
-                    onClick={() => openVehicleDetail(v)}
-                    className="bg-slate-900 text-white px-4 py-2.5 rounded-[12px] text-[11px] font-black uppercase tracking-widest flex items-center gap-1 shadow-[0_6px_16px_rgba(15,23,42,0.18)] active:bg-black transition-all"
-                  >
-                    Book Now <ChevronRight size={13} strokeWidth={3} className="opacity-60" />
-                  </motion.button>
+                  <div className="flex items-center gap-2">
+                    <motion.button
+                      whileTap={{ scale: 0.96 }}
+                      onClick={() => openVehicleDetail(v, { openQuote: true })}
+                      className="flex items-center gap-1 rounded-[12px] border border-slate-200 bg-white px-3 py-2.5 text-[11px] font-black uppercase tracking-widest text-slate-600 active:bg-slate-50"
+                    >
+                      <MessageSquareQuote size={13} strokeWidth={2.6} /> Quote
+                    </motion.button>
+                    <motion.button
+                      whileTap={{ scale: 0.96 }}
+                      onClick={() => openVehicleDetail(v)}
+                      className="bg-slate-900 text-white px-4 py-2.5 rounded-[12px] text-[11px] font-black uppercase tracking-widest flex items-center gap-1 shadow-[0_6px_16px_rgba(15,23,42,0.18)] active:bg-black transition-all"
+                    >
+                      Book Now <ChevronRight size={13} strokeWidth={3} className="opacity-60" />
+                    </motion.button>
+                  </div>
                 </div>
               </div>
             </motion.div>
@@ -527,6 +602,8 @@ const BikeRentalHome = () => {
             </button>
           </div>
         ) : null}
+          </>
+        )}
 
         <div className="flex items-center gap-3 rounded-[16px] border border-white/80 bg-white/90 px-4 py-3.5 shadow-[0_4px_14px_rgba(15,23,42,0.04)]">
           <div className="w-8 h-8 rounded-[10px] bg-slate-50 flex items-center justify-center shrink-0">

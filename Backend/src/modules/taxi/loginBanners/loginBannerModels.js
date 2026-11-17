@@ -43,9 +43,9 @@ const loginBannerSettingSchema = new mongoose.Schema({
   contact_heading: { type: String, default: "We're Here to" },
   contact_highlight: { type: String, default: 'Help' },
   contact_intro: { type: String, default: 'Got a question or need assistance? Reach out to our dedicated support team available 24/7.' },
-  contact_phone: { type: String, default: '7409129517' },
+  contact_phone: { type: String, default: '' },
   contact_email: { type: String, default: 'support@kailotaxi.com' },
-  contact_address: { type: String, default: 'Office No. 110,\nB. K Tower, H-65, Sec-63,\nNoida 201301' },
+  contact_address: { type: String, default: 'Bengaluru, Karnataka, India' },
   contact_hours: { type: String, default: 'Our platform operates 24 hours a day, 7 days a week. Support is always online.' },
 }, { timestamps: true });
 

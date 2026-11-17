@@ -121,6 +121,10 @@ import {
   getRentalBookingRequests,
   getRentalTrackingDashboard,
   getRentalQuoteRequests,
+  getServiceCenterStaffForAdmin,
+  createServiceCenterStaffForAdmin,
+  updateServiceCenterStaffForAdmin,
+  deleteServiceCenterStaffForAdmin,
   getPreferences,
   getRentalVehicleTypes,
   getRideModules,
@@ -212,6 +216,19 @@ import {
   deleteFleetVehicle,
   getTaxiCancellationAnalytics,
 } from '../controllers/adminController.js';
+import {
+  createAdminDriverVehicle,
+  createAdminRentalDriver,
+  deleteAdminDriverVehicle,
+  deleteAdminRentalDriver,
+  deleteAdminDriverBooking,
+  getAdminDriverBookings,
+  getAdminDriverVehicles,
+  getAdminRentalDrivers,
+  updateAdminDriverBooking,
+  updateAdminDriverVehicle,
+  updateAdminRentalDriver,
+} from '../controllers/driverRentalAdminController.js';
 import {
   getPoolingVehicles,
   createPoolingVehicle,
@@ -335,6 +352,21 @@ adminRouter.get('/admin/service-stores', getServiceStores);
 adminRouter.post('/admin/service-stores', createServiceStore);
 adminRouter.patch('/admin/service-stores/:id', updateServiceStore);
 adminRouter.delete('/admin/service-stores/:id', deleteServiceStore);
+adminRouter.get('/admin/rental-driver-vehicles', getAdminDriverVehicles);
+adminRouter.post('/admin/rental-driver-vehicles', createAdminDriverVehicle);
+adminRouter.patch('/admin/rental-driver-vehicles/:id', updateAdminDriverVehicle);
+adminRouter.delete('/admin/rental-driver-vehicles/:id', deleteAdminDriverVehicle);
+adminRouter.get('/admin/rental-drivers', getAdminRentalDrivers);
+adminRouter.post('/admin/rental-drivers', createAdminRentalDriver);
+adminRouter.patch('/admin/rental-drivers/:id', updateAdminRentalDriver);
+adminRouter.delete('/admin/rental-drivers/:id', deleteAdminRentalDriver);
+adminRouter.get('/admin/rental-driver-bookings', getAdminDriverBookings);
+adminRouter.patch('/admin/rental-driver-bookings/:id', updateAdminDriverBooking);
+adminRouter.delete('/admin/rental-driver-bookings/:id', deleteAdminDriverBooking);
+adminRouter.get('/admin/service-center-staff', getServiceCenterStaffForAdmin);
+adminRouter.post('/admin/service-center-staff', createServiceCenterStaffForAdmin);
+adminRouter.patch('/admin/service-center-staff/:id', updateServiceCenterStaffForAdmin);
+adminRouter.delete('/admin/service-center-staff/:id', deleteServiceCenterStaffForAdmin);
 adminRouter.get('/common/ride_modules', getRideModules);
 adminRouter.get('/admin/types/vehicle-types/list', getVehicleTypes);
 adminRouter.get('/admin/types/vehicle-types', getVehicleTypeCatalog);

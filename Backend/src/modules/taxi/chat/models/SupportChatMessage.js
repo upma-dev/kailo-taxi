@@ -66,10 +66,25 @@ const supportChatMessageSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    // Deleting a chat only hides it for the person who deleted it. User and driver deletes also set
+    // purgeAt, and MongoDB removes the message for good once that moment passes (see the TTL index).
+    hiddenForPeerAt: {
+      type: Date,
+      default: null,
+    },
+    hiddenForAdminAt: {
+      type: Date,
+      default: null,
+    },
+    purgeAt: {
+      type: Date,
+      default: undefined,
+    },
   },
   { timestamps: true },
 );
 
+supportChatMessageSchema.index({ purgeAt: 1 }, { expireAfterSeconds: 0 });
 supportChatMessageSchema.index({ conversationKey: 1, createdAt: -1 });
 supportChatMessageSchema.index({ receiverRole: 1, receiverId: 1, readAt: 1, createdAt: -1 });
 

@@ -49,7 +49,7 @@ const isTruckOrMoverVehicle = (name = '', type = '', icon = '') => {
   return TRUCK_MOVER_KEYS.some((key) => str.includes(key));
 };
 
-const buildServiceCategoryFilter = (serviceType = 'ride') => {
+const buildServiceCategoryFilter = (serviceType = 'ride', parcelVehicleTypeIds = []) => {
   const norm = String(serviceType || '').toLowerCase().trim();
 
   if (norm === 'outstation' || norm === 'intercity') {
@@ -72,19 +72,19 @@ const buildServiceCategoryFilter = (serviceType = 'ride') => {
   }
 
   if (norm === 'parcel' || norm === 'delivery') {
-    // Two-wheelers / parcel-eligible vehicles and drivers with servicePreference !== 'ride'
-    const deliveryKeys = [/delivery/i, /parcel/i, /^both$/i, /^taxi$/i];
+    // A parcel request goes only to a driver who chose parcels: Parcel / Delivery among their service
+    // categories, or a vehicle type that is a Parcel vehicle. A driver with no service chosen, or only
+    // Taxi, never receives a parcel. (A driver who set the preference to "Ride" only is removed by
+    // buildPreferenceFilters.)
+    const deliveryKeys = [/delivery/i, /parcel/i];
     return {
       $or: [
-        { serviceCategories: { $size: 0 } },
-        { serviceCategories: { $exists: false } },
         { serviceCategories: { $in: deliveryKeys } },
         { service_categories: { $in: deliveryKeys } },
-        { registerFor: { $in: [/delivery/i, /parcel/i, /^both$/i, /^taxi$/i] } },
+        { registerFor: { $in: deliveryKeys } },
         { 'onboarding.activeServices': { $in: deliveryKeys } },
-        { 'onboarding.registerFor': { $in: [/delivery/i, /parcel/i, /^both$/i, /^taxi$/i] } },
-        { servicePreference: { $in: ['both', 'parcel', null] } },
-        { servicePreference: { $exists: false } },
+        { 'onboarding.registerFor': { $in: deliveryKeys } },
+        ...(parcelVehicleTypeIds.length > 0 ? [{ vehicleTypeId: { $in: parcelVehicleTypeIds } }] : []),
       ],
     };
   }
@@ -156,7 +156,15 @@ const getIncompatibleVehicleTypeIds = async (serviceType = 'ride') => {
   return rows.map((row) => row._id);
 };
 
-const buildDriverMatchFilters = ({ zoneId, vehicleTypeId, vehicleTypeIds, vehicleTypeKeys, allowedVehicles = [], serviceType = 'ride', bookingMode = 'normal', incompatibleVehicleTypeIds = [] }) => {
+// Vehicle types the admin set to Service = Parcel. A driver on one of these has chosen parcels by choosing the vehicle.
+const getParcelVehicleTypeIds = async (serviceType = 'ride') => {
+  const service = String(serviceType || '').toLowerCase().trim();
+  if (service !== 'parcel' && service !== 'delivery') return [];
+  const rows = await Vehicle.find({ transport_type: 'delivery' }).select('_id').lean();
+  return rows.map((row) => row._id);
+};
+
+const buildDriverMatchFilters = ({ zoneId, vehicleTypeId, vehicleTypeIds, vehicleTypeKeys, allowedVehicles = [], serviceType = 'ride', bookingMode = 'normal', incompatibleVehicleTypeIds = [], parcelVehicleTypeIds = [] }) => {
   const normalizedVehicleTypeIds = normalizeVehicleTypeIds(vehicleTypeIds, vehicleTypeId);
   const normalizedVehicleTypeKeys = Array.isArray(vehicleTypeKeys)
     ? [...new Set(vehicleTypeKeys.map(normalizeVehicleKey).filter(Boolean))]
@@ -191,7 +199,7 @@ const buildDriverMatchFilters = ({ zoneId, vehicleTypeId, vehicleTypeIds, vehicl
     };
   }
 
-  const serviceCategoryFilter = buildServiceCategoryFilter(serviceType);
+  const serviceCategoryFilter = buildServiceCategoryFilter(serviceType, parcelVehicleTypeIds);
 
   const conditions = [
     { isOnline: true },
@@ -354,6 +362,7 @@ const findDriversForZone = async ({
   serviceType = 'ride',
   bookingMode = 'normal',
   incompatibleVehicleTypeIds = [],
+  parcelVehicleTypeIds = [],
 }) => {
   const commonFilters = buildDriverMatchFilters({
     zoneId,
@@ -363,6 +372,7 @@ const findDriversForZone = async ({
     serviceType,
     bookingMode,
     incompatibleVehicleTypeIds,
+    parcelVehicleTypeIds,
   });
   const selectedFields =
     'name phone socketId vehicleTypeId vehicleType vehicleIconType vehicleNumber vehicleColor vehicleMake vehicleModel rating ratingCount location zoneId isOnline isOnRide goHome returnTrip serviceCategories registerFor';
@@ -397,6 +407,7 @@ export const matchDrivers = async (pickupCoords, options = {}) => {
   const zone = await findZoneByPickup(coordinates);
   const effectiveMaxDistance = Math.max(1, Math.round(maxDistance));
   const incompatibleVehicleTypeIds = await getIncompatibleVehicleTypeIds(serviceType);
+  const parcelVehicleTypeIds = await getParcelVehicleTypeIds(serviceType);
 
   let drivers = await findDriversForZone({
     zoneId: zone?._id || undefined,
@@ -409,6 +420,7 @@ export const matchDrivers = async (pickupCoords, options = {}) => {
     serviceType,
     bookingMode,
     incompatibleVehicleTypeIds,
+    parcelVehicleTypeIds,
   });
 
   const blockedDriverIds = await getDriverIdsBlockedByUpcomingScheduledRides(
@@ -434,6 +446,7 @@ export const matchDrivers = async (pickupCoords, options = {}) => {
       serviceType,
       bookingMode,
       incompatibleVehicleTypeIds,
+      parcelVehicleTypeIds,
     });
 
     const fallbackBlockedDriverIds = await getDriverIdsBlockedByUpcomingScheduledRides(
@@ -463,6 +476,7 @@ export const matchDrivers = async (pickupCoords, options = {}) => {
       serviceType,
       bookingMode,
       incompatibleVehicleTypeIds,
+      parcelVehicleTypeIds,
     }).catch(() => {});
   }
 

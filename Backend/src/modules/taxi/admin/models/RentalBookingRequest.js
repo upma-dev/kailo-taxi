@@ -514,6 +514,12 @@ const rentalBookingRequestSchema = new mongoose.Schema(
       default: '',
       trim: true,
     },
+    // 'self_drive' = rider drives; 'with_driver' = the rental comes with a driver.
+    serviceMode: {
+      type: String,
+      enum: ['self_drive', 'with_driver'],
+      default: 'self_drive',
+    },
     status: {
       type: String,
       enum: ['pending', 'confirmed', 'assigned', 'end_requested', 'completed', 'cancelled'],
@@ -634,6 +640,23 @@ rentalBookingRequestSchema.index({ status: 1, createdAt: -1 });
 rentalBookingRequestSchema.index({ userId: 1, createdAt: -1 });
 rentalBookingRequestSchema.index({ vehicleTypeId: 1, createdAt: -1 });
 rentalBookingRequestSchema.index({ 'rentalTracking.currentLocation': '2dsphere' });
+
+// Alerts for the service center app (who hears what is decided in centerNotificationService).
+rentalBookingRequestSchema.pre('save', function captureCenterEvents(next) {
+  this.$locals.centerEvents = {
+    isNew: this.isNew,
+    staffChanged: this.isModified('assignedStaffId'),
+    statusChanged: this.isModified('status'),
+  };
+  next();
+});
+rentalBookingRequestSchema.post('save', function sendCenterAlerts(doc) {
+  const ev = doc.$locals?.centerEvents;
+  if (!ev) return;
+  import('../../services/centerNotificationService.js')
+    .then((service) => service.handleRentalSaved('rental_booking', doc, ev))
+    .catch(() => {});
+});
 
 export const RentalBookingRequest =
   mongoose.models.TaxiRentalBookingRequest ||

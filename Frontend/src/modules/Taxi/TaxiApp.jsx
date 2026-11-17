@@ -21,7 +21,7 @@ import { installBrowserFcmRegistration } from './shared/push/browserFcmRegistrat
 import { installNativeFcmBridge } from './shared/push/nativeFcmBridge';
 import { POOLING_ENABLED, RENTAL_ENABLED } from './shared/featureFlags';
 import useRentalEnabled from './shared/hooks/useRentalEnabled';
-import { showChatNotification } from '@/shared/utils/chatNotificationSound';
+import { playChatNotificationSound, showChatNotification } from '@/shared/utils/chatNotificationSound';
 import { TaxiAppSkeleton } from '@/shared/components/skeletons/ModuleSkeletons';
 import './App.css';
 
@@ -106,6 +106,7 @@ const BusConfirm = lazy(() => import('./modules/user/pages/bus/BusConfirm'));
 // New Feature Pages
 const BikeRentalHome = lazy(() => import('./modules/user/pages/rental/BikeRentalHome'));
 const RentalVehicleDetail = lazy(() => import('./modules/user/pages/rental/RentalVehicleDetail'));
+const RentalDriverBook = lazy(() => import('./modules/user/pages/rental/RentalDriverBook'));
 const RentalSchedule = lazy(() => import('./modules/user/pages/rental/RentalSchedule'));
 const RentalKYC = lazy(() => import('./modules/user/pages/rental/RentalKYC'));
 const RentalDeposit = lazy(() => import('./modules/user/pages/rental/RentalDeposit'));
@@ -233,6 +234,8 @@ const AdminBannerImage = lazy(() => import('./modules/admin/pages/promotions/Ban
 // Price Management
 const AdminServiceLocation = lazy(() => import('./modules/admin/pages/price-management/ServiceLocation'));
 const AdminServiceStores = lazy(() => import('./modules/admin/pages/price-management/ServiceStores'));
+const AdminServiceCenterStaff = lazy(() => import('./modules/admin/pages/price-management/ServiceCenterStaff'));
+const AdminDriverRentals = lazy(() => import('./modules/admin/pages/price-management/DriverRentals'));
 const AdminZoneManagement = lazy(() => import('./modules/admin/pages/price-management/ZoneManagement'));
 const AdminAirportManagement = lazy(() => import('./modules/admin/pages/price-management/Airport'));
 const AdminSetPrices = lazy(() => import('./modules/admin/pages/price-management/SetPrices'));
@@ -497,6 +500,9 @@ const UserAccountInvalidationListener = () => {
       if (!notificationWasAdded) {
         return;
       }
+
+      // Soft chime for an admin's support reply.
+      playChatNotificationSound();
 
       toast(messageBody, {
         duration: 4500,
@@ -817,6 +823,7 @@ function TaxiApp() {
                   <>
                     <Route path="rental" element={<BikeRentalHome />} />
                     <Route path="rental/vehicle" element={<RentalVehicleDetail />} />
+                    <Route path="rental/driver" element={<RentalDriverBook />} />
                     <Route path="rental/schedule" element={<RentalSchedule />} />
                     <Route path="rental/kyc" element={<RentalKYC />} />
                     <Route path="rental/deposit" element={<RentalDeposit />} />
@@ -947,6 +954,7 @@ function TaxiApp() {
                 {RENTAL_ENABLED ? (
                   <>
                     <Route path="user/rental" element={<BikeRentalHome />} />
+                    <Route path="user/rental/driver" element={<RentalDriverBook />} />
                     <Route
                       path="user/rental/vehicle"
                       element={<RentalVehicleDetail />}
@@ -1511,6 +1519,10 @@ function TaxiApp() {
                         path="service-stores/edit/:id"
                         element={<AdminServiceStores mode="edit" />}
                       />
+                      <Route
+                        path="service-center-staff"
+                        element={<AdminServiceCenterStaff />}
+                      />
                     </>
                   ) : null}
                   <Route path="app-modules" element={<AdminAppModules />} />
@@ -1594,6 +1606,10 @@ function TaxiApp() {
                       <Route
                         path="rental-quotes"
                         element={<AdminRentalQuoteRequests />}
+                      />
+                      <Route
+                        path="rental-with-driver"
+                        element={<AdminDriverRentals />}
                       />
                     </>
                   ) : null}

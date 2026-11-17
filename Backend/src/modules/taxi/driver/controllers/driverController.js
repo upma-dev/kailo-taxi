@@ -26,6 +26,7 @@ import { ServiceCenterStaff } from "../../admin/models/ServiceCenterStaff.js";
 import { Vehicle } from "../../admin/models/Vehicle.js";
 import { RentalVehicleType } from "../../admin/models/RentalVehicleType.js";
 import { RentalBookingRequest } from "../../admin/models/RentalBookingRequest.js";
+import { RentalQuoteRequest } from "../../admin/models/RentalQuoteRequest.js";
 import { CustomerBiometricProfile } from "../../admin/models/CustomerBiometricProfile.js";
 import { AdminBusinessSetting } from "../../admin/models/AdminBusinessSetting.js";
 import { Notification } from "../../admin/promotions/models/Notification.js";
@@ -2211,7 +2212,7 @@ const resolveAuthenticatedServiceCenter = async (req) => {
   return center;
 };
 
-const resolveAuthenticatedServiceCenterAccess = async (req) => {
+export const resolveAuthenticatedServiceCenterAccess = async (req) => {
   const role = String(req.auth?.role || "").toLowerCase();
 
   if (role === "service_center") {
@@ -2982,7 +2983,7 @@ export const getDriverScheduledRides = async (req, res) => {
   }
 
   const driver = await Driver.findById(req.auth.sub)
-    .select("service_location_id vehicleTypeId serviceCategories registerFor onboarding")
+    .select("service_location_id vehicleTypeId serviceCategories registerFor onboarding servicePreference")
     .lean();
 
   if (!driver) {
@@ -2996,7 +2997,10 @@ export const getDriverScheduledRides = async (req, res) => {
   const registerFor = String(driver.registerFor || '').toLowerCase().trim();
 
   const supportsOutstation = driverCategories.some((c) => c.includes('outstation') || c === 'both') || registerFor === 'outstation' || registerFor === 'both';
-  const supportsDelivery = driverCategories.some((c) => c.includes('delivery') || c.includes('parcel') || c === 'both') || registerFor === 'delivery' || registerFor === 'both';
+  // Parcels only for a driver who chose them (not "both", which means Taxi + Outstation) and did not set Ride only.
+  const supportsDelivery =
+    (driverCategories.some((c) => c.includes('delivery') || c.includes('parcel')) || registerFor === 'delivery' || registerFor === 'parcel') &&
+    String(driver.servicePreference || 'both').toLowerCase() !== 'ride';
   const supportsTaxi = driverCategories.length === 0 || driverCategories.some((c) => c.includes('taxi') || c.includes('city') || c === 'both') || registerFor === 'taxi' || registerFor === 'both' || registerFor === 'city';
 
   const allowedServiceTypes = [];
@@ -4174,6 +4178,151 @@ const appendBiometricAuditLog = (profile, log = {}) => {
   if (profile.auditLogs.length > 50) {
     profile.auditLogs = profile.auditLogs.slice(-50);
   }
+};
+
+const serializeServiceCenterQuoteRequest = (item = {}) => ({
+  id: String(item._id || ""),
+  serviceMode: item.serviceMode === "with_driver" ? "with_driver" : "self_drive",
+  vehicleName: item.vehicleName || item.vehicleTypeId?.name || "",
+  vehicleCategory: item.vehicleCategory || item.vehicleTypeId?.vehicleCategory || "",
+  vehicleImage: item.vehicleTypeId?.image || "",
+  contactName: item.contactName || "",
+  contactPhone: item.contactPhone || "",
+  contactEmail: item.contactEmail || "",
+  requestedHours: Number(item.requestedHours || 0),
+  pickupDateTime: item.pickupDateTime || null,
+  returnDateTime: item.returnDateTime || null,
+  seatsNeeded: Number(item.seatsNeeded || 1),
+  luggageNeeded: Number(item.luggageNeeded || 0),
+  pickupLocation: item.pickupLocation || "",
+  dropLocation: item.dropLocation || "",
+  specialRequirements: item.specialRequirements || "",
+  status: item.status || "pending",
+  quotedAmount: Number(item.adminQuotedAmount || 0),
+  note: item.adminNote || "",
+  assignedStaff: {
+    id: item.assignedStaffId ? String(item.assignedStaffId) : "",
+    name: item.assignedStaffName || "",
+    phone: item.assignedStaffPhone || "",
+  },
+  respondedByRole: item.respondedByRole || "",
+  respondedByName: item.respondedByName || "",
+  createdAt: item.createdAt || null,
+  updatedAt: item.updatedAt || null,
+});
+
+// Custom quote requests for this service center. The owner sees every request of the center and can hand one to a
+// staff member; a staff member sees only the requests handed to them.
+export const getServiceCenterQuoteRequests = async (req, res) => {
+  const access = await resolveAuthenticatedServiceCenterAccess(req);
+  const center = access?.center;
+
+  if (!center?._id) {
+    throw new ApiError(403, "Service center access is required");
+  }
+
+  const query = { serviceCenterIds: center._id };
+  if (access.staff?._id) {
+    query.assignedStaffId = access.staff._id;
+  }
+
+  const items = await RentalQuoteRequest.find(query)
+    .populate("vehicleTypeId", "name vehicleCategory image")
+    .sort({ createdAt: -1 })
+    .limit(200)
+    .lean();
+
+  const staffItems = access.canAssignBookings
+    ? await ServiceCenterStaff.find({ serviceCenterId: center._id, active: true, status: "active" }).sort({ name: 1 }).lean()
+    : [];
+
+  res.json({
+    success: true,
+    data: {
+      permissions: { canAssign: Boolean(access.canAssignBookings) },
+      results: items.map(serializeServiceCenterQuoteRequest),
+      staff: staffItems.map((item) => ({ id: String(item._id), name: item.name || "", phone: item.phone || "" })),
+    },
+  });
+};
+
+export const updateServiceCenterQuoteRequest = async (req, res) => {
+  const access = await resolveAuthenticatedServiceCenterAccess(req);
+  const center = access?.center;
+
+  if (!center?._id) {
+    throw new ApiError(403, "Service center access is required");
+  }
+
+  const id = String(req.params?.id || "").trim();
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    throw new ApiError(400, "Valid quote request id is required");
+  }
+
+  const query = { _id: id, serviceCenterIds: center._id };
+  if (access.staff?._id) {
+    query.assignedStaffId = access.staff._id;
+  }
+  const item = await RentalQuoteRequest.findOne(query);
+  if (!item) {
+    throw new ApiError(404, "Quote request not found");
+  }
+
+  const body = req.body || {};
+  let answered = false;
+
+  if (body.status !== undefined) {
+    const status = String(body.status);
+    if (!["reviewing", "quoted", "rejected"].includes(status)) {
+      throw new ApiError(400, "Invalid quote request status");
+    }
+    item.status = status;
+    answered = true;
+  }
+  if (body.quotedAmount !== undefined) {
+    item.adminQuotedAmount = Math.max(0, Number(body.quotedAmount || 0));
+    answered = true;
+  }
+  if (body.note !== undefined) {
+    item.adminNote = String(body.note || "").trim();
+    answered = true;
+  }
+  if (item.status === "quoted" && !(item.adminQuotedAmount > 0)) {
+    throw new ApiError(400, "Enter the quoted amount before sending the quote");
+  }
+
+  // Only the center owner hands a request to a staff member.
+  if (body.assignedStaffId !== undefined) {
+    if (!access.canAssignBookings) {
+      throw new ApiError(403, "Only the service center owner can assign staff");
+    }
+    const staffId = String(body.assignedStaffId || "").trim();
+    if (!staffId) {
+      item.assignedStaffId = null;
+      item.assignedStaffName = "";
+      item.assignedStaffPhone = "";
+    } else {
+      const staff = mongoose.Types.ObjectId.isValid(staffId)
+        ? await ServiceCenterStaff.findOne({ _id: staffId, serviceCenterId: center._id, active: { $ne: false } }).lean()
+        : null;
+      if (!staff) {
+        throw new ApiError(404, "Staff member not found in your service center");
+      }
+      item.assignedStaffId = staff._id;
+      item.assignedStaffName = staff.name || "";
+      item.assignedStaffPhone = staff.phone || "";
+    }
+  }
+
+  if (answered) {
+    item.reviewedAt = new Date();
+    item.respondedByRole = access.role;
+    item.respondedByName = access.staff?.name || center.name || "";
+  }
+  await item.save();
+
+  const populated = await RentalQuoteRequest.findById(item._id).populate("vehicleTypeId", "name vehicleCategory image").lean();
+  res.json({ success: true, data: serializeServiceCenterQuoteRequest(populated) });
 };
 
 export const getServiceCenterBookings = async (req, res) => {

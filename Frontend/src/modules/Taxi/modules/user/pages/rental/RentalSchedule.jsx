@@ -210,7 +210,7 @@ const DateTimePickerCard = ({
 const RentalSchedule = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { vehicle, duration, selectedPackage, serviceLocation } = location.state || {};
+  const { vehicle, duration, selectedPackage, serviceLocation, serviceMode } = location.state || {};
 
   if (!vehicle) {
     navigate('/taxi/user/rental');
@@ -474,6 +474,7 @@ const RentalSchedule = () => {
               state: {
                 vehicle,
                 duration,
+                serviceMode,
                 selectedPackage,
                 serviceLocation,
                 pickup,

@@ -63,8 +63,20 @@ import {
   getMyPoolingBookings,
 } from '../controllers/poolingTripController.js';
 import { getPublicAppModules, getGoodsTypes, getPublicRentalVehicleCatalog, getPublicVehicleTypeCatalog } from '../../admin/controllers/adminController.js';
-import { triggerUserSosAlert } from '../../safety/controllers/safetyController.js';
+import {
+  addMyEmergencyContact,
+  deleteMyEmergencyContact,
+  listMyEmergencyContacts,
+  triggerUserSosAlert,
+} from '../../safety/controllers/safetyController.js';
 import { requireRentalEnabled } from '../../services/rentalSettingsService.js';
+import {
+  cancelMyDriverRentalBooking,
+  createDriverRentalBooking,
+  getDriverRentalVehicles,
+  getMyDriverRentalBookings,
+  returnMyDriverRentalBooking,
+} from '../controllers/driverRentalUserController.js';
 
 export const userRouter = Router();
 
@@ -75,6 +87,11 @@ userRouter.get('/vehicle-types', asyncHandler(getPublicVehicleTypeCatalog));
 userRouter.get('/rental-vehicles', requireRentalEnabled, asyncHandler(getPublicRentalVehicleCatalog));
 userRouter.get('/service-locations', asyncHandler(listPublicServiceLocations));
 userRouter.get('/service-stores', asyncHandler(listPublicServiceStores));
+userRouter.get('/rental-driver-vehicles', requireRentalEnabled, asyncHandler(getDriverRentalVehicles));
+userRouter.post('/rental-driver-bookings', requireRentalEnabled, authenticateOrResolveUser(['user']), asyncHandler(createDriverRentalBooking));
+userRouter.get('/rental-driver-bookings', requireRentalEnabled, authenticateOrResolveUser(['user']), asyncHandler(getMyDriverRentalBookings));
+userRouter.post('/rental-driver-bookings/:id/return', requireRentalEnabled, authenticateOrResolveUser(['user']), asyncHandler(returnMyDriverRentalBooking));
+userRouter.post('/rental-driver-bookings/:id/cancel', requireRentalEnabled, authenticateOrResolveUser(['user']), asyncHandler(cancelMyDriverRentalBooking));
 userRouter.post('/rental-quote-requests', requireRentalEnabled, authenticateOrResolveUser(['user']), asyncHandler(createRentalQuoteRequest));
 userRouter.get('/rental-quote-requests', requireRentalEnabled, authenticateOrResolveUser(['user']), asyncHandler(listMyRentalQuoteRequests));
 userRouter.post('/rental-bookings', requireRentalEnabled, authenticateOrResolveUser(['user']), asyncHandler(createRentalBookingRequest));
@@ -101,6 +118,9 @@ userRouter.get('/notifications', authenticateOrResolveUser(['user']), asyncHandl
 userRouter.delete('/notifications/:id', authenticateOrResolveUser(['user']), asyncHandler(deleteUserNotification));
 userRouter.delete('/notifications', authenticateOrResolveUser(['user']), asyncHandler(clearAllUserNotifications));
 userRouter.post('/sos', authenticateOrResolveUser(['user']), asyncHandler(triggerUserSosAlert));
+userRouter.get('/emergency-contacts', authenticate(['user']), asyncHandler(listMyEmergencyContacts));
+userRouter.post('/emergency-contacts', authenticate(['user']), asyncHandler(addMyEmergencyContact));
+userRouter.delete('/emergency-contacts/:id', authenticate(['user']), asyncHandler(deleteMyEmergencyContact));
 userRouter.get('/wallet', authenticateOrResolveUser(['user']), asyncHandler(getUserWallet));
 userRouter.post('/wallet/topup', authenticateOrResolveUser(['user']), asyncHandler(topupUserWallet));
 userRouter.post('/wallet/transfer', authenticateOrResolveUser(['user']), asyncHandler(transferUserWallet));

@@ -59,6 +59,7 @@ import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import brandLogo from "@/assets/brand/logo.png";
 import LanguageButton from '../../../../../shared/language/LanguageButton';
+import { playChatNotificationSound } from '@/shared/utils/chatNotificationSound';
 
 function cn(...inputs) {
   return twMerge(clsx(inputs));
@@ -290,6 +291,60 @@ const normalizeHexColor = (value, fallback = '') => {
   return fallback;
 };
 
+// Loud two-tone emergency siren, repeated until the admin acknowledges the SOS.
+const startSosSiren = () => {
+  try {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return () => {};
+    const ctx = new AudioContextClass();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'square';
+    gain.gain.value = 0.25;
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    let high = false;
+    const swap = () => {
+      high = !high;
+      osc.frequency.setValueAtTime(high ? 960 : 640, ctx.currentTime);
+    };
+    swap();
+    const timer = window.setInterval(swap, 450);
+    ctx.resume?.().catch(() => {});
+    return () => {
+      window.clearInterval(timer);
+      try {
+        osc.stop();
+        ctx.close();
+      } catch {
+        // already closed
+      }
+    };
+  } catch {
+    return () => {};
+  }
+};
+
+// One SOS record from the server, shaped for the popup and the notification list.
+const describeSos = (data = {}) => {
+  const fromDriver = String(data.sourceApp || '').toLowerCase() === 'driver';
+  const lat = data.location?.lat;
+  const lng = data.location?.lng;
+  return {
+    id: String(data.id || ''),
+    fromDriver,
+    name: (fromDriver ? data.driverName : data.riderName) || (fromDriver ? 'Driver' : 'User'),
+    phone: (fromDriver ? data.driverPhone : data.riderPhone) || '',
+    tripCode: data.tripCode || '',
+    pickupAddress: data.pickupAddress || '',
+    dropAddress: data.dropAddress || '',
+    locationLabel: data.locationLabel || '',
+    mapUrl: Number.isFinite(Number(lat)) && Number.isFinite(Number(lng)) ? `https://www.google.com/maps?q=${lat},${lng}` : '',
+    createdAt: data.createdAt || new Date().toISOString(),
+  };
+};
+
 const getSidebarItemCount = (item, unreadCountsByPath = {}) => {
   if (item?.path) {
     return Math.max(0, Number(unreadCountsByPath[item.path] || 0));
@@ -310,7 +365,7 @@ const SidebarBadge = ({ count, isActive = false }) => {
   return (
     <span
       className={`ml-auto inline-flex min-w-[1.5rem] items-center justify-center rounded-full px-2 py-0.5 text-[10px] font-black tracking-tight ${
-        isActive ? 'bg-rose-600 text-white shadow-sm ring-1 ring-white/20' : 'bg-rose-500 text-white shadow-sm shadow-rose-500/30'
+        isActive ? 'bg-red-600 text-white shadow-sm ring-1 ring-white/20' : 'bg-red-600 text-white shadow-sm shadow-red-600/40'
       }`}
     >
       {count > 99 ? '99+' : count}
@@ -622,6 +677,7 @@ const AdminLayout = () => {
   const [chatNotifications, setChatNotifications] = useState([]);
   const [registrationNotifications, setRegistrationNotifications] = useState([]);
   const [chatUnreadCount, setChatUnreadCount] = useState(0);
+  const [sosAlert, setSosAlert] = useState(null); // the SOS the admin has to acknowledge
   const [supportPendingCount, setSupportPendingCount] = useState(0);
   const [rideRequestPage, setRideRequestPage] = useState(1);
   const [bookingPage, setBookingPage] = useState(1);
@@ -796,10 +852,12 @@ const AdminLayout = () => {
                       label: 'Rental',
                       subItems: [
                         { label: 'Service Stores', path: '/admin/pricing/service-stores', permission: 'service_stores.view' },
+                        { label: 'Center Staff', path: '/admin/pricing/service-center-staff', permission: 'service_stores.view' },
                         { label: 'Rental Vehicles', path: '/admin/pricing/rental-vehicles', permission: 'rental.view' },
                         { label: 'Track Vehicles', path: '/admin/pricing/rental-tracking', permission: 'rental.view' },
                         { label: 'Rental Requests', path: '/admin/pricing/rental-requests', permission: 'rental.view' },
                         { label: 'Rental Quote Requests', path: '/admin/pricing/rental-quotes', permission: 'rental.view' },
+                        { label: 'Rental with Driver', path: '/admin/pricing/rental-with-driver', permission: 'rental.view' },
                       ],
                     },
                   ]
@@ -1102,6 +1160,8 @@ const AdminLayout = () => {
       else if (role === 'refund') path = '/admin/drivers/wallet/withdrawals';
       else if (role === 'rental') path = '/admin/pricing/rental-requests';
       else if (role === 'rental_quote') path = '/admin/pricing/rental-quotes';
+      else if (role === 'rental_driver') path = '/admin/pricing/rental-with-driver';
+      else if (role === 'sos') path = '/admin/safety';
       else if (role === 'rental_end' || role === 'rental_alert') path = '/admin/pricing/rental-tracking';
 
       if (path) {
@@ -1293,16 +1353,33 @@ const AdminLayout = () => {
     };
   }, [isAdminChatRoute, mode]);
 
+  useEffect(() => {
+    if (!sosAlert) return undefined;
+    return startSosSiren();
+  }, [sosAlert]);
+
   const fetchPendingRegistrationsAndRefunds = useCallback(async () => {
     try {
-      const [pendingDriversRes, withdrawalsRes, busesRes, rentalRes, trackingRes, quoteRes] = await Promise.allSettled([
+      const [pendingDriversRes, withdrawalsRes, busesRes, rentalRes, trackingRes, quoteRes, driverRentalRes, sosRes] = await Promise.allSettled([
         adminService.getDrivers({ tab: 'pending', limit: 20 }),
         adminService.getDriverWithdrawalSummaries({ status: 'pending', limit: 20 }),
         adminService.listBusServices(),
         adminService.getRentalBookingRequests(),
         adminService.getRentalTrackingDashboard(),
         adminService.getRentalQuoteRequests(),
+        adminService.getDriverRentalBookings(),
+        adminService.getSafetyAlerts({ limit: 20, status: 'active' }),
       ]);
+
+      const sosList =
+        sosRes.status === 'fulfilled'
+          ? sosRes.value?.data?.results || sosRes.value?.results || sosRes.value?.data?.data?.results || []
+          : [];
+
+      const driverRentalList =
+        driverRentalRes.status === 'fulfilled'
+          ? driverRentalRes.value?.data?.data?.results || driverRentalRes.value?.data?.results || driverRentalRes.value?.results || []
+          : [];
 
       const quoteList =
         quoteRes.status === 'fulfilled'
@@ -1411,6 +1488,36 @@ const AdminLayout = () => {
           };
         });
 
+      // SOS alerts nobody has resolved yet.
+      const mappedSos = sosList.map((alert) => {
+        const info = describeSos(alert);
+        return {
+          id: `sos:${info.id}`,
+          title: info.fromDriver ? 'SOS - Driver in trouble' : 'SOS - User in trouble',
+          name: info.name,
+          phone: info.phone,
+          type: 'sos',
+          role: 'sos',
+          status: 'ALERT',
+          createdAt: info.createdAt,
+          sos: info,
+        };
+      });
+
+      // New Rental with Driver bookings that no one has confirmed yet.
+      const mappedDriverRentals = driverRentalList
+        .filter((b) => String(b.status || '') === 'pending')
+        .map((b) => ({
+          id: `pending_rental_driver_booking:${b.id || b._id}`,
+          title: 'New Rental with Driver Booking',
+          name: `${b.contactName || 'Customer'} - ${b.vehicleName || 'Vehicle'} (${b.selectedPackage?.label || b.bookingReference || ''})`,
+          phone: b.contactPhone || '',
+          type: 'rental_driver',
+          role: 'rental_driver',
+          status: 'PENDING',
+          createdAt: b.createdAt || new Date().toISOString(),
+        }));
+
       // Custom quote requests the admin still has to price.
       const mappedQuotes = quoteList
         .filter((q) => ['pending', 'reviewing'].includes(String(q.status || '').toLowerCase()))
@@ -1448,9 +1555,11 @@ const AdminLayout = () => {
             !p.id.startsWith('pending_rental:') &&
             !p.id.startsWith('pending_rental_end:') &&
             !p.id.startsWith('pending_rental_quote:') &&
+            !p.id.startsWith('pending_rental_driver_booking:') &&
+            !p.id.startsWith('sos:') &&
             !p.id.startsWith('pending_rental_alert:')
         );
-        return [...mappedRentals, ...mappedQuotes, ...mappedTrackingAlerts, ...mappedPendingDrivers, ...mappedWithdrawals, ...mappedPendingBuses, ...socketOnlyItems].slice(0, 50);
+        return [...mappedSos, ...mappedRentals, ...mappedDriverRentals, ...mappedQuotes, ...mappedTrackingAlerts, ...mappedPendingDrivers, ...mappedWithdrawals, ...mappedPendingBuses, ...socketOnlyItems].slice(0, 50);
       });
     } catch (err) {
       console.error('Failed to fetch pending drivers/refunds/buses:', err);
@@ -1570,10 +1679,26 @@ const AdminLayout = () => {
 
     socketService.connect({ role: 'admin', token });
 
-    socketService.on('new_sos', (data) => {
-      console.log('SOS ALERT RECEIVED:', data);
-      alert(`SOS ALERT: Driver ${data.driver_name} is in trouble!`);
-    });
+    const handleNewSos = (data = {}) => {
+      const info = describeSos(data);
+      setSosAlert(info);
+      setRegistrationNotifications((prev) => [
+        {
+          id: `sos:${info.id || Date.now()}`,
+          title: info.fromDriver ? 'SOS - Driver in trouble' : 'SOS - User in trouble',
+          name: info.name,
+          phone: info.phone,
+          type: 'sos',
+          role: 'sos',
+          status: 'ALERT',
+          createdAt: info.createdAt,
+          sos: info,
+        },
+        ...prev.filter((item) => item.id !== `sos:${info.id}`),
+      ].slice(0, 50));
+    };
+
+    socketService.on('new_sos', handleNewSos);
 
     const handleRegistrationAlert = (data = {}) => {
       console.log('New registration notification alert:', data);
@@ -1655,6 +1780,9 @@ const AdminLayout = () => {
         return;
       }
 
+      // Soft chime for every new message from a user or driver, also while the chat page is open.
+      playChatNotificationSound();
+
       if (isAdminChatRoute) {
         if (payload.conversationKey) {
           markSupportMessagesRead(payload.conversationKey, token).catch((error) => {
@@ -1689,9 +1817,10 @@ const AdminLayout = () => {
 
       if (wasAdded) {
         setChatUnreadCount((current) => current + 1);
-        toast(nextItem.body, {
-          duration: 4500,
-          className: 'font-bold text-[13px] rounded-2xl shadow-xl border border-sky-50 bg-white',
+        toast(`${nextItem.title}: ${nextItem.body}`, {
+          duration: 6000,
+          icon: '🔴',
+          className: 'font-bold text-[13px] rounded-2xl shadow-xl border-2 border-red-500 bg-white text-red-700',
         });
       }
     };
@@ -1699,7 +1828,7 @@ const AdminLayout = () => {
     socketService.on('chat:message', handleSupportChatNotification);
 
     return () => {
-      socketService.off('new_sos');
+      socketService.off('new_sos', handleNewSos);
       socketService.off('new_registration_alert', handleRegistrationAlert);
       socketService.off('rental:tracking:alert', handleRentalTrackingAlert);
       socketService.off('new_driver_registration', handleRegistrationAlert);
@@ -1716,6 +1845,41 @@ const AdminLayout = () => {
 
   return (
     <div className="flex h-screen overflow-hidden bg-neutral-200 font-sans text-gray-900">
+      {sosAlert ? (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-red-950/70 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl ring-4 ring-red-500">
+            <div className="animate-pulse bg-red-600 px-6 py-4 text-white">
+              <p className="text-[11px] font-black uppercase tracking-[0.3em]">Emergency</p>
+              <h2 className="text-2xl font-black">SOS ALERT</h2>
+              <p className="text-sm font-bold text-red-100">{sosAlert.fromDriver ? 'A driver' : 'A user'} pressed the SOS button</p>
+            </div>
+            <div className="space-y-3 px-6 py-5">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{sosAlert.fromDriver ? 'Driver' : 'User'}</p>
+                <p className="text-xl font-black text-slate-900">{sosAlert.name}</p>
+                {sosAlert.phone ? (
+                  <a href={`tel:${sosAlert.phone}`} className="mt-1 inline-block text-lg font-black text-red-600">{sosAlert.phone}</a>
+                ) : (
+                  <p className="text-sm font-semibold text-slate-400">No phone number on file</p>
+                )}
+              </div>
+              {sosAlert.tripCode ? <p className="text-sm font-semibold text-slate-600">Trip: {sosAlert.tripCode}</p> : null}
+              {sosAlert.pickupAddress ? <p className="text-sm font-semibold text-slate-600">From: {sosAlert.pickupAddress}</p> : null}
+              {sosAlert.dropAddress ? <p className="text-sm font-semibold text-slate-600">To: {sosAlert.dropAddress}</p> : null}
+              {sosAlert.mapUrl ? (
+                <a href={sosAlert.mapUrl} target="_blank" rel="noreferrer" className="inline-block rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white">Open live location</a>
+              ) : (
+                <p className="text-sm font-semibold text-slate-400">Location was not shared</p>
+              )}
+            </div>
+            <div className="flex gap-2 border-t border-slate-100 bg-slate-50 px-6 py-4">
+              <button type="button" onClick={() => setSosAlert(null)} className="flex-1 rounded-xl bg-red-600 px-4 py-3 text-sm font-black text-white">Got it - stop siren</button>
+              <button type="button" onClick={() => { setSosAlert(null); navigate('/admin/safety'); }} className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-700">Safety center</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <aside
         className={cn(
           "relative z-50 flex h-screen flex-col overflow-hidden transition-all duration-500 bg-neutral-950 border-r border-neutral-800/60",
@@ -1834,7 +1998,11 @@ const AdminLayout = () => {
                   className="relative rounded-lg p-2 text-neutral-400 transition-all hover:bg-neutral-50 hover:text-amber-600"
                 >
                   <Bell size={18} />
-                  {totalNotificationItems > 0 ? (
+                  {chatUnreadCount > 0 ? (
+                    <span className="absolute -right-0.5 -top-0.5 inline-flex min-w-[16px] items-center justify-center rounded-full bg-red-600 px-1 text-[9px] font-black leading-4 text-white ring-2 ring-white">
+                      {chatUnreadCount > 9 ? '9+' : chatUnreadCount}
+                    </span>
+                  ) : totalNotificationItems > 0 ? (
                     <span className="absolute right-1.5 top-1.5 inline-flex h-2.5 w-2.5 rounded-full bg-rose-500 ring-2 ring-white" />
                   ) : null}
                 </button>
@@ -1922,6 +2090,9 @@ const AdminLayout = () => {
                         }`}
                       >
                         Chats
+                        {chatUnreadCount > 0 ? (
+                          <span className="ml-1 inline-flex min-w-[16px] items-center justify-center rounded-full bg-red-600 px-1 text-[9px] font-black leading-4 text-white">{chatUnreadCount > 9 ? '9+' : chatUnreadCount}</span>
+                        ) : null}
                       </button>
                     </div>
                   </div>
@@ -2062,7 +2233,7 @@ const AdminLayout = () => {
                           {registrationNotifications.map((item) => {
                             const role = String(item.role || item.type || '').toLowerCase();
                             const badgeColor =
-                              role === 'refund' || role === 'rental' || role === 'rental_quote' || role === 'rental_end' || role === 'rental_alert'
+                              role === 'sos' || role === 'refund' || role === 'rental' || role === 'rental_driver' || role === 'rental_quote' || role === 'rental_end' || role === 'rental_alert'
                                 ? 'bg-rose-50 text-rose-700 font-black border border-rose-200/80 shadow-xs'
                                 : role === 'owner'
                                 ? 'bg-indigo-50 text-indigo-700 font-bold'
@@ -2077,6 +2248,8 @@ const AdminLayout = () => {
                                 ? '/admin/pricing/rental-requests'
                                 : role === 'rental_quote'
                                 ? '/admin/pricing/rental-quotes'
+                                : role === 'rental_driver'
+                                ? '/admin/pricing/rental-with-driver'
                                 : role === 'rental_end' || role === 'rental_alert'
                                 ? '/admin/pricing/rental-tracking'
                                 : role === 'refund'
@@ -2094,8 +2267,13 @@ const AdminLayout = () => {
                                 key={item.id}
                                 type="button"
                                 onClick={() => {
-                                  navigate(targetPath);
                                   setIsNotificationsOpen(false);
+                                  // An SOS opens its details right here instead of leaving the page.
+                                  if (role === 'sos' && item.sos) {
+                                    setSosAlert(item.sos);
+                                    return;
+                                  }
+                                  navigate(targetPath);
                                 }}
                                 className="relative w-full rounded-2xl border border-slate-100 bg-white px-4 py-3 text-left transition-all hover:border-emerald-200 hover:bg-emerald-50/30"
                               >
@@ -2108,7 +2286,7 @@ const AdminLayout = () => {
                                     )}
                                   </div>
                                   <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider ${badgeColor}`}>
-                                    {role === 'refund' ? 'Refund Pending' : role === 'rental' ? 'Rental Request' : role === 'rental_quote' ? 'Quote Request' : role === 'rental_end' ? 'End Requested' : role === 'rental_alert' ? 'Tracking Alert' : role.replace('_', ' ')}
+                                    {role === 'sos' ? 'SOS' : role === 'refund' ? 'Refund Pending' : role === 'rental' ? 'Rental Request' : role === 'rental_driver' ? 'Rental with Driver' : role === 'rental_quote' ? 'Quote Request' : role === 'rental_end' ? 'End Requested' : role === 'rental_alert' ? 'Tracking Alert' : role.replace('_', ' ')}
                                   </span>
                                 </div>
                                 <div className="mt-2 flex items-center justify-between text-[10px] font-bold text-slate-400">
@@ -2156,14 +2334,14 @@ const AdminLayout = () => {
                               setChatNotifications([]);
                               setIsNotificationsOpen(false);
                             }}
-                            className="relative w-full rounded-2xl border border-slate-100 bg-white px-4 py-3 text-left transition-all hover:border-indigo-200 hover:bg-indigo-50/40"
+                            className="relative w-full rounded-2xl border border-rose-200 border-l-4 border-l-red-600 bg-rose-50/60 px-4 py-3 text-left transition-all hover:bg-rose-50"
                           >
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
-                                <p className="truncate text-sm font-bold text-slate-900">{item.title}</p>
+                                <p className="truncate pr-6 text-sm font-black text-red-700">{item.title}</p>
                                 <p className="mt-1 truncate text-xs font-semibold text-slate-500">{item.body}</p>
                               </div>
-                              <span className="shrink-0 rounded-full bg-sky-50 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-sky-700">
+                              <span className="shrink-0 rounded-full bg-red-600 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-white">
                                 {item.senderRole}
                               </span>
                             </div>

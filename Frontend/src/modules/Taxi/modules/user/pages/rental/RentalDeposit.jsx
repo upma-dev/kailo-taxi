@@ -49,6 +49,7 @@ const buildRentalBookingPayload = ({
   conditionPhoto,
 }) => ({
   bookingReference,
+  serviceMode: state.serviceMode === 'with_driver' ? 'with_driver' : 'self_drive',
   vehicleTypeId: vehicle.id || vehicle._id,
   pickupDateTime: state.pickup,
   returnDateTime: state.returnTime,

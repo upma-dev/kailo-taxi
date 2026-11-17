@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import AuthLayout from '../../components/AuthLayout';
 import { ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { userAuthService } from '../../services/authService';
+import { goAfterLogin } from '../../utils/postLoginRedirect';
 
 const unwrap = (response) => response?.data?.data || response?.data || response;
 const PENDING_SIGNUP_PHONE_KEY = 'pendingUserSignupPhone';
@@ -183,7 +184,7 @@ const VerifyOTP = () => {
         sessionStorage.removeItem(PENDING_OTP_PHONE_KEY);
         sessionStorage.removeItem(PENDING_SIGNUP_PHONE_KEY);
         sessionStorage.removeItem(PENDING_SIGNUP_REFERRAL_CODE_KEY);
-        setTimeout(() => navigate('/taxi/user', { replace: true }), 1200);
+        setTimeout(() => goAfterLogin(navigate), 1200);
         return;
       }
 

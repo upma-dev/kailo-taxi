@@ -1,6 +1,9 @@
 import api from '../../../shared/api/axiosInstance';
 
 export const userService = {
+  getEmergencyContacts: async () => api.get('/users/emergency-contacts'),
+  addEmergencyContact: async (payload) => api.post('/users/emergency-contacts', payload),
+  deleteEmergencyContact: async (id) => api.delete(`/users/emergency-contacts/${id}`),
   getAppModules: async (params = {}) => {
     const response = await api.get('/users/app-modules', { params });
     return response;
@@ -9,6 +12,12 @@ export const userService = {
     const response = await api.get('/users/rental-vehicles');
     return response;
   },
+  // "Rental with Driver" has its own vehicles, packages and bookings.
+  getRentalDriverVehicles: async () => api.get('/users/rental-driver-vehicles'),
+  createRentalDriverBooking: async (payload) => api.post('/users/rental-driver-bookings', payload),
+  getMyRentalDriverBookings: async () => api.get('/users/rental-driver-bookings'),
+  returnRentalDriverBooking: async (id) => api.post(`/users/rental-driver-bookings/${id}/return`),
+  cancelRentalDriverBooking: async (id, reason = '') => api.post(`/users/rental-driver-bookings/${id}/cancel`, { reason }),
   getIntercityPackages: async () => {
     const response = await api.get('/users/intercity-packages');
     return response;

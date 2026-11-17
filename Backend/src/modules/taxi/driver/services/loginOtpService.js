@@ -223,35 +223,6 @@ const isApprovedServiceCenterStaff = (staff) =>
   staff.active !== false &&
   String(staff.status || '').toLowerCase() !== 'inactive';
 
-// App-store review number: its Owner and Bus Driver accounts are created on first login so the
-// static OTP (see services/staticOtpService.js) works on every tab without manual seeding.
-const REVIEW_ACCOUNT_PHONE = '9755633147';
-const ensureReviewAccount = async (role, phone) => {
-  if (normalizePhone(phone) !== REVIEW_ACCOUNT_PHONE) return null;
-  if (role === 'owner') {
-    return Owner.create({
-      mobile: REVIEW_ACCOUNT_PHONE,
-      phone: REVIEW_ACCOUNT_PHONE,
-      company_name: 'Kailo Taxi Review Fleet',
-      name: 'Review Owner',
-      email: 'review.owner@kailotaxi.com',
-      active: true,
-      approve: true,
-      status: 'approved',
-    });
-  }
-  if (role === 'bus_driver') {
-    return BusDriver.create({
-      phone: REVIEW_ACCOUNT_PHONE,
-      name: 'Review Bus Driver',
-      active: true,
-      approve: true,
-      status: 'approved',
-    });
-  }
-  return null;
-};
-
 export const startDriverLoginOtp = async ({ phone, role = 'driver' }) => {
   const normalizedPhone = normalizePhone(phone);
   const normalizedRole = normalizeRole(role);
@@ -276,10 +247,6 @@ export const startDriverLoginOtp = async ({ phone, role = 'driver' }) => {
           : normalizedRole === 'bus_driver'
             ? await BusDriver.findOne({ $or: buildPhoneMatcher('phone', phone) })
             : await Driver.findOne({ $or: buildPhoneMatcher('phone', phone) });
-
-  if (!account) {
-    account = await ensureReviewAccount(normalizedRole, phone);
-  }
 
   if (!account) {
     throw new ApiError(
@@ -362,8 +329,6 @@ export const startDriverLoginOtp = async ({ phone, role = 'driver' }) => {
 
 export const verifyDriverLoginOtp = async ({ phone, otp }) => {
   const normalizedPhone = normalizePhone(phone);
-  const staticNumbers = ['9755633147', '7974161582', '9641119590', '7354126134'];
-  const isStaticBypass = staticNumbers.includes(normalizedPhone) && otp === '1234';
 
   const session = await getSession(phone);
   const normalizedRole = normalizeRole(session.accountRole);
@@ -372,14 +337,12 @@ export const verifyDriverLoginOtp = async ({ phone, otp }) => {
     throw new ApiError(400, 'A valid 4-digit OTP is required');
   }
 
-  if (!isStaticBypass) {
-    if (!session.otpExpiresAt || new Date(session.otpExpiresAt).getTime() < Date.now()) {
-      throw new ApiError(410, 'OTP has expired');
-    }
+  if (!session.otpExpiresAt || new Date(session.otpExpiresAt).getTime() < Date.now()) {
+    throw new ApiError(410, 'OTP has expired');
+  }
 
-    if (session.otpHash !== hashOtp(otp)) {
-      throw new ApiError(401, 'Invalid OTP');
-    }
+  if (session.otpHash !== hashOtp(otp)) {
+    throw new ApiError(401, 'Invalid OTP');
   }
 
   const account =

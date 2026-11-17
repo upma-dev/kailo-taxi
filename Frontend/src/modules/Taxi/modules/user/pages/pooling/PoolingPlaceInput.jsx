@@ -7,12 +7,13 @@ import { useAppGoogleMapsLoader, HAS_VALID_GOOGLE_MAPS_KEY } from '../../../admi
  * Google Places autocomplete that resolves the chosen place to coordinates.
  * value / onChange use { label, lat, lng } (or null while nothing is selected).
  */
-const PoolingPlaceInput = ({ value, onChange, placeholder, accentClass = 'text-indigo-500', allowCurrentLocation = false }) => {
+const PoolingPlaceInput = ({ value, onChange, placeholder, accentClass = 'text-indigo-500', allowCurrentLocation = false, inputClassName = '', onTextChange = null }) => {
   const { isLoaded } = useAppGoogleMapsLoader();
   const [query, setQuery] = useState(value?.label || '');
   const [suggestions, setSuggestions] = useState([]);
   const [open, setOpen] = useState(false);
   const [locating, setLocating] = useState(false);
+  const [locationIssue, setLocationIssue] = useState(null); // { title, steps } shown when the device location is unavailable
   const containerRef = useRef(null);
   const serviceRef = useRef(null);
   const tokenRef = useRef(null);
@@ -62,6 +63,7 @@ const PoolingPlaceInput = ({ value, onChange, placeholder, accentClass = 'text-i
   const selectPrediction = (prediction) => {
     if (!window.google?.maps?.Geocoder) return;
     setOpen(false);
+    setLocationIssue(null);
     setQuery(prediction.description);
     tokenRef.current = null;
 
@@ -81,6 +83,7 @@ const PoolingPlaceInput = ({ value, onChange, placeholder, accentClass = 'text-i
       return;
     }
     setLocating(true);
+    setLocationIssue(null);
     navigator.geolocation.getCurrentPosition(
       ({ coords }) => {
         const point = { lat: coords.latitude, lng: coords.longitude };
@@ -94,11 +97,23 @@ const PoolingPlaceInput = ({ value, onChange, placeholder, accentClass = 'text-i
           onChange({ label: status === 'OK' && results?.[0] ? results[0].formatted_address : 'Current location', ...point });
         });
       },
-      () => {
+      (error) => {
         setLocating(false);
-        toast.error('Could not get your location. Please type it instead.');
+        if (error?.code === 1) {
+          setLocationIssue({
+            title: 'Location access is blocked',
+            steps: 'Tap the lock icon next to the web address, set Location to Allow, then try again. On the phone, also allow location for this browser or app in Settings.',
+          });
+        } else if (error?.code === 2) {
+          setLocationIssue({
+            title: 'Your device location is switched off',
+            steps: 'Turn on Location (GPS) from your phone settings or quick settings bar, then try again.',
+          });
+        } else {
+          setLocationIssue({ title: 'Could not find your location', steps: 'Check that Location is on and you have a signal, then try again. You can also type the address.' });
+        }
       },
-      { enableHighAccuracy: true },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
     );
   };
 
@@ -116,10 +131,11 @@ const PoolingPlaceInput = ({ value, onChange, placeholder, accentClass = 'text-i
         onChange={(event) => {
           setQuery(event.target.value);
           setOpen(true);
+          onTextChange?.(event.target.value);
           // Typing again invalidates the previously resolved coordinates.
           if (value) onChange(null);
         }}
-        className={`w-full rounded-[24px] bg-slate-50 py-5 pl-12 text-sm font-black text-slate-900 outline-none transition focus:ring-4 focus:ring-indigo-50 border border-transparent focus:border-indigo-100 ${allowCurrentLocation ? 'pr-14' : 'pr-4'}`}
+        className={`${inputClassName || 'w-full rounded-[24px] bg-slate-50 py-5 pl-12 text-sm font-black text-slate-900 outline-none transition focus:ring-4 focus:ring-indigo-50 border border-transparent focus:border-indigo-100'} ${allowCurrentLocation ? 'pr-14' : 'pr-4'}`}
       />
       {allowCurrentLocation ? (
         <button
@@ -131,6 +147,17 @@ const PoolingPlaceInput = ({ value, onChange, placeholder, accentClass = 'text-i
         >
           <LocateFixed size={18} className={locating ? 'animate-pulse' : ''} />
         </button>
+      ) : null}
+
+      {locationIssue ? (
+        <div className="mt-2 rounded-2xl border border-amber-200 bg-amber-50 p-3">
+          <p className="text-[12px] font-black text-amber-900">{locationIssue.title}</p>
+          <p className="mt-1 text-[11px] font-semibold leading-relaxed text-amber-800">{locationIssue.steps}</p>
+          <div className="mt-2 flex gap-2">
+            <button type="button" onClick={useCurrentLocation} className="rounded-lg bg-amber-600 px-3 py-1.5 text-[11px] font-black text-white">Try again</button>
+            <button type="button" onClick={() => setLocationIssue(null)} className="rounded-lg border border-amber-300 px-3 py-1.5 text-[11px] font-black text-amber-800">Type instead</button>
+          </div>
+        </div>
       ) : null}
 
       {open && suggestions.length > 0 ? (

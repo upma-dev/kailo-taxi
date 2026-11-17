@@ -5,6 +5,9 @@ import { Delivery } from '../../user/models/Delivery.js';
 import { Ride } from '../../user/models/Ride.js';
 import { User } from '../../user/models/User.js';
 import { emitToAdmins } from '../../services/dispatchService.js';
+import { ApiError } from '../../../../utils/ApiError.js';
+import { UserEmergencyContact } from '../../user/models/UserEmergencyContact.js';
+import { isSosSmsConfigured, sendSosSms } from '../../services/smsService.js';
 
 const cleanString = (value = '') => String(value || '').trim();
 
@@ -220,7 +223,49 @@ export const triggerUserSosAlert = asyncHandler(async (req, res) => {
   emitToAdmins('new_sos', payload);
   emitToAdmins('safety:alert:new', payload);
 
-  res.json({ success: true, data: payload });
+  // Text the rider's emergency contacts. A failure here never blocks the alert to the safety center.
+  const contactAlerts = { total: 0, sent: 0, smsConfigured: isSosSmsConfigured() };
+  try {
+    const contacts = await UserEmergencyContact.find({ userId: req.auth.sub }).lean();
+    contactAlerts.total = contacts.length;
+    if (contacts.length && contactAlerts.smsConfigured) {
+      const link = payload.location ? `https://www.google.com/maps?q=${payload.location.lat},${payload.location.lng}` : '';
+      const results = await Promise.all(
+        contacts.map((contact) => sendSosSms({ phone: contact.phone, name: payload.riderName, link })),
+      );
+      contactAlerts.sent = results.filter((result) => result.sent).length;
+    }
+  } catch (error) {
+    console.warn('SOS contact SMS failed:', error?.message);
+  }
+
+  res.json({ success: true, data: { ...payload, contactAlerts } });
+});
+
+const MAX_EMERGENCY_CONTACTS = 5;
+const serializeContact = (item) => ({ id: String(item._id), name: item.name, phone: item.phone });
+
+export const listMyEmergencyContacts = asyncHandler(async (req, res) => {
+  const items = await UserEmergencyContact.find({ userId: req.auth.sub }).sort({ createdAt: 1 }).lean();
+  res.json({ success: true, data: { results: items.map(serializeContact) } });
+});
+
+export const addMyEmergencyContact = asyncHandler(async (req, res) => {
+  const name = cleanString(req.body?.name);
+  const phone = cleanString(req.body?.phone).replace(/\D/g, '').slice(-10);
+  if (!name) throw new ApiError(400, 'Name is required');
+  if (!/^[6-9]\d{9}$/.test(phone)) throw new ApiError(400, 'Enter a valid 10-digit mobile number');
+  if ((await UserEmergencyContact.countDocuments({ userId: req.auth.sub })) >= MAX_EMERGENCY_CONTACTS) {
+    throw new ApiError(400, `You can add up to ${MAX_EMERGENCY_CONTACTS} contacts`);
+  }
+  if (await UserEmergencyContact.exists({ userId: req.auth.sub, phone })) throw new ApiError(409, 'This number is already added');
+  const created = await UserEmergencyContact.create({ userId: req.auth.sub, name, phone });
+  res.status(201).json({ success: true, data: serializeContact(created) });
+});
+
+export const deleteMyEmergencyContact = asyncHandler(async (req, res) => {
+  await UserEmergencyContact.deleteOne({ _id: req.params.id, userId: req.auth.sub });
+  res.json({ success: true, data: { deleted: true } });
 });
 
 export const triggerDriverSosAlert = asyncHandler(async (req, res) => {

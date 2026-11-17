@@ -3,8 +3,9 @@ import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import AuthLayout from '../../components/AuthLayout';
 import { Phone } from 'lucide-react';
-import { getLocalUserToken, userAuthService } from '../../services/authService';
+import { getRiderSessionToken, userAuthService } from '../../services/authService';
 import { useSettings } from '../../../../shared/context/SettingsContext';
+import { goAfterLogin } from '../../utils/postLoginRedirect';
 
 const Login = () => {
   const location = useLocation();
@@ -22,12 +23,12 @@ const Login = () => {
   const isValidPhone = phoneNumber.length === 10 && /^\d+$/.test(phoneNumber);
 
   useEffect(() => {
-    const token = getLocalUserToken();
+    const token = getRiderSessionToken();
     if (!token) {
       return;
     }
 
-    navigate(userHomeRoute, { replace: true });
+    goAfterLogin(navigate, userHomeRoute);
   }, [navigate, userHomeRoute]);
 
   const handleLogin = async (e) => {

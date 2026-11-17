@@ -8,6 +8,7 @@ import OurServices from '../components/OurServices';
 import HomeOffers from '../components/HomeOffers';
 import RecentTrips from '../components/RecentTrips';
 import MyQuoteRequests from '../components/MyQuoteRequests';
+import UpcomingTrips from '../components/UpcomingTrips';
 import BottomNavbar from '../components/BottomNavbar';
 import carIcon from '../../../assets/icons/car.png';
 import bikeIcon from '../../../assets/icons/bike.png';
@@ -600,6 +601,8 @@ const Home = ({ embedded = false }) => {
             <SuperAppHero onSearchFocus={() => navigate(`${routePrefix}/ride/select-location`)} />
           </div>
         )}
+
+        <UpcomingTrips className="mx-5" />
 
         {isScheduledAcceptedRide && (
           <motion.button

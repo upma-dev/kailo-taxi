@@ -31,6 +31,13 @@ const statusClasses = {
   cancelled: 'bg-rose-50 text-rose-700 border-rose-100',
 };
 
+const REQUEST_FILTERS = [
+  { key: 'all', label: 'All', match: () => true },
+  { key: 'pending', label: 'Pending', match: (status) => status === 'pending' },
+  { key: 'ongoing', label: 'Ongoing', match: (status) => ['confirmed', 'assigned', 'end_requested'].includes(status) },
+  { key: 'completed', label: 'Completed', match: (status) => status === 'completed' },
+];
+
 const bookingStatusOptions = [
   { value: 'pending', label: 'Pending' },
   { value: 'confirmed', label: 'Confirmed' },
@@ -164,8 +171,25 @@ const RentalBookingRequests = () => {
   const [savingId, setSavingId] = useState('');
   const [selectedId, setSelectedId] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [page, setPage] = useState(1);
+  const [centers, setCenters] = useState([]);
+  const [staffList, setStaffList] = useState([]);
+  // The admin's pick for the open request: { [id]: { centers: [centerId], staffId } }
+  const [assignDrafts, setAssignDrafts] = useState({});
+
+  useEffect(() => {
+    Promise.all([adminService.getServiceStores(), adminService.getServiceCenterStaff()])
+      .then(([storeResponse, staffResponse]) => {
+        const rowsOf = (payload) => payload?.data?.data?.results || payload?.data?.results || payload?.results || [];
+        setCenters(rowsOf(storeResponse).map((row) => ({ id: String(row.id || row._id), name: row.name || 'Service center' })));
+        setStaffList(rowsOf(staffResponse));
+      })
+      .catch(() => {
+        // Without them only the assignment card stays empty.
+      });
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -194,17 +218,20 @@ const RentalBookingRequests = () => {
 
   useEffect(() => {
     setPage(1);
-  }, [itemsPerPage, searchTerm]);
+  }, [itemsPerPage, searchTerm, statusFilter]);
 
   const safeItems = useMemo(() => (Array.isArray(items) ? items : []), [items]);
+  const filterCounts = useMemo(() => Object.fromEntries(REQUEST_FILTERS.map((f) => [f.key, safeItems.filter((item) => f.match(String(item?.status || ''))).length])), [safeItems]);
   const pendingCount = useMemo(() => safeItems.filter((item) => item?.status === 'pending').length, [safeItems]);
   const paidCount = useMemo(() => safeItems.filter((item) => item?.paymentStatus === 'paid').length, [safeItems]);
 
   const filteredItems = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
-    if (!query) return safeItems;
+    const activeFilter = REQUEST_FILTERS.find((f) => f.key === statusFilter) || REQUEST_FILTERS[0];
+    const byStatus = safeItems.filter((item) => activeFilter.match(String(item?.status || '')));
+    if (!query) return byStatus;
 
-    return safeItems.filter((item) =>
+    return byStatus.filter((item) =>
       [
         item?.bookingReference,
         item?.vehicleName,
@@ -221,7 +248,7 @@ const RentalBookingRequests = () => {
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(query)),
     );
-  }, [safeItems, searchTerm]);
+  }, [safeItems, searchTerm, statusFilter]);
 
   const totalEntries = filteredItems.length;
   const totalPages = Math.max(1, Math.ceil(totalEntries / itemsPerPage));
@@ -263,6 +290,53 @@ const RentalBookingRequests = () => {
       toast.success('Rental request updated');
     } catch (error) {
       toast.error(error?.message || 'Could not update rental request.');
+    } finally {
+      setSavingId('');
+    }
+  };
+
+  const assignFor = (request) => {
+    const id = String(request?.id || request?._id || '');
+    return (
+      assignDrafts[id] || {
+        centers: Array.isArray(request?.serviceCenterIds) ? request.serviceCenterIds : [],
+        staffId: request?.assignedStaff?.id || '',
+      }
+    );
+  };
+
+  const setAssign = (request, patch) => {
+    const id = String(request?.id || request?._id || '');
+    setAssignDrafts((current) => ({ ...current, [id]: { ...assignFor(request), ...patch } }));
+  };
+
+  const toggleCenter = (request, centerId) => {
+    const current = assignFor(request);
+    const next = current.centers.includes(centerId) ? current.centers.filter((value) => value !== centerId) : [...current.centers, centerId];
+    const keepStaff = staffList.find((member) => member.id === current.staffId && next.includes(member.serviceCenterId));
+    setAssign(request, { centers: next, staffId: keepStaff ? current.staffId : '' });
+  };
+
+  const saveAssignment = async () => {
+    if (!selectedRequest) return;
+    const id = String(selectedRequest.id || selectedRequest._id);
+    const draft = assignFor(selectedRequest);
+    setSavingId(id);
+    try {
+      const updated = await adminService.updateRentalBookingRequest(id, {
+        serviceCenterIds: draft.centers,
+        assignedStaffId: draft.staffId || '',
+      });
+      const payload = updated?.data?.data || updated?.data || updated;
+      updateLocal(id, payload);
+      setAssignDrafts((current) => {
+        const next = { ...current };
+        delete next[id];
+        return next;
+      });
+      toast.success('Service centers and staff updated');
+    } catch (error) {
+      toast.error(error?.message || 'Could not update the assignment.');
     } finally {
       setSavingId('');
     }
@@ -310,6 +384,18 @@ const RentalBookingRequests = () => {
       </div>
 
       <div className="rounded-[28px] border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-wrap gap-2 border-b border-slate-100 px-6 pt-5 pb-4">
+          {REQUEST_FILTERS.map((f) => (
+            <button
+              key={f.key}
+              type="button"
+              onClick={() => setStatusFilter(f.key)}
+              className={`rounded-full border px-4 py-2 text-xs font-bold transition ${statusFilter === f.key ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-600'}`}
+            >
+              {f.label} <span className="ml-1 opacity-70">{filterCounts[f.key] || 0}</span>
+            </button>
+          ))}
+        </div>
         <div className="flex flex-col gap-3 border-b border-slate-100 px-6 py-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="relative w-full max-w-md">
             <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -401,6 +487,11 @@ const RentalBookingRequests = () => {
                             <span className={`inline-flex w-fit rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-wide ${paymentStatusClasses[item.paymentStatus] || paymentStatusClasses.pending}`}>
                               {item.paymentStatus}
                             </span>
+                            {item.serviceMode === 'with_driver' ? (
+                              <span className="inline-flex w-fit rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-[10px] font-black uppercase tracking-wide text-violet-700">
+                                With driver
+                              </span>
+                            ) : null}
                           </div>
                         </td>
                         <td className="px-4 py-4">
@@ -637,8 +728,62 @@ const RentalBookingRequests = () => {
                         <span className={`inline-flex rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-wide ${paymentStatusClasses[selectedRequest.paymentStatus] || paymentStatusClasses.pending}`}>
                           {selectedRequest.paymentStatus}
                         </span>
+                        {selectedRequest.serviceMode === 'with_driver' ? (
+                          <span className="inline-flex rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-[10px] font-black uppercase tracking-wide text-violet-700">
+                            With driver
+                          </span>
+                        ) : null}
                       </div>
                     </div>
+                  </div>
+
+                  <div className="rounded-[24px] border border-slate-200 bg-slate-50/70 p-5">
+                    <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Service centers and staff</p>
+                    {centers.length === 0 ? (
+                      <p className="mt-4 text-sm font-semibold text-slate-400">No service centers have been added yet.</p>
+                    ) : (
+                      <div className="mt-4 space-y-3">
+                        <div className="flex flex-wrap gap-2">
+                          {centers.map((center) => {
+                            const on = assignFor(selectedRequest).centers.includes(center.id);
+                            return (
+                              <button
+                                key={center.id}
+                                type="button"
+                                onClick={() => toggleCenter(selectedRequest, center.id)}
+                                className={`rounded-full border px-4 py-2 text-xs font-bold transition ${
+                                  on ? 'border-[#2e3c78] bg-[#2e3c78] text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                                }`}
+                              >
+                                {center.name}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <select
+                          value={assignFor(selectedRequest).staffId}
+                          onChange={(event) => setAssign(selectedRequest, { staffId: event.target.value })}
+                          className={inputClass}
+                        >
+                          <option value="">No staff chosen (the center decides)</option>
+                          {staffList
+                            .filter((member) => member.active && assignFor(selectedRequest).centers.includes(member.serviceCenterId))
+                            .map((member) => (
+                              <option key={member.id} value={member.id}>
+                                {member.name} - {member.serviceCenterName || 'Service center'}
+                              </option>
+                            ))}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={saveAssignment}
+                          disabled={savingId === String(selectedRequest.id || selectedRequest._id)}
+                          className="w-full rounded-xl bg-[#2e3c78] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#24305f] disabled:opacity-60"
+                        >
+                          Save centers and staff
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   <div className="rounded-[24px] border border-slate-200 bg-slate-50/70 p-5">

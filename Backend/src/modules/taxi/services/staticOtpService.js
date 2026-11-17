@@ -1,8 +1,8 @@
-// Fixed-OTP test accounts (Play Store review / QA). Only the numbers below get OTP 1234 and no SMS is sent.
-// Every other number always gets a real SMS OTP in production.
+// Fixed-OTP test accounts (Play Store review / QA). No phone number is built into the code: a number gets a
+// fixed OTP and no SMS only when the server's .env lists it. Every other number always gets a real SMS OTP.
 //
-// - Add or remove numbers here (or, without a code change, put extra numbers in .env as
-//   STATIC_OTP_PHONE=9999999999,8888888888 ; they use STATIC_OTP_CODE or 1234).
+// - Put the numbers in .env as STATIC_OTP_PHONE=9999999999,8888888888 ; they use STATIC_OTP_CODE (set a
+//   code of your own, do not rely on the default) and the default 1234 only as a last resort.
 // - USE_DEFAULT_OTP=true (every number gets the fixed OTP) works only outside production, for local testing.
 //
 // The driver app login is shared by drivers, fleet owners and bus drivers, so the "driver" list covers all three:
@@ -11,8 +11,8 @@
 export const STATIC_TEST_OTP = '1234';
 
 const TEST_NUMBERS = {
-  user: ['7610416911'],
-  driver: ['9755633147', '7974161582', '9641119590', '7354126134', '6268423925'],
+  user: [],
+  driver: [],
 };
 
 const last10 = (phone) => String(phone || '').replace(/\D/g, '').slice(-10);

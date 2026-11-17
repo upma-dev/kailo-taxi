@@ -44,6 +44,13 @@ const readLocalUserToken = () => {
 
 export const getLocalUserToken = readLocalUserToken;
 
+// Only a token that really belongs to a rider. getLocalUserToken falls back to any stored token,
+// which can be an admin or driver token left in this browser.
+export const getRiderSessionToken = () => {
+  const token = readLocalUserToken();
+  return String(getTokenPayload(token)?.role || '').toLowerCase() === 'user' ? token : '';
+};
+
 export const clearLocalUserSession = () => {
   const token = readLocalUserToken();
   const fallbackToken = localStorage.getItem('token');
