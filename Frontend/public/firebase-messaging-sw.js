@@ -68,6 +68,9 @@ function getTargetPathFromPayload(payload = {}) {
 }
 
 async function hasVisibleClientForTarget(payload = {}) {
+  if (payload?.data?.type === "test" || payload?.type === "test") {
+    return false;
+  }
   const windowClients = await clients.matchAll({ type: "window", includeUncontrolled: true });
   const targetPath = getTargetPathFromPayload(payload);
   const targetSegments = String(targetPath).split("/").filter(Boolean);

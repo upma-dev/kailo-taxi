@@ -13,6 +13,7 @@ import { socketService } from '../../../shared/api/socket';
 import api from '../../../shared/api/axiosInstance';
 import { syncThemeForPath } from '@/shared/utils/theme.js';
 import LanguageRow from '@/shared/language/LanguageRow'
+import TestNotificationButton from '../../../shared/push/TestNotificationButton';
 
 const MotionDiv = motion.div;
 const MotionButton = motion.button;
@@ -335,6 +336,11 @@ const Profile = () => {
           {/* Dangerous Zone */}
           <motion.div variants={itemVariants} className="pt-4 pb-12 space-y-4">
              <LanguageRow className="rounded-[24px] border border-slate-100" />
+
+            <TestNotificationButton
+              role="user"
+              className="w-full flex items-center gap-4 px-6 py-4 rounded-[24px] border border-slate-100 text-slate-700 text-[14px] font-bold hover:bg-slate-50 transition-colors disabled:opacity-60"
+            />
 
             <MotionButton
               whileHover={{ scale: 1.01 }}

@@ -10,7 +10,7 @@ const LanguageSelect = () => {
     const location = useLocation();
     const { settings } = useSettings();
     const appName = settings.general?.app_name || 'App';
-    const appLogo = settings.general?.logo || settings.customization?.logo || settings.general?.favicon || '';
+    const appLogo = settings.general?.partner_logo || '/kailo-partner-logo.png';
     const [selectedLang, setSelectedLang] = useState(() => localStorage.getItem('driver_lang') || 'english');
     const isAuthenticatedDriver = Boolean(getLocalDriverToken()) && !location.state?.registrationFlow;
     const authenticatedHome =

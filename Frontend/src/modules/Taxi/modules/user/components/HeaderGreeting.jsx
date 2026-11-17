@@ -16,7 +16,7 @@ const HeaderGreeting = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { settings } = useSettings();
-  const appLogo = settings.general?.logo || settings.customization?.logo || settings.general?.favicon || '';
+  const appLogo = settings.general?.logo || settings.customization?.logo || settings.general?.favicon || '/kailo-taxi-logo.png';
   const appName = settings.general?.app_name || 'App';
   const [locationLabel, setLocationLabel] = useState(getSavedLocationLabel);
   const routePrefix = location.pathname.startsWith('/taxi/user') ? '/taxi/user' : '';

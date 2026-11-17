@@ -28,6 +28,7 @@ import { useNavigate } from 'react-router-dom';
 import DriverBottomNav from '../../shared/components/DriverBottomNav';
 import { clearDriverAuthState, getCurrentDriver, updateDriverProfile } from '../services/registrationService';
 import LanguageRow from '@/shared/language/LanguageRow'
+import TestNotificationButton from '../../../shared/push/TestNotificationButton';
 
 const unwrapDriver = (response) => response?.data?.data || response?.data || response || null;
 const ROUTE_BOOKING_STORAGE_KEY = 'driver_route_booking_preferences';
@@ -461,6 +462,13 @@ const DriverProfile = () => {
             </main>
 
             <div className="px-6 pt-6"><LanguageRow className="border border-slate-100" /></div>
+
+            <div className="px-6 pt-3">
+                <TestNotificationButton
+                    role={isOwner ? "owner" : "driver"}
+                    className="w-full flex items-center gap-3 px-5 py-4 rounded-2xl border border-slate-100 text-slate-700 text-[13px] font-bold active:scale-[0.99] transition-transform disabled:opacity-60"
+                />
+            </div>
 
             {/* Sign Out Section */}
             <div className="px-6 py-10">

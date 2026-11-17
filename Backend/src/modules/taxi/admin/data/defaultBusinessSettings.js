@@ -10,6 +10,7 @@ export const createDefaultBusinessSettings = () => ({
     default_lat: '22.7196',
     default_lng: '75.8577',
     logo: '/kailo-taxi-logo.png',
+    partner_logo: '/kailo-partner-logo.png',
     footer_logo: '/kailo-taxi-logo.png',
     hero_video_url: '/kailo_promotional_video.mp4',
     favicon: '/favicon.ico',

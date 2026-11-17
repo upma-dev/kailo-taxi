@@ -19,6 +19,7 @@ import {
   completeDriverOnboarding,
   getDriverDocumentTemplates,
   getStoredDriverRegistrationSession,
+  normalizeDriverPortalRole,
   persistDriverAuthSession,
   saveDriverDocuments,
   saveDriverRegistrationSession,
@@ -732,7 +733,7 @@ const StepDocuments = () => {
       const token = payload?.token;
       if (token) {
         const normalizedRole =
-          String(session.role || 'driver').toLowerCase() === 'owner' ? 'owner' : 'driver';
+          normalizeDriverPortalRole(session.role || payload?.role || 'driver');
         persistDriverAuthSession({ token, role: normalizedRole });
       }
 

@@ -15,6 +15,7 @@ import {
   clearDriverAuthState,
   getLocalDriverToken,
   getStoredDriverRole,
+  normalizeDriverPortalRole,
   persistDriverAuthSession,
 } from "../../services/registrationService";
 
@@ -59,16 +60,16 @@ const RegistrationStatus = () => {
   const mountedRef = useRef(false);
 
   const appName = settings.general?.app_name || "Kailo Taxi";
-  const appLogo = settings.general?.logo || settings.customization?.logo;
+  const appLogo = settings.general?.partner_logo || '/kailo-partner-logo.png';
   const isVehicleReapproval = location.state?.statusReason === "vehicle-update" || driver?.approve === false;
   const routePrefix = location.pathname.startsWith('/taxi/owner') ? '/taxi/owner' : '/taxi/driver';
 
   useEffect(() => {
     if (location.state?.role) {
       const normalizedRole =
-        String(location.state.role).toLowerCase() === "owner"
-          ? "owner"
-          : "driver";
+        normalizeDriverPortalRole(location.state.role);
+
+
       persistDriverAuthSession({ role: normalizedRole });
     }
 
@@ -81,7 +82,7 @@ const RegistrationStatus = () => {
       const roleFromState = String(location.state?.role || "").toLowerCase();
       persistDriverAuthSession({
         token: onboardingToken,
-        role: roleFromState === "owner" ? "owner" : "driver",
+        role: normalizeDriverPortalRole(roleFromState),
       });
     }
 
@@ -134,10 +135,10 @@ const RegistrationStatus = () => {
         if (isApproved) {
           clearDriverRegistrationSession();
           const normalizedRole =
-            String(getStoredDriverRole() || location.state?.role || "driver").toLowerCase();
+            normalizeDriverPortalRole(getStoredDriverRole() || location.state?.role || "driver");
           
           const isOwner = normalizedRole === "owner";
-          const path = isOwner ? "/taxi/owner/home" : "/taxi/driver/home";
+          const path = isOwner ? "/taxi/owner/home" : normalizedRole === "bus_driver" ? "/taxi/driver/bus-home" : "/taxi/driver/home";
           
           navigate(path, { replace: true });
           requestInFlightRef.current = false;
