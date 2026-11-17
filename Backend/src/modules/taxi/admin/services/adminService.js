@@ -5548,8 +5548,21 @@ export const listDriverDeletionRequests = async ({ page = 1, limit = 50, status 
 
 export const approveDriverDeletionRequest = async (id, adminId) => {
   const now = new Date();
-  const driver = await Driver.findOneAndDelete(
+  const driver = await Driver.findOneAndUpdate(
     { _id: id, deletedAt: null, 'deletionRequest.status': 'pending' },
+    {
+      $set: {
+        deletedAt: now,
+        approve: false,
+        status: 'inactive',
+        deletion_reason: 'driver_delete_request',
+        'deletionRequest.status': 'approved',
+        'deletionRequest.reviewedAt': now,
+        'deletionRequest.reviewedBy': adminId || null,
+        'deletionRequest.adminNote': '',
+      },
+    },
+    { returnDocument: 'before' },
   );
 
   if (!driver) throw new ApiError(404, 'Pending driver deletion request not found');
@@ -5853,8 +5866,14 @@ export const updateDriverPassword = async (id, password) => {
   return serializeDriver(driver);
 };
 
+// Deleting a driver hides the account (like deleting a user). It can be restored or removed for good
+// from the Deleted Drivers page.
 export const deleteDriver = async (id) => {
-  const deleted = await Driver.findByIdAndDelete(id);
+  const deleted = await Driver.findOneAndUpdate(
+    { _id: id, deletedAt: null },
+    { $set: { deletedAt: new Date(), approve: false, status: 'inactive', deletion_reason: 'admin_delete' } },
+    { returnDocument: 'after' },
+  );
   if (!deleted) {
     throw new ApiError(404, 'Driver not found');
   }
