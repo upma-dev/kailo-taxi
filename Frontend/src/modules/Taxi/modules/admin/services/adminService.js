@@ -47,6 +47,12 @@ export const adminService = {
   updateUser: (id, userData) => api.patch(`/admin/users/${id}`, userData),
   
   deleteUser: (id) => api.delete(`/admin/users/${id}`),
+  getDeletedUsers: () => api.get('/admin/users/deleted?page=1&limit=200'),
+  restoreDeletedUser: (id) => api.patch(`/admin/users/deleted/${id}/restore`),
+  permanentlyDeleteDeletedUser: (id) => api.delete(`/admin/users/deleted/${id}`),
+  getDeletedDrivers: () => api.get('/admin/drivers/deleted?page=1&limit=200'),
+  restoreDeletedDriver: (id) => api.patch(`/admin/drivers/deleted/${id}/restore`),
+  permanentlyDeleteDeletedDriver: (id) => api.delete(`/admin/drivers/deleted/${id}`),
   getUserDeleteRequests: () => api.get('/admin/users/delete-requests'),
   approveUserDeleteRequest: (id) => api.patch(`/admin/users/delete-requests/${id}/approve`),
   rejectUserDeleteRequest: (id, adminNote = '') => api.patch(`/admin/users/delete-requests/${id}/reject`, { adminNote }),

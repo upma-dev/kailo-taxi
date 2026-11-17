@@ -212,6 +212,7 @@ const AdminDriverWallet = lazy(() => import('./modules/admin/pages/drivers/Drive
 const AdminNegativeBalanceDrivers = lazy(() => import('./modules/admin/pages/drivers/NegativeBalanceDrivers'));
 const AdminWithdrawalRequestDrivers = lazy(() => import('./modules/admin/pages/drivers/WithdrawalRequestDrivers'));
 const AdminWithdrawalRequestDetail = lazy(() => import('./modules/admin/pages/drivers/WithdrawalRequestDetail'));
+const AdminDeletedAccounts = lazy(() => import('./modules/admin/pages/DeletedAccounts'));
 const AdminDriverDeleteRequests = lazy(() => import('./modules/admin/pages/drivers/DriverDeleteRequests'));
 const AdminGlobalDocuments = lazy(() => import('./modules/admin/pages/drivers/GlobalDocuments'));
 const AdminDriverDocumentForm = lazy(() => import('./modules/admin/pages/drivers/DriverDocumentForm'));
@@ -1270,6 +1271,8 @@ function TaxiApp() {
                   path="users/delete-requests"
                   element={<AdminDeleteRequestUsers />}
                 />
+                <Route path="users/deleted" element={<AdminDeletedAccounts kind="users" />} />
+                <Route path="drivers/deleted" element={<AdminDeletedAccounts kind="drivers" />} />
                 <Route
                   path="users/bulk-upload"
                   element={<AdminUserBulkUpload />}
