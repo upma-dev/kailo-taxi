@@ -375,6 +375,8 @@ export const DEFAULT_LANDING = {
     copyright: '© {year} {company}. All rights reserved.',
     builtIn: 'Built in Bangalore, IN',
     tagline: 'Speed, Safety & Quality',
+    // Optional separate footers per panel: { user: { enabled, ...footer fields }, driver: { ... } }
+    panels: {},
   },
   appScreens: {
     user: { title: 'Move with', highlight: 'Safety & Style.', subtitle: 'Reliable, fast and always at your service.', image: '' },

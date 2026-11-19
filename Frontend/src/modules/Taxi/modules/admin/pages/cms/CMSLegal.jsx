@@ -1,256 +1,536 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  FileText, 
-  ShieldCheck, 
-  Lock, 
-  Car, 
-  Truck, 
-  Receipt, 
-  XCircle, 
-  Save, 
-  Loader2, 
-  Eye, 
-  Edit3, 
-  Sparkles, 
-  RefreshCw, 
-  CheckCircle,
-  Building2
-} from 'lucide-react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { ArrowDown, ArrowUp, ExternalLink, Eye, EyeOff, Edit3, FilePlus2, Loader2, Plus, Save, ShieldCheck, Trash2, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { cmsApi as api, pageEndpoint } from '../../services/cmsService';
 import { legalHtmlToPlainText, plainTextToLegalHtml } from '@/shared/utils/legalContentFormat';
 
+// Same lists the server starts with. The server adds anything the admin creates.
+const BUILT_IN_APPS = ['user', 'driver', 'website'];
+const BUILT_IN_DOCS = ['privacy', 'terms', 'refund', 'cancellation', 'shipping', 'dmv-compliance'];
+const FALLBACK_INDEX = {
+  apps: [
+    { id: 'user', label: 'Rider App' },
+    { id: 'driver', label: 'Driver App' },
+    { id: 'website', label: 'Website' },
+  ],
+  docs: [
+    { id: 'privacy', label: 'Privacy Policy' },
+    { id: 'terms', label: 'Terms & Conditions' },
+    { id: 'refund', label: 'Refund Policy' },
+    { id: 'cancellation', label: 'Cancellation Policy' },
+    { id: 'shipping', label: 'Parcel & Shipping Policy' },
+    { id: 'dmv-compliance', label: 'DMV & Transport Compliance' },
+  ],
+};
+
+// Rider app pages keep their original keys (terms, privacy, ...); every other app is "<app>-<document>".
+const pageKey = (app, doc) => (app === 'user' ? doc : `${app}-${doc}`);
+
+const slug = (value) =>
+  String(value || '')
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+const blankSection = () => ({ heading: '', body: '' });
+const TEMPLATE_SECTIONS = (label) => [
+  { heading: 'Overview', body: `Write what this ${label.toLowerCase()} covers.` },
+  { heading: 'Details', body: '- **First point:** explain it here.\n- **Second point:** explain it here.' },
+  { heading: 'Contact', body: 'For any questions, contact our support team.' },
+];
+
+// Section numbers are added automatically on the page, so headings are stored without them.
+const stripNumber = (t) => String(t || '').replace(/^\s*\d+\s*[.):-]\s*/, '').trim();
+
+// Splits saved HTML into { intro, sections: [{ heading, body }] } the same way the public page does.
+const htmlToSections = (html) => {
+  if (!html) return { intro: '', sections: [] };
+  const root = new DOMParser().parseFromString(`<div>${html}</div>`, 'text/html').body.firstElementChild;
+  const nodes = Array.from(root.childNodes);
+  const h2 = nodes.filter((n) => n.nodeName === 'H2').length;
+  const h3 = nodes.filter((n) => n.nodeName === 'H3').length;
+  const tag = h2 === 1 && h3 > 0 ? 'H3' : 'H2';
+  const preface = [];
+  const sections = [];
+  let cur = null;
+  for (const n of nodes) {
+    if (n.nodeName === tag) {
+      cur = { heading: stripNumber(n.textContent), html: '' };
+      sections.push(cur);
+    } else if (!cur && /^H[1-3]$/.test(n.nodeName)) continue;
+    else if (cur) cur.html += n.nodeType === 1 ? n.outerHTML : n.textContent;
+    else if (n.textContent.trim()) preface.push(n.textContent.trim());
+  }
+  return {
+    intro: preface.join(' '),
+    sections: sections.map((x) => ({ heading: x.heading, body: legalHtmlToPlainText(x.html) })),
+  };
+};
+
+const escapeText = (v) => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const sectionsToHtml = (sections) =>
+  sections
+    .filter((x) => !x.hidden && (x.heading.trim() || x.body.trim()))
+    .map((x) => `<h2>${escapeText(x.heading.trim() || 'Section')}</h2>${plainTextToLegalHtml(x.body)}`)
+    .join('');
+
+const SwitchCard = ({ title, hint, checked, onChange }) => (
+  <div className="flex items-center justify-between gap-4 rounded-xl border border-gray-200 px-4 py-3">
+    <div>
+      <p className="text-sm font-bold text-gray-900">{title}</p>
+      <p className="text-xs text-gray-500">{hint}</p>
+    </div>
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      className={`relative h-7 w-12 shrink-0 cursor-pointer rounded-full transition-colors ${checked ? 'bg-emerald-500' : 'bg-gray-300'}`}
+    >
+      <span className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-all ${checked ? 'left-[22px]' : 'left-0.5'}`} />
+    </button>
+  </div>
+);
+
 const CMSLegal = () => {
-  const [activeTab, setActiveTab] = useState('driver-terms'); 
-  // Options: 'terms', 'privacy', 'driver-terms', 'driver-privacy', 'refund', 'shipping', 'cancellation', 'dmv-compliance'
+  const [index, setIndex] = useState(FALLBACK_INDEX);
+  const [app, setApp] = useState('user');
+  const [doc, setDoc] = useState('privacy');
 
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [viewMode, setViewMode] = useState('edit'); // 'edit' | 'preview'
+  const [viewMode, setViewMode] = useState('edit');
+  const [form, setForm] = useState({ title: '', intro: '', sections: [], published: true, showUpdated: true, updatedAt: '' });
+  const [status, setStatus] = useState({}); // app id -> 'live' | 'draft'
 
-  const [documentData, setDocumentData] = useState({
-    title: 'Terms and Conditions',
-    content: ''
-  });
+  const [adding, setAdding] = useState(null); // 'app' | 'doc' | null
+  const [newLabel, setNewLabel] = useState('');
 
-  const legalTabs = [
-    { id: 'driver-terms', label: 'Driver Terms', icon: Car, color: 'text-indigo-600', key: 'driver-terms' },
-    { id: 'driver-privacy', label: 'Driver Privacy Policy', icon: Lock, color: 'text-indigo-600', key: 'driver-privacy' },
-    { id: 'terms', label: 'User Terms', icon: FileText, color: 'text-blue-600', key: 'terms' },
-    { id: 'privacy', label: 'User Privacy Policy', icon: ShieldCheck, color: 'text-blue-600', key: 'privacy' },
-    { id: 'refund', label: 'Refund Policy', icon: Receipt, color: 'text-amber-600', key: 'refund' },
-    { id: 'shipping', label: 'Parcel & Shipping Policy', icon: Truck, color: 'text-purple-600', key: 'shipping' },
-    { id: 'cancellation', label: 'Cancellation Policy', icon: XCircle, color: 'text-rose-600', key: 'cancellation' },
-    { id: 'dmv-compliance', label: 'DMV & Transport Rules', icon: Building2, color: 'text-cyan-600', key: 'dmv-compliance' },
-  ];
+  const key = pageKey(app, doc);
+  const appLabel = index.apps.find((a) => a.id === app)?.label || app;
+  const docLabel = index.docs.find((d) => d.id === doc)?.label || doc;
+  // Cancellation charges (and the driver refund page) are built from the pricing settings, not from this text.
+  const isLiveSettingsPage = doc === 'cancellation' || (doc === 'refund' && app === 'driver');
 
   useEffect(() => {
-    fetchDocumentContent(activeTab);
-  }, [activeTab]);
+    api
+      .get(pageEndpoint('legal-index'))
+      .then((res) => res.data?.data && setIndex(res.data.data))
+      .catch(() => {});
+  }, []);
 
-  const getEndpoint = (key) => {
-    if (key === 'driver-terms') return pageEndpoint('driver-terms');
-    if (key === 'driver-privacy') return pageEndpoint('driver-privacy');
-    if (key === 'terms') return pageEndpoint('terms');
-    if (key === 'privacy') return pageEndpoint('privacy');
-    if (key === 'refund') return pageEndpoint('refund');
-    if (key === 'cancellation') return pageEndpoint('cancellation');
-    return pageEndpoint(key);
-  };
+  // Live / Draft badge on every app for the document being edited.
+  useEffect(() => {
+    let alive = true;
+    Promise.all(
+      index.apps.map((a) =>
+        api
+          .get(pageEndpoint(pageKey(a.id, doc)))
+          .then((res) => [a.id, res.data?.data?.published !== false && res.data?.data?.content ? 'live' : 'draft'])
+          .catch(() => [a.id, 'draft']),
+      ),
+    ).then((rows) => alive && setStatus(Object.fromEntries(rows)));
+    return () => {
+      alive = false;
+    };
+  }, [index.apps, doc]);
 
-  const fetchDocumentContent = async (key) => {
+  const loadPage = useCallback(async () => {
+    setLoading(true);
     try {
-      setLoading(true);
-      const res = await api.get(getEndpoint(key));
-      if (res.data?.success && res.data?.data) {
-        const pageData = res.data.data;
-        const plain = legalHtmlToPlainText(pageData.content || '');
-        setDocumentData({
-          title: pageData.title || getDefaultTitle(key),
-          content: plain
-        });
-      } else {
-        setDocumentData({
-          title: getDefaultTitle(key),
-          content: getDefaultContent(key)
-        });
-      }
-    } catch (err) {
-      console.log(`Error fetching ${key}, using seeded template:`, err);
-      setDocumentData({
-        title: getDefaultTitle(key),
-        content: getDefaultContent(key)
+      const res = await api.get(pageEndpoint(key));
+      const data = res.data?.data || {};
+      const parsed = htmlToSections(data.content);
+      setForm({
+        title: data.title || docLabel,
+        intro: data.intro || parsed.intro,
+        published: data.published !== false,
+        showUpdated: data.showUpdated !== false,
+        updatedAt: data.updatedAt || '',
+        sections: Array.isArray(data.sections) && data.sections.length
+          ? data.sections.map((x) => ({ heading: x.heading || '', body: x.body || '', hidden: !!x.hidden }))
+          : parsed.sections.length
+          ? parsed.sections
+          : data.content
+            ? [{ heading: data.title || docLabel, body: legalHtmlToPlainText(data.content) }]
+            : TEMPLATE_SECTIONS(docLabel),
       });
+    } catch {
+      setForm({ title: docLabel, intro: '', sections: TEMPLATE_SECTIONS(docLabel), published: true, showUpdated: true, updatedAt: '' });
     } finally {
       setLoading(false);
     }
-  };
+  }, [key, docLabel]);
+
+  useEffect(() => {
+    loadPage();
+  }, [loadPage]);
 
   const handleSave = async () => {
+    if (!form.title.trim()) return toast.error('Please enter a title');
     try {
       setSaving(true);
-      const htmlContent = plainTextToLegalHtml(documentData.content);
-      const res = await api.put(
-        getEndpoint(activeTab),
-        { title: documentData.title, content: htmlContent }
-      );
-      if (res.data?.success) {
-        toast.success(`${documentData.title} saved & published successfully!`);
-      } else {
-        toast.success('Document updated!');
-      }
+      await api.put(pageEndpoint(key), {
+        title: form.title.trim(),
+        intro: form.intro.trim(),
+        content: sectionsToHtml(form.sections),
+        published: form.published,
+        showUpdated: form.showUpdated,
+        sections: form.sections,
+      });
+      setForm((f) => ({ ...f, updatedAt: new Date().toISOString() }));
+      setStatus((st) => ({ ...st, [app]: form.published ? 'live' : 'draft' }));
+      toast.success(form.published ? `${docLabel} for ${appLabel} saved and live` : `${docLabel} for ${appLabel} saved (not published)`);
     } catch (err) {
-      toast.error('Saved locally for session');
+      toast.error(err?.message || 'Could not save. Please try again.');
     } finally {
       setSaving(false);
     }
   };
 
-  const getDefaultTitle = (key) => {
-    switch (key) {
-      case 'driver-terms': return 'Driver Partner Terms & Conditions';
-      case 'driver-privacy': return 'Driver Location & Data Privacy Policy';
-      case 'terms': return 'User Terms and Conditions';
-      case 'privacy': return 'User Privacy Policy';
-      case 'shipping': return 'Parcel & Shipping Policy';
-      case 'refund': return 'Refund & Settlement Policy';
-      case 'cancellation': return 'Cancellation Policy';
-      case 'dmv-compliance': return 'DMV & Regulatory Transit Compliance';
-      default: return 'Legal Policy Document';
+  const saveIndex = async (next, okMessage) => {
+    try {
+      const res = await api.put(pageEndpoint('legal-index'), next);
+      setIndex(res.data?.data || next);
+      toast.success(okMessage);
+      return true;
+    } catch (err) {
+      toast.error(err?.message || 'Could not update the list');
+      return false;
     }
   };
 
-  const getDefaultContent = (key) => {
-    if (key === 'driver-terms') {
-      return `# Driver Partner Terms and Conditions\n\nWelcome to Kailo Taxi. As an independent driver partner operating cab, auto, bike or parcel services, you agree to these Terms.\n\n## 1. Eligibility & Verification\n- Must possess a valid commercial driving license.\n- Active vehicle RC, insurance, and permit documents.\n- Pass background verification checks.\n\n## 2. Fare & Bidding Policy\n- Ride fares are calculated dynamically or set via bid negotiation.\n- Platform commission is deducted as per active subscription/tier.\n\n## 3. Safety Standards\n- Strict adherence to speed limits and traffic laws.\n- Zero tolerance for alcohol or substance influence while on duty.`;
+  const addItem = async () => {
+    const label = newLabel.trim();
+    if (!label) return;
+    if (adding === 'app') {
+      const id = slug(label).replace(/-/g, '').slice(0, 20);
+      if (id.length < 2) return toast.error('Use a name with at least 2 letters or numbers');
+      if (index.apps.some((a) => a.id === id)) return toast.error('That app already exists');
+      if (await saveIndex({ ...index, apps: [...index.apps, { id, label }] }, `${label} added`)) setApp(id);
+    } else {
+      const id = slug(label).slice(0, 40);
+      if (id.length < 2) return toast.error('Use a name with at least 2 letters or numbers');
+      if (index.docs.some((d) => d.id === id)) return toast.error('That document already exists');
+      if (await saveIndex({ ...index, docs: [...index.docs, { id, label }] }, `${label} added`)) setDoc(id);
     }
-    if (key === 'driver-privacy') {
-      return `# Driver Location & Data Privacy Policy\n\nKailo Taxi collects driver location data to enable real-time ride dispatching and passenger safety.\n\n## 1. Background Location Tracking\n- Location data is collected when driver app is set to "ONLINE" or during active trips.\n- Location data facilitates route navigation and safety SOS monitoring.\n\n## 2. Data Protection & Sharing\n- Driver contact numbers are masked during rider calls.\n- Financial wallet history is encrypted.`;
-    }
-    return `# ${getDefaultTitle(key)}\n\nThis policy governs platform usage on Kailo Taxi. Ensure all terms are strictly observed.\n\n## 1. General Overview\nAll users and partners must maintain accurate registration credentials.`;
+    setAdding(null);
+    setNewLabel('');
   };
 
-  const inputClass = "w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-800 bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all";
-  const labelClass = "block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider";
-  const cardClass = "bg-white rounded-2xl border border-gray-100 p-6 shadow-sm";
+  const removeItem = async (type, id) => {
+    const label = (type === 'app' ? index.apps : index.docs).find((x) => x.id === id)?.label || id;
+    if (!window.confirm(`Remove "${label}" from the list? Its saved text is kept but it will no longer be listed.`)) return;
+    const next =
+      type === 'app'
+        ? { ...index, apps: index.apps.filter((a) => a.id !== id) }
+        : { ...index, docs: index.docs.filter((d) => d.id !== id) };
+    if (await saveIndex(next, `${label} removed`)) {
+      if (type === 'app' && app === id) setApp('user');
+      if (type === 'doc' && doc === id) setDoc('privacy');
+    }
+  };
+
+  const liveUrl = `/taxi/legal/${app}/${doc}`;
+  const setSection = (i, patch) => setForm((f) => ({ ...f, sections: f.sections.map((x, idx) => (idx === i ? { ...x, ...patch } : x)) }));
+  const moveSection = (i, dir) =>
+    setForm((f) => {
+      const next = [...f.sections];
+      const j = i + dir;
+      if (j < 0 || j >= next.length) return f;
+      [next[i], next[j]] = [next[j], next[i]];
+      return { ...f, sections: next };
+    });
+
+  const inputClass =
+    'w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-800 bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all';
+  const labelClass = 'block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider';
+
+  const Chip = ({ active, onClick, onRemove, children }) => (
+    <span
+      className={`inline-flex items-center rounded-xl border text-xs font-bold whitespace-nowrap transition-all ${
+        active ? 'bg-gray-900 text-white border-gray-900 shadow-md' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-100'
+      }`}
+    >
+      <button type="button" onClick={onClick} className="px-4 py-2.5 cursor-pointer">
+        {children}
+      </button>
+      {onRemove && (
+        <button type="button" onClick={onRemove} aria-label="Remove" className="pr-3 -ml-2 opacity-60 hover:opacity-100 cursor-pointer">
+          <X size={13} />
+        </button>
+      )}
+    </span>
+  );
+
+  const AddButton = ({ type, label }) => (
+    <button
+      type="button"
+      onClick={() => {
+        setAdding(adding === type ? null : type);
+        setNewLabel('');
+      }}
+      className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-dashed border-indigo-300 text-indigo-600 text-xs font-bold hover:bg-indigo-50 cursor-pointer whitespace-nowrap"
+    >
+      <Plus size={14} /> {label}
+    </button>
+  );
 
   return (
-    <div className="min-h-screen bg-gray-50/50 p-6 lg:p-8 font-sans pb-24 max-w-6xl mx-auto space-y-6 animate-in fade-in duration-500">
-      
-      {/* Header */}
+    <div className="min-h-screen bg-gray-50/50 p-6 lg:p-8 font-sans pb-24 max-w-6xl mx-auto space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-200/60 pb-5">
         <div>
           <div className="flex items-center gap-2 text-xs font-bold text-indigo-600 uppercase tracking-widest mb-1">
-            <ShieldCheck size={14} /> CMS Builder / Legal & DMV Compliance Hub
+            <ShieldCheck size={14} /> CMS Builder / Legal Pages
           </div>
-          <h1 className="text-2xl font-black text-gray-900 tracking-tight">Privacy Policy, T&C and DMV Settings</h1>
-          <p className="text-xs text-gray-500 font-medium">Manage legal agreements, privacy disclosures, driver terms, and regulatory compliance documents.</p>
+          <h1 className="text-2xl font-black text-gray-900 tracking-tight">Privacy Policy, Terms, Refund &amp; more</h1>
+          <p className="text-xs text-gray-500 font-medium">
+            Pick an app or the website, pick a document, and write what that app should show. Every app can have its own text.
+          </p>
         </div>
         <button
           onClick={handleSave}
-          disabled={saving}
-          className="px-6 py-2.5 bg-gray-900 hover:bg-black text-white rounded-xl text-xs font-bold shadow-md hover:shadow-lg transition-all flex items-center gap-2 justify-center shrink-0"
+          disabled={saving || loading}
+          className="px-6 py-2.5 bg-gray-900 hover:bg-black disabled:opacity-60 text-white rounded-xl text-xs font-bold shadow-md transition-all flex items-center gap-2 justify-center shrink-0 cursor-pointer"
         >
           {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-          Publish Legal Document
+          Save
         </button>
       </div>
 
-      {/* Policy Tabs */}
-      <div className="flex gap-2 overflow-x-auto pb-2 border-b border-gray-200">
-        {legalTabs.map((tab) => {
-          const IconComp = tab.icon;
-          const isActive = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
-                isActive
-                  ? 'bg-gray-900 text-white shadow-md'
-                  : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200/80'
-              }`}
-            >
-              <IconComp size={15} className={isActive ? 'text-indigo-300' : tab.color} />
-              {tab.label}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Editor & Content Container */}
-      <div className={cardClass}>
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-gray-100">
-          <div>
-            <span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest bg-indigo-50 px-2.5 py-1 rounded-md mb-2 inline-block">
-              {legalTabs.find(t => t.id === activeTab)?.label}
-            </span>
-            <h3 className="text-lg font-black text-gray-900 tracking-tight">{documentData.title}</h3>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <div className="inline-flex rounded-xl border border-gray-200 p-1 bg-gray-50">
-              <button
-                type="button"
-                onClick={() => setViewMode('edit')}
-                className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
-                  viewMode === 'edit' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-                }`}
+      {/* 1. App / website */}
+      <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm space-y-4">
+        <div>
+          <p className={labelClass}>1. Which app or website?</p>
+          <div className="flex flex-wrap gap-2">
+            {index.apps.map((a) => (
+              <Chip
+                key={a.id}
+                active={app === a.id}
+                onClick={() => setApp(a.id)}
+                onRemove={BUILT_IN_APPS.includes(a.id) ? null : () => removeItem('app', a.id)}
               >
-                <Edit3 size={13} /> Edit Mode
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode('preview')}
-                className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
-                  viewMode === 'preview' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                <Eye size={13} /> Live Preview
-              </button>
-            </div>
+                {a.label}
+                {status[a.id] && (
+                  <span className={`ml-2 rounded px-1.5 py-0.5 text-[9px] font-black uppercase ${status[a.id] === 'live' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                    {status[a.id] === 'live' ? 'Live' : 'Draft'}
+                  </span>
+                )}
+              </Chip>
+            ))}
+            <AddButton type="app" label="Add app / website" />
           </div>
         </div>
 
-        {loading ? (
-          <div className="py-16 text-center text-gray-400 font-medium">
-            <Loader2 size={28} className="animate-spin mx-auto mb-3 text-indigo-600" /> Loading Document...
+        <div>
+          <p className={labelClass}>2. Which document?</p>
+          <div className="flex flex-wrap gap-2">
+            {index.docs.map((d) => (
+              <Chip
+                key={d.id}
+                active={doc === d.id}
+                onClick={() => setDoc(d.id)}
+                onRemove={BUILT_IN_DOCS.includes(d.id) ? null : () => removeItem('doc', d.id)}
+              >
+                {d.label}
+              </Chip>
+            ))}
+            <AddButton type="doc" label="Add document" />
           </div>
-        ) : viewMode === 'edit' ? (
-          <div className="space-y-4">
-            <div>
-              <label className={labelClass}>Document Title</label>
-              <input
-                className={inputClass}
-                value={documentData.title}
-                onChange={(e) => setDocumentData({ ...documentData, title: e.target.value })}
-              />
-            </div>
+        </div>
 
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className={labelClass}>Document Body Content</label>
-                <span className="text-[11px] text-gray-400 font-medium">Use # Header, ## Section, - Bullets, **Bold**</span>
-              </div>
-              <textarea
-                className={`${inputClass} min-h-[500px] font-mono text-xs leading-relaxed resize-y`}
-                value={documentData.content}
-                onChange={(e) => setDocumentData({ ...documentData, content: e.target.value })}
-                placeholder="Write legal text here..."
-              />
-            </div>
-          </div>
-        ) : (
-          <div className="min-h-[500px] p-8 bg-gray-50/70 rounded-xl border border-gray-200">
-            <h2 className="text-2xl font-black text-gray-900 mb-6">{documentData.title}</h2>
-            <div
-              className="prose prose-indigo max-w-none text-xs leading-relaxed text-gray-700 space-y-4"
-              dangerouslySetInnerHTML={{ __html: plainTextToLegalHtml(documentData.content) }}
+        {adding && (
+          <div className="flex flex-col sm:flex-row gap-2 rounded-xl bg-indigo-50/60 border border-indigo-100 p-3">
+            <input
+              autoFocus
+              className={inputClass}
+              placeholder={adding === 'app' ? 'Name, e.g. Partner App' : 'Name, e.g. Safety Guidelines'}
+              value={newLabel}
+              onChange={(e) => setNewLabel(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && addItem()}
             />
+            <button
+              type="button"
+              onClick={addItem}
+              className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center justify-center gap-2 cursor-pointer shrink-0"
+            >
+              <FilePlus2 size={14} /> Add
+            </button>
           </div>
         )}
       </div>
 
+      {/* Editor */}
+      <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-gray-100">
+          <div>
+            <span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest bg-indigo-50 px-2.5 py-1 rounded-md mb-2 inline-block">
+              {docLabel} · {appLabel}
+            </span>
+            <h3 className="text-lg font-black text-gray-900 tracking-tight">{form.title || docLabel}</h3>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <a
+              href={liveUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-800"
+            >
+              <ExternalLink size={13} /> Open live page
+            </a>
+            <div className="inline-flex rounded-xl border border-gray-200 p-1 bg-gray-50">
+              {[
+                ['edit', Edit3, 'Edit'],
+                ['preview', Eye, 'Preview'],
+              ].map(([mode, Icon, text]) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setViewMode(mode)}
+                  className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
+                    viewMode === mode ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  <Icon size={13} /> {text}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {isLiveSettingsPage && (
+          <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-medium text-amber-800">
+            The charges and rules on this page come from the pricing / cancellation settings and update automatically. Only the title is used from here.
+          </div>
+        )}
+
+        {loading ? (
+          <div className="py-16 text-center text-gray-400 font-medium">
+            <Loader2 size={28} className="animate-spin mx-auto mb-3 text-indigo-600" /> Loading...
+          </div>
+        ) : viewMode === 'edit' ? (
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500">
+              <span>{form.updatedAt ? `Last saved ${new Date(form.updatedAt).toLocaleString()}` : 'Not saved yet'}</span>
+              <a href={liveUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-bold text-indigo-600 hover:underline">
+                Preview <ExternalLink size={12} />
+              </a>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <SwitchCard
+                title="Published"
+                hint={form.published ? 'Live in the app.' : 'When off, the page shows "not available" in the app.'}
+                checked={form.published}
+                onChange={(v) => setForm({ ...form, published: v })}
+              />
+              <SwitchCard
+                title={'Show "Last updated" date'}
+                hint="A small line under the title, set from the last save."
+                checked={form.showUpdated}
+                onChange={(v) => setForm({ ...form, showUpdated: v })}
+              />
+            </div>
+
+            <div>
+              <label className={labelClass}>Page Title</label>
+              <input className={inputClass} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
+            </div>
+
+            <div>
+              <label className={labelClass}>Short Summary (shown in the green box at the top)</label>
+              <textarea
+                className={`${inputClass} min-h-[84px] resize-y`}
+                value={form.intro}
+                onChange={(e) => setForm({ ...form, intro: e.target.value })}
+                placeholder="One or two lines that tell people what this page is about."
+              />
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <label className={labelClass}>Sections (numbered automatically)</label>
+                <span className="text-[11px] text-gray-400 font-medium">
+                  In the text: <b>- Bullet</b> · <b>**Bold**</b> · blank line = new paragraph
+                </span>
+              </div>
+              {form.sections.map((sec, i) => (
+                <div key={i} className={`rounded-xl border border-gray-200 bg-gray-50/60 p-4 space-y-3 ${sec.hidden ? 'opacity-60' : ''}`}>
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gray-900 text-xs font-black text-white">{i + 1}</span>
+                    <input
+                      className={inputClass}
+                      placeholder="Section heading, e.g. Eligibility and your account"
+                      value={sec.heading}
+                      onChange={(e) => setSection(i, { heading: e.target.value })}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setSection(i, { hidden: !sec.hidden })}
+                      aria-label={sec.hidden ? 'Show section' : 'Hide section'}
+                      title={sec.hidden ? 'Hidden in the app - click to show' : 'Visible in the app - click to hide'}
+                      className={`p-2 cursor-pointer ${sec.hidden ? 'text-amber-500' : 'text-gray-400 hover:text-gray-800'}`}
+                    >
+                      {sec.hidden ? <EyeOff size={15} /> : <Eye size={15} />}
+                    </button>
+                    <button type="button" onClick={() => moveSection(i, -1)} disabled={i === 0} aria-label="Move up" className="p-2 text-gray-400 hover:text-gray-800 disabled:opacity-30 cursor-pointer">
+                      <ArrowUp size={15} />
+                    </button>
+                    <button type="button" onClick={() => moveSection(i, 1)} disabled={i === form.sections.length - 1} aria-label="Move down" className="p-2 text-gray-400 hover:text-gray-800 disabled:opacity-30 cursor-pointer">
+                      <ArrowDown size={15} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setForm((f) => ({ ...f, sections: f.sections.filter((_, idx) => idx !== i) }))}
+                      aria-label="Delete section"
+                      className="p-2 text-gray-400 hover:text-red-500 cursor-pointer"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
+                  <textarea
+                    className={`${inputClass} min-h-[140px] text-[13px] leading-relaxed resize-y`}
+                    placeholder="Write the text for this section..."
+                    value={sec.body}
+                    onChange={(e) => setSection(i, { body: e.target.value })}
+                  />
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => setForm((f) => ({ ...f, sections: [...f.sections, blankSection()] }))}
+                className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-dashed border-indigo-300 text-indigo-600 text-xs font-bold hover:bg-indigo-50 cursor-pointer"
+              >
+                <Plus size={14} /> Add section
+              </button>
+              <div className="flex justify-end border-t border-gray-100 pt-5">
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="px-6 py-2.5 bg-gray-900 hover:bg-black disabled:opacity-60 text-white rounded-xl text-xs font-bold shadow-md flex items-center gap-2 cursor-pointer"
+                >
+                  {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} Save
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="min-h-[400px] p-6 bg-gray-50/70 rounded-xl border border-gray-200">
+            <h2 className="text-xl font-black text-gray-900 mb-3">{form.title}</h2>
+            {form.intro && <p className="mb-4 rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-900">{form.intro}</p>}
+            <div className="space-y-4">
+              {form.sections.map((sec, i) => !sec.hidden && (
+                <div key={i} className="rounded-2xl border border-gray-200 bg-white p-5">
+                  <h3 className="text-base font-black text-gray-900">{i + 1}. {sec.heading || 'Untitled section'}</h3>
+                  <div className="prose prose-sm mt-3 max-w-none text-gray-700" dangerouslySetInnerHTML={{ __html: plainTextToLegalHtml(sec.body) }} />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 };

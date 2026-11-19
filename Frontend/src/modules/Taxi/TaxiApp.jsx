@@ -378,7 +378,10 @@ const MainLayout = ({ children }) => {
     '/taxi/driver/privacy', '/taxi/driver/privacy-policy', '/taxi/driver/terms', '/taxi/driver/terms-and-conditions',
     '/taxi/owner/privacy', '/taxi/owner/privacy-policy', '/taxi/owner/terms', '/taxi/owner/terms-and-conditions'
   ];
-  const isStaticPath = staticPages.includes(location.pathname);
+  const isStaticPath =
+    staticPages.includes(location.pathname) ||
+    location.pathname === '/taxi/shipping' ||
+    location.pathname.startsWith('/taxi/legal/');
   const isAdminPath =
     location.pathname.startsWith('/admin') ||
     location.pathname.startsWith('/admin') ||
@@ -394,7 +397,7 @@ const MainLayout = ({ children }) => {
 
   if (isStaticPath) {
     return (
-      <div className="redigo-landing-root min-h-screen w-full bg-[#F7F5F0] text-[#172033] overflow-x-hidden">
+      <div className="redigo-landing-root min-h-screen w-full bg-[#F7F5F0] text-[#172033] overflow-x-clip">
         <main className="min-h-screen w-full">{children}</main>
       </div>
     );
@@ -402,7 +405,7 @@ const MainLayout = ({ children }) => {
 
   return (
     <div className="redigo-app min-h-screen bg-[#0B172A]">
-      <main className="max-w-lg mx-auto bg-[#EFF5FD] min-h-screen relative overflow-x-hidden shadow-2xl">
+      <main className="max-w-lg mx-auto bg-[#EFF5FD] min-h-screen relative overflow-x-clip shadow-2xl">
         {children}
       </main>
     </div>
@@ -781,6 +784,8 @@ function TaxiApp() {
               <Route path="privacy-policy" element={<LegalPage />} />
               <Route path="refund" element={<LegalPage />} />
               <Route path="cancellation" element={<LegalPage />} />
+              <Route path="shipping" element={<LegalPage />} />
+              <Route path="legal/:app/:doc" element={<LegalPage />} />
               <Route path="login" element={<Login />} />
               <Route path="auth/login" element={<Navigate to="/taxi/user/login" replace />} />
               <Route path="user/auth/login" element={<Navigate to="/taxi/user/login" replace />} />

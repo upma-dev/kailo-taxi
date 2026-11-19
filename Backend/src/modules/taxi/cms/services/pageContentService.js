@@ -13,6 +13,15 @@ export const LEGAL_PAGE_KEYS = [
   'dmv-compliance',
 ];
 
+const RESERVED_KEYS = ['about', 'home', 'landing', 'legal-index'];
+const LEGAL_KEY_PATTERN = /^[a-z0-9][a-z0-9-]{1,59}$/;
+
+// Any <app>-<document> style key is a legal page, except the CMS keys that hold other content.
+export const isLegalPageKey = (key) => {
+  const k = String(key || '').trim().toLowerCase();
+  return LEGAL_KEY_PATTERN.test(k) && !RESERVED_KEYS.includes(k);
+};
+
 const normalizeKey = (key) => String(key || '').trim().toLowerCase();
 
 const decodeHtmlEntities = (value) => {
@@ -31,7 +40,12 @@ const decodeHtmlEntities = (value) => {
 
 const normalizeLegalForResponse = (legal) => {
   if (!legal || typeof legal !== 'object') return legal;
-  return { ...legal, title: legal.title ?? '', content: decodeHtmlEntities(legal.content ?? '') };
+  return {
+    ...legal,
+    title: legal.title ?? '',
+    intro: decodeHtmlEntities(legal.intro ?? ''),
+    content: decodeHtmlEntities(legal.content ?? ''),
+  };
 };
 
 const normalizeAboutForResponse = (about) => {
@@ -64,19 +78,19 @@ const DEFAULT_PAGES = {
   },
   refund: {
     title: 'Refund Policy',
-    content: `<h2>Refund Policy</h2><p>Rides canceled before a driver is assigned, or due to driver unavailability, will be fully refunded to the original payment method within 3-5 business days.</p>`,
+    content: `<h2>Refund Policy</h2><h3>1. When you get a refund</h3><p>Rides canceled before a driver is assigned, or because no driver is available, are refunded in full to the original payment method.</p><h3>2. How long it takes</h3><p>Refunds reach your bank, card or UPI account within 3-5 business days.</p><h3>3. Wallet payments</h3><p>If you paid from your Kailo wallet, the amount is returned to your wallet straight away.</p><h3>4. Need help?</h3><p>If a refund has not arrived in time, contact our support team from the Help section of the app.</p>`,
   },
   shipping: {
     title: 'Parcel & Shipping Policy',
-    content: `<h2>Parcel & Shipping Policy</h2><p>Parcels are picked up by nearby drivers shortly after booking. Estimated delivery times are shown prior to booking based on live traffic and distance.</p>`,
+    content: `<h2>Parcel & Shipping Policy</h2><h3>1. Pickup</h3><p>Parcels are picked up by a nearby driver shortly after booking.</p><h3>2. Delivery time</h3><p>The estimated delivery time is shown before you book, based on live traffic and distance.</p><h3>3. What you can send</h3><p>Illegal, dangerous or restricted items cannot be sent. Declare the parcel contents correctly when booking.</p><h3>4. Damage or loss</h3><p>If a parcel is damaged or lost, report it from the app and our team will review it.</p>`,
   },
   cancellation: {
     title: 'Cancellation Policy',
-    content: 'A cancellation charge will apply as per configured rules once a driver has been assigned.',
+    content: `<h2>Cancellation Policy</h2><h3>1. Free cancellation</h3><p>You can cancel for free until a driver is assigned.</p><h3>2. Cancellation charges</h3><p>A cancellation charge applies as per the configured rules once a driver has been assigned. The exact amount is shown in the app before you confirm.</p><h3>3. Driver cancellations</h3><p>If the driver cancels, you are not charged and we help you find another ride.</p>`,
   },
   'dmv-compliance': {
     title: 'DMV & Transport Compliance',
-    content: `<h2>DMV & Transport Compliance</h2><p>All drivers and vehicles on Kailo Taxi must comply with local motor vehicle and transport authority regulations, including valid licenses, registration, insurance and permits.</p>`,
+    content: `<h2>DMV & Transport Compliance</h2><h3>1. Licenses and permits</h3><p>All drivers must hold a valid driving license and the permits required for their vehicle type.</p><h3>2. Vehicle registration and insurance</h3><p>Every vehicle must have valid registration and insurance, and must pass local fitness checks.</p><h3>3. Local regulations</h3><p>Drivers and vehicles must follow the motor vehicle and transport authority rules of the city they operate in.</p>`,
   },
   home: {
     eyebrowBadge: 'SAFE, FAST & AFFORDABLE RIDES',
@@ -102,28 +116,83 @@ const DEFAULT_PAGES = {
   },
 };
 
-export const getPublicPageByKey = async (key) => {
+export const DEFAULT_LEGAL_INDEX = {
+  apps: [
+    { id: 'user', label: 'Rider App' },
+    { id: 'driver', label: 'Driver App' },
+    { id: 'website', label: 'Website' },
+  ],
+  docs: [
+    { id: 'privacy', label: 'Privacy Policy' },
+    { id: 'terms', label: 'Terms & Conditions' },
+    { id: 'refund', label: 'Refund Policy' },
+    { id: 'cancellation', label: 'Cancellation Policy' },
+    { id: 'shipping', label: 'Parcel & Shipping Policy' },
+    { id: 'dmv-compliance', label: 'DMV & Transport Compliance' },
+  ],
+};
+
+const cleanList = (list, idPattern) => {
+  const seen = new Set();
+  const out = [];
+  for (const item of Array.isArray(list) ? list : []) {
+    const id = String(item?.id || '').trim().toLowerCase();
+    const label = String(item?.label || '').trim().slice(0, 80);
+    if (!idPattern.test(id) || !label || seen.has(id)) continue;
+    seen.add(id);
+    out.push({ id, label });
+  }
+  return out;
+};
+
+// Apps (user, driver, website, ...) and document types (privacy, terms, ...) the admin manages.
+// Built-in ones always stay; anything the admin adds is kept after them.
+const normalizeLegalIndex = (meta) => {
+  const apps = cleanList(meta?.apps, /^[a-z0-9]{2,20}$/);
+  const docs = cleanList(meta?.docs, /^[a-z0-9][a-z0-9-]{1,39}$/);
+  const merge = (defaults, saved) => [
+    ...defaults.map((d) => saved.find((s) => s.id === d.id) || d),
+    ...saved.filter((s) => !defaults.some((d) => d.id === s.id)),
+  ];
+  return { apps: merge(DEFAULT_LEGAL_INDEX.apps, apps), docs: merge(DEFAULT_LEGAL_INDEX.docs, docs) };
+};
+
+const defaultPageFor = (k) => DEFAULT_PAGES[k] || (k.startsWith('website-') ? DEFAULT_PAGES[k.slice(8)] : null);
+
+const readPage = async (key, { admin = false } = {}) => {
   const k = normalizeKey(key);
   const doc = await PageContent.findOne({ key: k }).lean();
+  if (k === 'legal-index') return { key: k, data: normalizeLegalIndex(doc?.meta) };
   if (!doc) {
     if (k === 'landing') return { key: k, data: DEFAULT_LANDING };
     if (k === 'about') {
       return { key: k, data: { appName: 'Kailo Taxi', version: '1.0.0', description: '', logo: '' } };
     }
-    return { key: k, data: DEFAULT_PAGES[k] || { title: '', content: '' } };
+    return { key: k, data: defaultPageFor(k) || { title: '', content: '' } };
   }
   if (k === 'about') return { key: k, data: normalizeAboutForResponse(doc.about || null) };
   if (k === 'home') return { key: k, data: doc.home || DEFAULT_PAGES.home };
   if (k === 'landing') return { key: k, data: mergeLanding(doc.landing) };
 
   const legalData = normalizeLegalForResponse(doc.legal || null);
-  if (!legalData || !legalData.content || !legalData.content.trim()) {
-    return { key: k, data: DEFAULT_PAGES[k] || legalData || { title: '', content: '' } };
+  const flags = { published: legalData?.published !== false, showUpdated: legalData?.showUpdated !== false };
+  const { sections, ...visible } = legalData || {};
+  const adminExtra = admin ? { sections: Array.isArray(sections) ? sections : undefined } : {};
+  // Switched off by the admin: the apps show "not available" instead of any text.
+  if (!admin && legalData && !flags.published) {
+    return { key: k, data: { title: legalData.title || '', intro: '', content: '', ...flags, unpublished: true } };
   }
-  return { key: k, data: legalData };
+  if (!legalData || !legalData.content || !legalData.content.trim()) {
+    return {
+      key: k,
+      data: { ...(defaultPageFor(k) || visible || { title: '', content: '' }), intro: legalData?.intro || '', ...flags, ...adminExtra, updatedAt: doc.updatedAt },
+    };
+  }
+  return { key: k, data: { ...visible, ...flags, ...adminExtra, updatedAt: doc.updatedAt } };
 };
 
-export const getAdminPageByKey = getPublicPageByKey;
+export const getPublicPageByKey = (key) => readPage(key);
+export const getAdminPageByKey = (key) => readPage(key, { admin: true });
 
 const upsertPage = async (key, fields, updatedBy) =>
   PageContent.findOneAndUpdate(
@@ -134,14 +203,30 @@ const upsertPage = async (key, fields, updatedBy) =>
 
 export const upsertLegalPage = async (key, payload, updatedBy) => {
   const k = normalizeKey(key);
-  if (!LEGAL_PAGE_KEYS.includes(k)) {
+  if (!isLegalPageKey(k)) {
     throw new ApiError(400, 'Invalid page key');
   }
   const title = String(payload?.title || '').trim();
+  const intro = decodeHtmlEntities(String(payload?.intro || '')).trim();
   const content = decodeHtmlEntities(String(payload?.content || '')).trim();
 
-  const doc = await upsertPage(k, { legal: { title, content } }, updatedBy);
-  return { key: k, data: normalizeLegalForResponse(doc?.legal || null) };
+  const published = payload?.published !== false;
+  const showUpdated = payload?.showUpdated !== false;
+  const sections = Array.isArray(payload?.sections)
+    ? payload.sections.slice(0, 100).map((x) => ({
+        heading: String(x?.heading || '').slice(0, 200),
+        body: String(x?.body || '').slice(0, 20000),
+        hidden: !!x?.hidden,
+      }))
+    : undefined;
+
+  const doc = await upsertPage(k, { legal: { title, intro, content, published, showUpdated, sections } }, updatedBy);
+  return { key: k, data: { ...normalizeLegalForResponse(doc?.legal || null), updatedAt: doc?.updatedAt } };
+};
+
+export const upsertLegalIndex = async (payload, updatedBy) => {
+  const doc = await upsertPage('legal-index', { meta: normalizeLegalIndex(payload) }, updatedBy);
+  return { key: 'legal-index', data: normalizeLegalIndex(doc?.meta) };
 };
 
 export const upsertAboutPage = async (payload, updatedBy) => {
