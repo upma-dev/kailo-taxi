@@ -176,27 +176,25 @@ const SupportChatPanel = ({
     }
 
     if (session.role === 'admin') {
+      // Support threads are shared by every admin, so any admin's message in the thread belongs to it.
       return (
         message.sender.role === 'admin' &&
-        senderId === sessionId &&
         message.receiver.role === parsedConversation.peerRole &&
         receiverId === String(parsedConversation.peerId)
       ) || (
         message.sender.role === parsedConversation.peerRole &&
         senderId === String(parsedConversation.peerId) &&
-        message.receiver.role === 'admin' &&
-        receiverId === sessionId
+        message.receiver.role === 'admin'
       );
     }
 
+    // Any admin may answer a user or driver, so only the person's own side is matched.
     return (
       message.sender.role === session.role &&
       senderId === sessionId &&
-      message.receiver.role === 'admin' &&
-      receiverId === String(parsedConversation.adminId)
+      message.receiver.role === 'admin'
     ) || (
       message.sender.role === 'admin' &&
-      senderId === String(parsedConversation.adminId) &&
       message.receiver.role === session.role &&
       receiverId === sessionId
     );

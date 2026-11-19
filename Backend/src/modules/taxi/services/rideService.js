@@ -860,10 +860,10 @@ const buildDriverVehicleAcceptFilter = async (ride) => {
 
   const parcelDriverClauses = isParcelRide
     ? [
-        { serviceCategories: { $in: ['delivery', 'Delivery', 'DELIVERY', 'parcel', 'Parcel', 'PARCEL', 'both', 'Both', 'BOTH', 'taxi,delivery', 'delivery,taxi', 'Taxi,Delivery', 'Taxi, Delivery'] } },
-        { service_categories: { $in: ['delivery', 'Delivery', 'DELIVERY', 'parcel', 'Parcel', 'PARCEL', 'both', 'Both', 'BOTH', 'taxi,delivery', 'delivery,taxi', 'Taxi,Delivery', 'Taxi, Delivery'] } },
-        { registerFor: { $in: ['delivery', 'Delivery', 'DELIVERY', 'both', 'Both', 'BOTH'] } },
-        { 'onboarding.activeServices': { $in: ['delivery', 'Delivery', 'DELIVERY', 'parcel', 'Parcel', 'PARCEL', 'both', 'Both'] } },
+        { serviceCategories: { $in: ['delivery', 'Delivery', 'DELIVERY', 'parcel', 'Parcel', 'PARCEL', 'taxi,delivery', 'delivery,taxi', 'Taxi,Delivery', 'Taxi, Delivery'] } },
+        { service_categories: { $in: ['delivery', 'Delivery', 'DELIVERY', 'parcel', 'Parcel', 'PARCEL', 'taxi,delivery', 'delivery,taxi', 'Taxi,Delivery', 'Taxi, Delivery'] } },
+        { registerFor: { $in: ['delivery', 'Delivery', 'DELIVERY', 'parcel', 'Parcel', 'PARCEL'] } },
+        { 'onboarding.activeServices': { $in: ['delivery', 'Delivery', 'DELIVERY', 'parcel', 'Parcel', 'PARCEL'] } },
       ]
     : [];
 

@@ -5,6 +5,7 @@ import AuthLayout from '../../components/AuthLayout';
 import { User, Mail, Camera, Smartphone, ImagePlus, LifeBuoy } from 'lucide-react';
 import { clearLocalUserSession, userAuthService } from '../../services/authService';
 import { useSettings } from '../../../../shared/context/SettingsContext';
+import { goAfterLogin } from '../../utils/postLoginRedirect';
 
 const fieldShellClassName =
   'rounded-xl border border-gray-200 bg-[#F8F9FA] px-4 py-4 transition-all flex items-center gap-3 focus-within:border-[color:var(--app-primary,#0F766E)] focus-within:ring-1 focus-within:ring-[color:var(--app-primary,#0F766E)]';
@@ -160,7 +161,7 @@ const Signup = () => {
       syncPushTokens();
       sessionStorage.removeItem(PENDING_SIGNUP_PHONE_KEY);
       sessionStorage.removeItem(PENDING_SIGNUP_REFERRAL_CODE_KEY);
-      navigate('/taxi/user', { replace: true });
+      goAfterLogin(navigate);
     } catch (err) {
       const message = err?.message || 'Signup failed. Please try again.';
 

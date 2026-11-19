@@ -1307,6 +1307,19 @@ export const deletePoolingRoute = asyncHandler(async (req, res) => {
   await adminService.deletePoolingRoute(req.params.id);
   ok(res, { deleted: true });
 });
+export const getServiceCenterStaffForAdmin = asyncHandler(async (req, res) =>
+  ok(res, { results: await adminService.listServiceCenterStaffForAdmin(req.query, req.auth?.admin) }),
+);
+export const createServiceCenterStaffForAdmin = asyncHandler(async (req, res) =>
+  ok(res, await adminService.createServiceCenterStaffForAdmin(req.body, req.auth?.admin)),
+);
+export const updateServiceCenterStaffForAdmin = asyncHandler(async (req, res) =>
+  ok(res, await adminService.updateServiceCenterStaffForAdmin(req.params.id, req.body, req.auth?.admin)),
+);
+export const deleteServiceCenterStaffForAdmin = asyncHandler(async (req, res) => {
+  await adminService.deleteServiceCenterStaffForAdmin(req.params.id, req.auth?.admin);
+  ok(res, { deleted: true });
+});
 export const getRentalQuoteRequests = asyncHandler(async (_req, res) =>
   ok(res, { results: await adminService.listRentalQuoteRequests() }),
 );

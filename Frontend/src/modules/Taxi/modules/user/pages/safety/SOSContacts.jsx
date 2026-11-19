@@ -1,17 +1,14 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Plus, Trash2, Phone, User, AlertTriangle, ShieldAlert, X, CheckCircle2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { triggerUserSosAlert } from '../../../../shared/services/safetyAlertService';
+import { userService } from '../../services/userService';
 
 const MAX_CONTACTS = 5;
 const PHONE_REGEX = /^[6-9]\d{9}$/;
 
-const MOCK_CONTACTS = [
-  { id: '1', name: 'Rahul Verma',  phone: '9876543210' },
-  { id: '2', name: 'Priya Sharma', phone: '9123456789' },
-];
 
 const EMERGENCY_SERVICES = [
   { id: 'police', label: 'Police', phone: '100', accent: 'bg-blue-50 border-blue-100 text-blue-600' },
@@ -21,7 +18,7 @@ const EMERGENCY_SERVICES = [
 
 const SOSContacts = () => {
   const navigate = useNavigate();
-  const [contacts, setContacts]         = useState(MOCK_CONTACTS);
+  const [contacts, setContacts]         = useState([]);
   const [showAddSheet, setShowAddSheet] = useState(false);
   const [name, setName]                 = useState('');
   const [phone, setPhone]               = useState('');
@@ -31,6 +28,22 @@ const SOSContacts = () => {
   const [countdown, setCountdown]       = useState(3);
   const [saving, setSaving]             = useState(false);
   const [isTriggeringSos, setIsTriggeringSos] = useState(false);
+
+  const rowsOf = (response) => {
+    const payload = response?.data?.data || response?.data || response || {};
+    return Array.isArray(payload.results) ? payload.results : [];
+  };
+
+  useEffect(() => {
+    let active = true;
+    userService
+      .getEmergencyContacts()
+      .then((response) => active && setContacts(rowsOf(response)))
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const validate = () => {
     const e = {};
@@ -44,17 +57,27 @@ const SOSContacts = () => {
   const handleAdd = async () => {
     if (!validate()) return;
     setSaving(true);
-    await new Promise(r => setTimeout(r, 500)); // POST /api/v1/common/sos/store
-    setContacts(prev => [...prev, { id: Date.now().toString(), name: name.trim(), phone }]);
-    setName(''); setPhone(''); setErrors({});
-    setShowAddSheet(false);
-    setSaving(false);
+    try {
+      const response = await userService.addEmergencyContact({ name: name.trim(), phone });
+      const created = response?.data?.data || response?.data || response;
+      setContacts((prev) => [...prev, { id: created.id, name: created.name, phone: created.phone }]);
+      setName(''); setPhone(''); setErrors({});
+      setShowAddSheet(false);
+    } catch (error) {
+      setErrors({ phone: error?.message || 'Could not save this contact' });
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleDelete = async (id) => {
-    await new Promise(r => setTimeout(r, 300)); // POST /api/v1/common/sos/delete/:id
-    setContacts(prev => prev.filter(c => c.id !== id));
-    setDeleteTarget(null);
+    try {
+      await userService.deleteEmergencyContact(id);
+      setContacts((prev) => prev.filter((c) => c.id !== id));
+      setDeleteTarget(null);
+    } catch (error) {
+      toast.error(error?.message || 'Could not remove this contact');
+    }
   };
 
   const triggerSOS = () => {
@@ -70,8 +93,17 @@ const SOSContacts = () => {
           setSosActive(false);
           setCountdown(3);
           triggerUserSosAlert()
-            .then(() => {
-              toast.success('SOS sent to safety center');
+            .then((result) => {
+              const alerts = result?.contactAlerts;
+              if (alerts?.sent > 0) {
+                toast.success(`SOS sent to the safety center and ${alerts.sent} emergency contact${alerts.sent > 1 ? 's' : ''}`);
+              } else if (alerts?.total > 0 && !alerts?.smsConfigured) {
+                toast.success('SOS sent to the safety center. SMS to your contacts is not set up yet.');
+              } else if (alerts?.total > 0) {
+                toast.success('SOS sent to the safety center. Your contacts could not be reached by SMS.');
+              } else {
+                toast.success('SOS sent to the safety center. Add emergency contacts to alert them too.');
+              }
             })
             .catch((error) => {
               console.error('Failed to trigger user SOS:', error);

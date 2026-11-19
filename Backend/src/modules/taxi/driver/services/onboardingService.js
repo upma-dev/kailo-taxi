@@ -555,8 +555,6 @@ export const startDriverOnboarding = async ({ phone, role = 'driver' }) => {
 
 export const verifyDriverOtp = async ({ registrationId, phone, otp }) => {
   const normalizedPhone = normalizePhone(phone);
-  const staticNumbers = ['9755633147', '7974161582', '7354126134'];
-  const isStaticBypass = staticNumbers.includes(normalizedPhone) && otp === '1234';
 
   const session = await getSession(registrationId, phone);
 
@@ -564,14 +562,12 @@ export const verifyDriverOtp = async ({ registrationId, phone, otp }) => {
     throw new ApiError(400, 'A valid 4-digit OTP is required');
   }
 
-  if (!isStaticBypass) {
-    if (!session.otpExpiresAt || new Date(session.otpExpiresAt).getTime() < Date.now()) {
-      throw new ApiError(410, 'OTP has expired');
-    }
+  if (!session.otpExpiresAt || new Date(session.otpExpiresAt).getTime() < Date.now()) {
+    throw new ApiError(410, 'OTP has expired');
+  }
 
-    if (session.otpHash !== hashOtp(otp)) {
-      throw new ApiError(401, 'Invalid OTP');
-    }
+  if (session.otpHash !== hashOtp(otp)) {
+    throw new ApiError(401, 'Invalid OTP');
   }
 
   session.status = 'otp_verified';

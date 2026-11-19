@@ -32,6 +32,8 @@ import {
 } from '../../services/tripGeneratorService.js';
 import { RentalBookingRequest } from '../../admin/models/RentalBookingRequest.js';
 import { RentalQuoteRequest } from '../../admin/models/RentalQuoteRequest.js';
+import { RentalDriverVehicle } from '../../admin/models/DriverRental.js';
+import { notifyNewRequest } from '../../services/centerNotificationService.js';
 import { RentalVehicleType } from '../../admin/models/RentalVehicleType.js';
 import { ServiceStore } from '../../admin/models/ServiceStore.js';
 import { SetPrice } from '../../admin/models/SetPrice.js';
@@ -952,12 +954,16 @@ const serializeRentalQuoteRequest = (item = {}) => ({
   status: item.status || 'pending',
   adminQuotedAmount: Number(item.adminQuotedAmount || 0),
   adminNote: item.adminNote || '',
+  serviceMode: item.serviceMode === 'with_driver' ? 'with_driver' : 'self_drive',
+  respondedByRole: item.respondedByRole || '',
+  respondedByName: item.respondedByName || '',
   createdAt: item.createdAt || null,
 });
 
 const serializeRentalBookingRequest = (item = {}) => ({
   id: String(item._id || item.id || ''),
   bookingReference: item.bookingReference || '',
+  serviceMode: item.serviceMode === 'with_driver' ? 'with_driver' : 'self_drive',
   userId: item.userId ? String(item.userId) : '',
   vehicleTypeId: item.vehicleTypeId ? String(item.vehicleTypeId) : '',
   vehicleName: item.vehicleName || '',
@@ -3368,6 +3374,9 @@ export const cancelMyBusBooking = async (req, res) => {
 export const createRentalQuoteRequest = async (req, res) => {
   const payload = req.body || {};
   const vehicleTypeId = String(payload.vehicleTypeId || '').trim();
+  // A quote for "Rental with Driver" names a driver rental vehicle; a self-drive quote names a rental vehicle type.
+  const driverVehicleId = String(payload.driverVehicleId || '').trim();
+  const isDriverQuote = mongoose.Types.ObjectId.isValid(driverVehicleId);
   const contactName = toCleanString(payload.contactName);
   const contactPhone = normalizePhone(payload.contactPhone);
   const contactEmail = normalizeEmail(payload.contactEmail);
@@ -3378,7 +3387,7 @@ export const createRentalQuoteRequest = async (req, res) => {
   const seatsNeeded = Math.max(1, Number(payload.seatsNeeded || 1));
   const luggageNeeded = Math.max(0, Number(payload.luggageNeeded || 0));
 
-  if (!mongoose.Types.ObjectId.isValid(vehicleTypeId)) {
+  if (!isDriverQuote && !mongoose.Types.ObjectId.isValid(vehicleTypeId)) {
     throw new ApiError(400, 'Valid rental vehicle is required');
   }
 
@@ -3389,17 +3398,35 @@ export const createRentalQuoteRequest = async (req, res) => {
   validatePhone(contactPhone);
   validateEmail(contactEmail);
 
-  const vehicle = await RentalVehicleType.findById(vehicleTypeId).lean();
-  if (!vehicle || vehicle.active === false || vehicle.status !== 'active') {
+  const vehicle = isDriverQuote
+    ? await RentalDriverVehicle.findById(driverVehicleId).lean()
+    : await RentalVehicleType.findById(vehicleTypeId).lean();
+  const vehicleOff = isDriverQuote ? vehicle?.status === 'inactive' : vehicle?.status !== 'active';
+  if (!vehicle || vehicle.active === false || vehicleOff) {
     throw new ApiError(404, 'Rental vehicle not found');
   }
 
   const pickupDateTime = payload.pickupDateTime ? new Date(payload.pickupDateTime) : null;
   const returnDateTime = payload.returnDateTime ? new Date(payload.returnDateTime) : null;
+  const serviceMode = isDriverQuote || String(payload.serviceMode || '').trim().toLowerCase() === 'with_driver' ? 'with_driver' : 'self_drive';
+
+  // The request goes to the admin and also to the service centers linked to this vehicle.
+  const linkedCenterSource = isDriverQuote ? vehicle.serviceCenterIds : vehicle.serviceStoreIds;
+  const linkedCenterIds = Array.isArray(linkedCenterSource)
+    ? linkedCenterSource.filter((item) => mongoose.Types.ObjectId.isValid(item))
+    : [];
+  const linkedCenters = linkedCenterIds.length
+    ? await ServiceStore.find({ _id: { $in: linkedCenterIds }, active: { $ne: false }, status: { $ne: 'inactive' } })
+      .select('_id')
+      .lean()
+    : [];
 
   const request = await RentalQuoteRequest.create({
     userId: req.auth?.sub && mongoose.Types.ObjectId.isValid(req.auth.sub) ? req.auth.sub : null,
-    vehicleTypeId,
+    serviceMode,
+    serviceCenterIds: linkedCenters.map((item) => item._id),
+    vehicleTypeId: isDriverQuote ? null : vehicleTypeId,
+    driverVehicleId: isDriverQuote ? driverVehicleId : null,
     vehicleName: vehicle.name || '',
     vehicleCategory: vehicle.vehicleCategory || '',
     contactName,
@@ -3423,7 +3450,7 @@ export const createRentalQuoteRequest = async (req, res) => {
       type: 'rental_quote',
       role: 'rental_quote',
       title: 'New Custom Quote Request',
-      name: `${contactName} - ${vehicle.name || 'Rental vehicle'} (${requestedHours}h)`,
+      name: `${contactName} - ${vehicle.name || 'Rental vehicle'}${serviceMode === 'with_driver' ? ' with driver' : ''} (${requestedHours}h)`,
       phone: contactPhone || '',
       createdAt: new Date().toISOString(),
     });
@@ -3569,6 +3596,7 @@ export const createRentalBookingRequest = async (req, res) => {
     vehicleName: vehicle.name || '',
     vehicleCategory: vehicle.vehicleCategory || '',
     vehicleImage: vehicle.image || '',
+    serviceMode: String(payload.serviceMode || '').trim().toLowerCase() === 'with_driver' ? 'with_driver' : 'self_drive',
     serviceCenterIds: matchingServiceCenters.map((item) => item._id),
     selectedPackage: {
       packageId: toCleanString(selectedPackage.id || selectedPackage.packageId || ''),
@@ -3703,6 +3731,8 @@ export const createRentalBookingRequest = async (req, res) => {
 
   // Tell the admin panel (bell + toast) about a brand-new rental request.
   if (isNewRentalRequest) {
+    // The service centers linked to the vehicle hear about it too (staff only once it is handed to them).
+    notifyNewRequest('rental_booking', request.toObject ? request.toObject() : request);
     try {
       emitToAdmins('new_registration_alert', {
         id: `pending_rental:${String(request._id)}`,

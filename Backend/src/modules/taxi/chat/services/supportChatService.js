@@ -31,6 +31,12 @@ const toObjectId = (value) => {
   return new mongoose.Types.ObjectId(String(value));
 };
 
+// How long a chat the user or driver deleted stays in the database before it is removed for good.
+const SUPPORT_CHAT_PURGE_DAYS = Math.max(1, Number(process.env.SUPPORT_CHAT_PURGE_DAYS) || 7);
+
+// Messages a person deleted are hidden from them only.
+const visibleTo = (role) => (role === 'admin' ? { hiddenForAdminAt: null } : { hiddenForPeerAt: null });
+
 const normalizeText = (value) => String(value || '').trim();
 
 const normalizeRole = (role) => {
@@ -88,15 +94,12 @@ const buildConversationIdentityQuery = async ({ role, id, conversationKey }) => 
   }
 
   if (normalizedRole === 'admin') {
-    if (parsed.adminId !== entityId) {
-      throw new ApiError(403, 'Conversation does not belong to this admin account');
-    }
-
+    // Support threads are shared by every admin: user and driver messages are stored against the default
+    // support admin, so any signed-in admin may read and answer them.
     return {
       $or: [
         {
           senderRole: 'admin',
-          senderId: toObjectId(entityId),
           receiverRole: parsed.peerRole,
           receiverId: toObjectId(parsed.peerId),
         },
@@ -104,15 +107,14 @@ const buildConversationIdentityQuery = async ({ role, id, conversationKey }) => 
           senderRole: parsed.peerRole,
           senderId: toObjectId(parsed.peerId),
           receiverRole: 'admin',
-          receiverId: toObjectId(entityId),
         },
       ],
     };
   }
 
-  const defaultAdminId = await resolveDefaultSupportAdminId();
-
-  if (parsed.peerRole !== normalizedRole || parsed.adminId !== defaultAdminId) {
+  // A user or driver may open only their own thread. Replies can come from any admin, so the admin id
+  // inside the key is not checked: every message between this person and support belongs to the thread.
+  if (parsed.peerRole !== normalizedRole || parsed.peerId !== entityId) {
     throw new ApiError(403, 'Conversation does not belong to this support thread');
   }
 
@@ -122,11 +124,9 @@ const buildConversationIdentityQuery = async ({ role, id, conversationKey }) => 
         senderRole: normalizedRole,
         senderId: toObjectId(entityId),
         receiverRole: 'admin',
-        receiverId: toObjectId(parsed.adminId),
       },
       {
         senderRole: 'admin',
-        senderId: toObjectId(parsed.adminId),
         receiverRole: normalizedRole,
         receiverId: toObjectId(entityId),
       },
@@ -305,10 +305,8 @@ export const resolveSupportPeerFromConversationKey = async (conversationKey, aut
     };
   }
 
-  const defaultAdminId = await resolveDefaultSupportAdminId();
-
-  if (parsed.adminId !== defaultAdminId) {
-    throw new ApiError(403, 'Conversation does not belong to the active support admin');
+  if (parsed.peerRole !== normalizedRole) {
+    throw new ApiError(403, 'Conversation does not belong to this support thread');
   }
 
   return {
@@ -383,8 +381,15 @@ export const createSupportMessage = async ({
     normalizedSenderRole === 'admin' ? receiverId : parsed.adminId,
   );
 
+  // An admin answering inside an existing thread keeps that thread's key, whichever admin is signed in.
+  const keepThreadKey =
+    normalizedSenderRole === 'admin' &&
+    parsedConversation &&
+    parsedConversation.peerRole === normalizedReceiverRole &&
+    parsedConversation.peerId === String(receiverId);
+
   const doc = await SupportChatMessage.create({
-    conversationKey: buildSupportConversationKeyFromMessage({
+    conversationKey: keepThreadKey ? parsedConversation.canonicalKey : buildSupportConversationKeyFromMessage({
       conversationKey: parsedConversation?.canonicalKey || resolvedConversationKey,
       senderRole: normalizedSenderRole,
       receiverRole: normalizedReceiverRole || (normalizedSenderRole === 'admin' ? 'admin' : 'admin'),
@@ -428,14 +433,27 @@ export const listSupportConversations = async ({ role, id }) => {
           ],
         };
 
-  const messages = await SupportChatMessage.find(query)
+  const messages = await SupportChatMessage.find({ $and: [query, visibleTo(normalizedRole)] })
     .sort({ createdAt: -1 })
     .lean();
 
   const grouped = new Map();
 
+  // One thread per person: replies from different admins are merged into the same thread.
+  let supportAdminId = null;
+  try {
+    supportAdminId = await resolveDefaultSupportAdminId();
+  } catch {
+    supportAdminId = null;
+  }
+
   for (const message of messages) {
-    const canonicalKey = buildSupportConversationKeyFromMessage(message);
+    const peerIsSender = message.senderRole !== 'admin';
+    const peerRole = peerIsSender ? message.senderRole : message.receiverRole;
+    const peerId = peerIsSender ? message.senderId : message.receiverId;
+    const canonicalKey = supportAdminId
+      ? buildSupportConversationKey({ channel: peerRole, adminId: supportAdminId, peerId: String(peerId) })
+      : buildSupportConversationKeyFromMessage(message);
     const current = grouped.get(canonicalKey);
 
     if (!current) {
@@ -530,7 +548,7 @@ export const getSupportMessages = async ({ role, id, conversationKey }) => {
     conversationKey,
   });
 
-  const messages = await SupportChatMessage.find(query).sort({ createdAt: 1 }).lean();
+  const messages = await SupportChatMessage.find({ $and: [query, visibleTo(normalizedRole)] }).sort({ createdAt: 1 }).lean();
 
   return messages.map((message) => serializeMessage(message));
 };
@@ -561,7 +579,7 @@ export const markSupportMessagesAsRead = async ({ role, id, conversationKey }) =
     {
       ...query,
       receiverRole: normalizedRole,
-      receiverId: toObjectId(entityId),
+      ...(normalizedRole === 'admin' ? {} : { receiverId: toObjectId(entityId) }),
       readAt: null,
     },
     {
@@ -596,13 +614,22 @@ export const deleteSupportConversationMessages = async ({ role, id, conversation
     conversationKey: parsed.canonicalKey,
   });
 
-  const result = await SupportChatMessage.deleteMany({
-    ...query,
-    conversationKey: { $in: parsed.keys },
-  });
+  // Hide the thread for the person who deleted it. A user or driver delete also schedules the real removal.
+  const now = new Date();
+  const hide =
+    normalizedRole === 'admin'
+      ? { hiddenForAdminAt: now }
+      : { hiddenForPeerAt: now, purgeAt: new Date(now.getTime() + SUPPORT_CHAT_PURGE_DAYS * 24 * 60 * 60 * 1000) };
+
+  const result = await SupportChatMessage.updateMany(
+    {
+      $and: [query, { conversationKey: { $in: parsed.keys } }, visibleTo(normalizedRole)],
+    },
+    { $set: hide },
+  );
 
   return {
-    deletedCount: result.deletedCount || 0,
+    deletedCount: result.modifiedCount || 0,
     conversationKey: parsed.canonicalKey,
     keys: parsed.keys,
     adminId: parsed.adminId,
@@ -626,9 +653,12 @@ export const broadcastSupportMessage = (message) => {
   const senderRoom = getSupportParticipantRoom(message.sender.role, message.sender.id);
   const receiverRoom = getSupportParticipantRoom(message.receiver.role, message.receiver.id);
 
+  // A user or driver writing to support reaches every signed-in admin, not only the default support admin.
+  const receiverTargets = message.receiver.role === 'admin' ? chatIo.to(receiverRoom).to(getSupportRoleRoom('admin')) : chatIo.to(receiverRoom);
+
   chatIo.to(senderRoom).emit('chat:message', message);
-  chatIo.to(receiverRoom).emit('chat:message', message);
-  chatIo.to(receiverRoom).emit('chat:notification', {
+  receiverTargets.emit('chat:message', message);
+  receiverTargets.emit('chat:notification', {
     conversationKey: message.conversationKey,
     senderName: message.sender.name || message.sender.role,
     text: message.message,
@@ -668,16 +698,16 @@ export const broadcastSupportConversationDeleted = (payload) => {
     deletedBy: payload.deletedBy || null,
   };
 
-  for (const key of keys) {
-    chatIo.to(getSupportRoom(key)).emit('chat:conversation-deleted', nextPayload);
-  }
-
   if (!parsed) {
     return;
   }
 
-  chatIo.to(getSupportParticipantRoom('admin', parsed.adminId)).emit('chat:conversation-deleted', nextPayload);
-  chatIo.to(getSupportParticipantRoom(parsed.peerRole, parsed.peerId)).emit('chat:conversation-deleted', nextPayload);
-  chatIo.to(getSupportRoleRoom('admin')).emit('chat:conversation-deleted', nextPayload);
-  chatIo.to(getSupportRoleRoom(parsed.peerRole)).emit('chat:conversation-deleted', nextPayload);
+  // A delete only hides the chat for the one who deleted it, so only their screens clear.
+  const deleterRole = payload.deletedBy?.role;
+  if (deleterRole === 'admin') {
+    chatIo.to(getSupportRoleRoom('admin')).emit('chat:conversation-deleted', nextPayload);
+    chatIo.to(getSupportParticipantRoom('admin', parsed.adminId)).emit('chat:conversation-deleted', nextPayload);
+  } else {
+    chatIo.to(getSupportParticipantRoom(parsed.peerRole, parsed.peerId)).emit('chat:conversation-deleted', nextPayload);
+  }
 };

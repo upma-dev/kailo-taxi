@@ -71,7 +71,12 @@ const MyQuoteRequests = ({ limit = 3, className = '' }) => {
               <p className="text-[13px] font-black text-emerald-700">Quoted price: Rs.{quote.adminQuotedAmount}</p>
             ) : null}
             {quote.adminNote && (status === 'quoted' || status === 'rejected') ? (
-              <p className="text-[11px] font-semibold text-slate-500">Admin note: {quote.adminNote}</p>
+              <p className="text-[11px] font-semibold text-slate-500">
+                {quote.respondedByRole === 'service_center' || quote.respondedByRole === 'service_center_staff' ? 'Service center note' : 'Note'}: {quote.adminNote}
+              </p>
+            ) : null}
+            {quote.serviceMode === 'with_driver' ? (
+              <p className="text-[10px] font-black uppercase tracking-wider text-violet-600">With driver</p>
             ) : null}
           </button>
         );

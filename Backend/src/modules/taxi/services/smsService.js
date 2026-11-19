@@ -2,7 +2,7 @@ import { env } from '../../../config/env.js';
 import { ApiError } from '../../../utils/ApiError.js';
 import { AdminBusinessSetting } from '../admin/models/AdminBusinessSetting.js';
 
-const SMS_INDIA_HUB_ENDPOINT = 'http://cloud.smsindiahub.in/api/mt/SendSMS';
+const SMS_INDIA_HUB_ENDPOINT = 'https://cloud.smsindiahub.in/api/mt/SendSMS';
 const DLT_TEMPLATE_TEXT =
   process.env.SMS_DLT_TEMPLATE_TEXT ||
   'Welcome to Eqosy. Your OTP for registration is ##var##.BGADEC';
@@ -216,7 +216,7 @@ export const sendOtpSms = async ({ phone, otp, purpose = 'otp' }) => {
   console.log(`[SMS] Sending OTP to ******${msisdn.slice(-4)} via SMS India Hub...`);
 
   // Primary: GET request on /api/mt/SendSMS (exact method as user sign in)
-  const sendUrl = new URL('http://cloud.smsindiahub.in/api/mt/SendSMS');
+  const sendUrl = new URL(SMS_INDIA_HUB_ENDPOINT);
   sendUrl.searchParams.append('APIKey', apiKey);
   sendUrl.searchParams.append('senderid', senderId);
   sendUrl.searchParams.append('channel', 'Trans');
@@ -264,4 +264,48 @@ export const sendOtpSms = async ({ phone, otp, purpose = 'otp' }) => {
     providerResponse: finalResponseText,
     jobId,
   };
+};
+
+// SOS text for an emergency contact. SMS India Hub only delivers text that matches a DLT-approved template,
+// so this is sent only when SMS_SOS_TEMPLATE_ID and SMS_SOS_TEMPLATE_TEXT are set in .env.
+// The template text may use {name} (rider) and {link} (Google Maps link).
+export const isSosSmsConfigured = () =>
+  Boolean(
+    (process.env.SMS_SOS_TEMPLATE_ID || '').trim() &&
+      (process.env.SMS_SOS_TEMPLATE_TEXT || '').trim() &&
+      (env.sms?.indiaHub?.apiKey || process.env.SMS_INDIA_HUB_API_KEY || '').trim(),
+  );
+
+export const sendSosSms = async ({ phone, name, link }) => {
+  if (!isSosSmsConfigured()) {
+    return { sent: false, reason: 'not_configured' };
+  }
+
+  const digits = String(phone || '').replace(/\D/g, '');
+  const msisdn = digits.length === 10 ? `91${digits}` : digits;
+  const apiKey = (env.sms?.indiaHub?.apiKey || process.env.SMS_INDIA_HUB_API_KEY || '').trim();
+  const senderId = (env.sms?.indiaHub?.senderId || process.env.SMS_INDIA_HUB_SENDER_ID || 'BGADEC').trim();
+  const peId = (env.sms?.indiaHub?.peId || process.env.SMS_INDIA_HUB_PE_ID || '').trim();
+  const text = process.env.SMS_SOS_TEMPLATE_TEXT.replace('{name}', name || 'A Kailo Taxi rider').replace('{link}', link || '');
+
+  const url = new URL(SMS_INDIA_HUB_ENDPOINT);
+  url.searchParams.append('APIKey', apiKey);
+  url.searchParams.append('senderid', senderId);
+  url.searchParams.append('channel', 'Trans');
+  url.searchParams.append('DCS', '0');
+  url.searchParams.append('flashsms', '0');
+  url.searchParams.append('number', msisdn);
+  url.searchParams.append('text', text);
+  url.searchParams.append('TemplateId', process.env.SMS_SOS_TEMPLATE_ID.trim());
+  url.searchParams.append('PEID', peId);
+
+  try {
+    const response = await fetch(url.toString(), { signal: AbortSignal.timeout(15000) });
+    const body = (await response.text()).trim();
+    const parsed = parseProviderResponse(body);
+    const ok = response.ok && ((parsed && String(parsed.ErrorCode || '') === '000') || body.includes('"ErrorCode":"000"'));
+    return ok ? { sent: true } : { sent: false, reason: 'rejected', detail: body.slice(0, 200) };
+  } catch (error) {
+    return { sent: false, reason: 'failed', detail: error.message };
+  }
 };

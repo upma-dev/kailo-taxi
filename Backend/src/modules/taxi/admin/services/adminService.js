@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import mongoose from 'mongoose';
 import { ApiError } from '../../../../utils/ApiError.js';
 import { createDefaultAdminState } from '../data/defaultAdminState.js';
@@ -1375,6 +1376,17 @@ const serializeRentalQuoteRequest = (item = {}) => ({
   reviewedAt: item.reviewedAt || null,
   createdAt: item.createdAt || null,
   updatedAt: item.updatedAt || null,
+  serviceMode: item.serviceMode === 'with_driver' ? 'with_driver' : 'self_drive',
+  serviceCenters: Array.isArray(item.serviceCenterIds)
+    ? item.serviceCenterIds.map((center) => ({ id: String(center?._id || center), name: center?.name || '' }))
+    : [],
+  assignedStaff: {
+    id: item.assignedStaffId ? String(item.assignedStaffId) : '',
+    name: item.assignedStaffName || '',
+    phone: item.assignedStaffPhone || '',
+  },
+  respondedByRole: item.respondedByRole || '',
+  respondedByName: item.respondedByName || '',
   rentalTracking: buildRentalTrackingSnapshot(item),
 });
 
@@ -1468,6 +1480,7 @@ const serializeRentalBookingRequest = (item = {}) => ({
     phone: item.assignedStaffPhone || '',
   },
   serviceCenterNote: item.serviceCenterNote || '',
+  serviceMode: item.serviceMode === 'with_driver' ? 'with_driver' : 'self_drive',
   status: item.status || 'pending',
   assignedAt: item.assignedAt || null,
   completionRequestedAt: item.completionRequestedAt || null,
@@ -2624,17 +2637,23 @@ const syncSettingRows = (rows, payload) =>
     };
   });
 
-const DEFAULT_ADMIN_EMAIL = 'admin@gmail.com';
-const DEFAULT_ADMIN_PASSWORD = '12345';
+// The first admin is created only from the server's .env (DEFAULT_ADMIN_EMAIL / DEFAULT_ADMIN_PASSWORD).
+// There is no built-in password in production. For local development the old demo login still works.
+const DEFAULT_ADMIN_EMAIL = String(process.env.DEFAULT_ADMIN_EMAIL || 'admin@gmail.com').trim().toLowerCase();
+const DEFAULT_ADMIN_PASSWORD =
+  String(process.env.DEFAULT_ADMIN_PASSWORD || '') || (process.env.NODE_ENV === 'production' ? '' : '12345');
 const BCRYPT_HASH_PATTERN = /^\$2[aby]\$\d{2}\$/;
 
 const syncDefaultAdminRecord = async () => {
   const now = new Date();
   const existingAdmin = await Admin.findOne({ email: DEFAULT_ADMIN_EMAIL }).select('+password');
-  const nextPassword =
-    !existingAdmin || !BCRYPT_HASH_PATTERN.test(existingAdmin.password || '')
-      ? await hashPassword(DEFAULT_ADMIN_PASSWORD)
-      : undefined;
+  const needsPassword = !existingAdmin || !BCRYPT_HASH_PATTERN.test(existingAdmin.password || '');
+  if (needsPassword && !DEFAULT_ADMIN_PASSWORD) {
+    // Never create or repair the default admin with a password that is written in the code.
+    console.warn('[admin] No default admin created: set DEFAULT_ADMIN_EMAIL and DEFAULT_ADMIN_PASSWORD in .env to create one.');
+    return;
+  }
+  const nextPassword = needsPassword ? await hashPassword(DEFAULT_ADMIN_PASSWORD) : undefined;
 
   await Admin.collection.updateOne(
     { email: DEFAULT_ADMIN_EMAIL },
@@ -2899,16 +2918,16 @@ const buildLegacyOwnerSeeds = (serviceLocationId) => [
 const seedInitialData = async () => {
   const defaults = createDefaultAdminState();
 
-  // Seed Users
-  if (await User.countDocuments() === 0) {
-    await User.insertMany(defaults.users.map(u => ({ ...u, phone: u.mobile, password: 'password123' })));
+  // Seed demo users (development only). They are never added to a live database.
+  if (process.env.NODE_ENV !== 'production' && await User.countDocuments() === 0) {
+    await User.insertMany(defaults.users.map(u => ({ ...u, phone: u.mobile, password: crypto.randomBytes(18).toString('hex') })));
   }
 
   // Seed Service Locations (a country; its cities are zones)
   await ensureServiceLocationsSeeded();
 
-  // Seed Drivers
-  if (await Driver.countDocuments() === 0) {
+  // Seed demo drivers (development only). They are never added to a live database.
+  if (process.env.NODE_ENV !== 'production' && await Driver.countDocuments() === 0) {
     await Driver.insertMany(defaults.drivers.map(d => ({ ...d, phone: d.mobile })));
   }
 
@@ -3567,7 +3586,7 @@ const seedRentalStores = async () => {
       service_location_id: zone.service_location_id || null,
       address: store.address,
       owner_name: 'Kailo Rentals',
-      owner_phone: '7409129517',
+      owner_phone: '',
       latitude: store.lat,
       longitude: store.lng,
       location: { type: 'Point', coordinates: [store.lng, store.lat] },
@@ -5529,8 +5548,21 @@ export const listDriverDeletionRequests = async ({ page = 1, limit = 50, status 
 
 export const approveDriverDeletionRequest = async (id, adminId) => {
   const now = new Date();
-  const driver = await Driver.findOneAndDelete(
+  const driver = await Driver.findOneAndUpdate(
     { _id: id, deletedAt: null, 'deletionRequest.status': 'pending' },
+    {
+      $set: {
+        deletedAt: now,
+        approve: false,
+        status: 'inactive',
+        deletion_reason: 'driver_delete_request',
+        'deletionRequest.status': 'approved',
+        'deletionRequest.reviewedAt': now,
+        'deletionRequest.reviewedBy': adminId || null,
+        'deletionRequest.adminNote': '',
+      },
+    },
+    { returnDocument: 'before' },
   );
 
   if (!driver) throw new ApiError(404, 'Pending driver deletion request not found');
@@ -5834,8 +5866,14 @@ export const updateDriverPassword = async (id, password) => {
   return serializeDriver(driver);
 };
 
+// Deleting a driver hides the account (like deleting a user). It can be restored or removed for good
+// from the Deleted Drivers page.
 export const deleteDriver = async (id) => {
-  const deleted = await Driver.findByIdAndDelete(id);
+  const deleted = await Driver.findOneAndUpdate(
+    { _id: id, deletedAt: null },
+    { $set: { deletedAt: new Date(), approve: false, status: 'inactive', deletion_reason: 'admin_delete' } },
+    { returnDocument: 'after' },
+  );
   if (!deleted) {
     throw new ApiError(404, 'Driver not found');
   }
@@ -9359,10 +9397,119 @@ export const updateBusService = async (id, payload = {}, options = {}) => {
     return true;
   };
 
+  // ---- Service center staff, managed by the admin (a center's owner can manage its own staff in the center app) ----
+  const serializeAdminServiceCenterStaff = (staff = {}) => ({
+    id: String(staff._id || ''),
+    serviceCenterId: String(staff.serviceCenterId?._id || staff.serviceCenterId || ''),
+    serviceCenterName: staff.serviceCenterId?.name || '',
+    name: staff.name || '',
+    phone: staff.phone || '',
+    active: staff.active !== false,
+    status: staff.status || 'active',
+    createdAt: staff.createdAt || null,
+  });
+
+  const cleanStaffPhone = (value) => String(value || '').replace(/\D/g, '').slice(-10);
+
+  export const listServiceCenterStaffForAdmin = async (query = {}, currentAdmin = null) => {
+    assertAdminPermission(currentAdmin, 'service_stores.view', 'service stores');
+    const filter = {};
+    const centerId = String(query.serviceCenterId || '').trim();
+    if (centerId && mongoose.Types.ObjectId.isValid(centerId)) filter.serviceCenterId = centerId;
+    const staff = await ServiceCenterStaff.find(filter)
+      .populate({ path: 'serviceCenterId', model: ServiceStore, select: 'name' })
+      .sort({ createdAt: -1 })
+      .lean();
+    return staff.map(serializeAdminServiceCenterStaff);
+  };
+
+  export const createServiceCenterStaffForAdmin = async (payload = {}, currentAdmin = null) => {
+    assertAdminPermission(currentAdmin, 'service_stores.view', 'service stores');
+    const name = String(payload.name || '').trim();
+    const phone = cleanStaffPhone(payload.phone);
+    const centerId = String(payload.serviceCenterId || '').trim();
+    if (!name) throw new ApiError(400, 'Staff name is required');
+    if (!/^\d{10}$/.test(phone)) throw new ApiError(400, 'Staff login number must be a valid 10-digit number');
+    if (!mongoose.Types.ObjectId.isValid(centerId) || !(await ServiceStore.exists({ _id: centerId }))) {
+      throw new ApiError(400, 'Choose the service center this staff member belongs to');
+    }
+    if (await ServiceCenterStaff.exists({ phone })) {
+      throw new ApiError(409, 'A staff account already exists with this number');
+    }
+    const created = await ServiceCenterStaff.create({
+      serviceCenterId: centerId,
+      name,
+      phone,
+      active: payload.active !== false,
+      status: payload.active === false ? 'inactive' : 'active',
+    });
+    const populated = await ServiceCenterStaff.findById(created._id)
+      .populate({ path: 'serviceCenterId', model: ServiceStore, select: 'name' })
+      .lean();
+    return serializeAdminServiceCenterStaff(populated);
+  };
+
+  export const updateServiceCenterStaffForAdmin = async (id, payload = {}, currentAdmin = null) => {
+    assertAdminPermission(currentAdmin, 'service_stores.view', 'service stores');
+    const staff = mongoose.Types.ObjectId.isValid(id) ? await ServiceCenterStaff.findById(id) : null;
+    if (!staff) throw new ApiError(404, 'Service center staff member not found');
+
+    if (payload.name !== undefined) {
+      const name = String(payload.name || '').trim();
+      if (!name) throw new ApiError(400, 'Staff name is required');
+      staff.name = name;
+    }
+    if (payload.phone !== undefined) {
+      const phone = cleanStaffPhone(payload.phone);
+      if (!/^\d{10}$/.test(phone)) throw new ApiError(400, 'Staff login number must be a valid 10-digit number');
+      if (await ServiceCenterStaff.exists({ phone, _id: { $ne: staff._id } })) {
+        throw new ApiError(409, 'A staff account already exists with this number');
+      }
+      staff.phone = phone;
+    }
+    if (payload.serviceCenterId !== undefined) {
+      const centerId = String(payload.serviceCenterId || '').trim();
+      if (!mongoose.Types.ObjectId.isValid(centerId) || !(await ServiceStore.exists({ _id: centerId }))) {
+        throw new ApiError(400, 'Choose a valid service center');
+      }
+      staff.serviceCenterId = centerId;
+    }
+    if (payload.active !== undefined) {
+      staff.active = Boolean(payload.active);
+      staff.status = staff.active ? 'active' : 'inactive';
+    }
+    await staff.save();
+    const populated = await ServiceCenterStaff.findById(staff._id)
+      .populate({ path: 'serviceCenterId', model: ServiceStore, select: 'name' })
+      .lean();
+    return serializeAdminServiceCenterStaff(populated);
+  };
+
+  export const deleteServiceCenterStaffForAdmin = async (id, currentAdmin = null) => {
+    assertAdminPermission(currentAdmin, 'service_stores.view', 'service stores');
+    const staff = mongoose.Types.ObjectId.isValid(id) ? await ServiceCenterStaff.findById(id) : null;
+    if (!staff) throw new ApiError(404, 'Service center staff member not found');
+    const busy = await RentalBookingRequest.exists({
+      assignedStaffId: staff._id,
+      status: { $in: ['pending', 'confirmed', 'assigned', 'end_requested'] },
+    });
+    if (busy) {
+      throw new ApiError(409, 'This staff member has active bookings. Reassign them first, or switch the staff member to inactive.');
+    }
+    await ServiceCenterStaff.deleteOne({ _id: staff._id });
+    // Quote requests that were with this staff member go back to the center.
+    await RentalQuoteRequest.updateMany(
+      { assignedStaffId: staff._id },
+      { $set: { assignedStaffId: null, assignedStaffName: '', assignedStaffPhone: '' } },
+    );
+    return true;
+  };
+
   export const listRentalQuoteRequests = async () => {
     const items = await RentalQuoteRequest.find()
       .populate('userId', 'name phone email')
       .populate('vehicleTypeId', 'name vehicleCategory image')
+      .populate({ path: 'serviceCenterIds', model: ServiceStore, select: 'name' })
       .sort({ createdAt: -1 })
       .lean();
 
@@ -9390,13 +9537,60 @@ export const updateBusService = async (id, payload = {}, options = {}) => {
       item.adminNote = String(payload.adminNote || '').trim();
     }
 
+    // The admin chooses which service centers see this request, and which staff member handles it.
+    if (payload.serviceCenterIds !== undefined) {
+      const wanted = (Array.isArray(payload.serviceCenterIds) ? payload.serviceCenterIds : [])
+        .map((value) => String(value || '').trim())
+        .filter((value) => mongoose.Types.ObjectId.isValid(value));
+      const centers = wanted.length
+        ? await ServiceStore.find({ _id: { $in: wanted } }).select('_id').lean()
+        : [];
+      item.serviceCenterIds = centers.map((center) => center._id);
+      // A staff member who no longer belongs to one of the chosen centers is removed from the request.
+      if (item.assignedStaffId) {
+        const stillValid = await ServiceCenterStaff.exists({ _id: item.assignedStaffId, serviceCenterId: { $in: item.serviceCenterIds } });
+        if (!stillValid) {
+          item.assignedStaffId = null;
+          item.assignedStaffName = '';
+          item.assignedStaffPhone = '';
+        }
+      }
+    }
+
+    if (payload.assignedStaffId !== undefined) {
+      const staffId = String(payload.assignedStaffId || '').trim();
+      if (!staffId) {
+        item.assignedStaffId = null;
+        item.assignedStaffName = '';
+        item.assignedStaffPhone = '';
+      } else {
+        const staff = mongoose.Types.ObjectId.isValid(staffId) ? await ServiceCenterStaff.findById(staffId).lean() : null;
+        if (!staff || staff.active === false) {
+          throw new ApiError(404, 'Service center staff member not found');
+        }
+        const centerIds = (item.serviceCenterIds || []).map((value) => String(value));
+        if (!centerIds.includes(String(staff.serviceCenterId))) {
+          // Choosing a staff member also gives their center access to the request.
+          item.serviceCenterIds = [...(item.serviceCenterIds || []), staff.serviceCenterId];
+        }
+        item.assignedStaffId = staff._id;
+        item.assignedStaffName = staff.name || '';
+        item.assignedStaffPhone = staff.phone || '';
+      }
+    }
+
     item.reviewedAt = new Date();
     item.reviewedBy = adminId || null;
+    if (payload.status !== undefined || payload.adminQuotedAmount !== undefined || payload.adminNote !== undefined) {
+      item.respondedByRole = 'admin';
+      item.respondedByName = 'Admin';
+    }
     await item.save();
 
     const populated = await RentalQuoteRequest.findById(item._id)
       .populate('userId', 'name phone email')
       .populate('vehicleTypeId', 'name vehicleCategory image')
+      .populate({ path: 'serviceCenterIds', model: ServiceStore, select: 'name' })
       .lean();
 
     return serializeRentalQuoteRequest(populated);
@@ -9539,6 +9733,44 @@ export const getRentalTrackingDashboard = async () => {
 
     if (payload.adminNote !== undefined) {
       item.adminNote = String(payload.adminNote || '').trim();
+    }
+
+    // The admin chooses which service centers see this booking, and which staff member handles it.
+    if (payload.serviceCenterIds !== undefined) {
+      const wanted = (Array.isArray(payload.serviceCenterIds) ? payload.serviceCenterIds : [])
+        .map((value) => String(value || '').trim())
+        .filter((value) => mongoose.Types.ObjectId.isValid(value));
+      const centers = wanted.length ? await ServiceStore.find({ _id: { $in: wanted } }).select('_id').lean() : [];
+      item.serviceCenterIds = centers.map((center) => center._id);
+      if (item.assignedStaffId) {
+        const stillValid = await ServiceCenterStaff.exists({ _id: item.assignedStaffId, serviceCenterId: { $in: item.serviceCenterIds } });
+        if (!stillValid) {
+          item.assignedStaffId = null;
+          item.assignedStaffName = '';
+          item.assignedStaffPhone = '';
+        }
+      }
+    }
+
+    if (payload.assignedStaffId !== undefined) {
+      const staffId = String(payload.assignedStaffId || '').trim();
+      if (!staffId) {
+        item.assignedStaffId = null;
+        item.assignedStaffName = '';
+        item.assignedStaffPhone = '';
+      } else {
+        const staff = mongoose.Types.ObjectId.isValid(staffId) ? await ServiceCenterStaff.findById(staffId).lean() : null;
+        if (!staff || staff.active === false) {
+          throw new ApiError(404, 'Service center staff member not found');
+        }
+        const centerIds = (item.serviceCenterIds || []).map((value) => String(value));
+        if (!centerIds.includes(String(staff.serviceCenterId))) {
+          item.serviceCenterIds = [...(item.serviceCenterIds || []), staff.serviceCenterId];
+        }
+        item.assignedStaffId = staff._id;
+        item.assignedStaffName = staff.name || '';
+        item.assignedStaffPhone = staff.phone || '';
+      }
     }
 
     if (item.status === 'cancelled') {

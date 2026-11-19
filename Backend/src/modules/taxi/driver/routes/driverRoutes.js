@@ -1,3 +1,14 @@
+import { getCenterNotifications, readCenterNotifications } from "../controllers/centerNotificationController.js";
+import {
+  createCenterDriverVehicle,
+  createCenterRentalDriver,
+  deleteCenterDriverVehicle,
+  deleteCenterRentalDriver,
+  getCenterDriverRentals,
+  updateCenterDriverBooking,
+  updateCenterDriverVehicle,
+  updateCenterRentalDriver,
+} from "../controllers/centerDriverRentalController.js";
 import { Router } from "express";
 import { asyncHandler } from "../../../../utils/asyncHandler.js";
 import { authenticate } from "../../middlewares/authMiddleware.js";
@@ -53,6 +64,8 @@ import {
   previewDriverRideCancellation,
   getDriverScheduledRides,
   getServiceCenterBookings,
+  getServiceCenterQuoteRequests,
+  updateServiceCenterQuoteRequest,
   getServiceCenterBookingBiometrics,
   getServiceCenterStaffBiometrics,
   getServiceCenterStaffMembers,
@@ -394,6 +407,26 @@ driverRouter.get(
   authenticate(["service_center", "service_center_staff"]),
   asyncHandler(getServiceCenterBookings),
 );
+driverRouter.get(
+  "/service-center/quote-requests",
+  authenticate(["service_center", "service_center_staff"]),
+  asyncHandler(getServiceCenterQuoteRequests),
+);
+driverRouter.patch(
+  "/service-center/quote-requests/:id",
+  authenticate(["service_center", "service_center_staff"]),
+  asyncHandler(updateServiceCenterQuoteRequest),
+);
+driverRouter.get("/service-center/notifications", authenticate(["service_center", "service_center_staff"]), asyncHandler(getCenterNotifications));
+driverRouter.post("/service-center/notifications/read", authenticate(["service_center", "service_center_staff"]), asyncHandler(readCenterNotifications));
+driverRouter.get("/service-center/driver-rentals", authenticate(["service_center", "service_center_staff"]), asyncHandler(getCenterDriverRentals));
+driverRouter.post("/service-center/driver-rentals/vehicles", authenticate(["service_center"]), asyncHandler(createCenterDriverVehicle));
+driverRouter.patch("/service-center/driver-rentals/vehicles/:id", authenticate(["service_center"]), asyncHandler(updateCenterDriverVehicle));
+driverRouter.delete("/service-center/driver-rentals/vehicles/:id", authenticate(["service_center"]), asyncHandler(deleteCenterDriverVehicle));
+driverRouter.post("/service-center/driver-rentals/drivers", authenticate(["service_center"]), asyncHandler(createCenterRentalDriver));
+driverRouter.patch("/service-center/driver-rentals/drivers/:id", authenticate(["service_center"]), asyncHandler(updateCenterRentalDriver));
+driverRouter.delete("/service-center/driver-rentals/drivers/:id", authenticate(["service_center"]), asyncHandler(deleteCenterRentalDriver));
+driverRouter.patch("/service-center/driver-rentals/bookings/:id", authenticate(["service_center", "service_center_staff"]), asyncHandler(updateCenterDriverBooking));
 driverRouter.get(
   "/service-center/bookings/:bookingId/biometrics",
   authenticate(["service_center", "service_center_staff"]),

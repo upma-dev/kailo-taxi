@@ -18,6 +18,7 @@ import {
   Shield,
   Star,
   Tag,
+  UserRound,
   Users,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -218,12 +219,14 @@ const RentalVehicleDetail = () => {
   const storedUserInfo = useMemo(() => readStoredUserInfo(), []);
   const initialVehicle = location.state?.vehicle || storedDetail?.vehicle || null;
   const duration = location.state?.duration || storedDetail?.duration || 'Hourly';
+  // 'self_drive' or 'with_driver', chosen on the rental home. It goes with the booking and the custom quote.
+  const serviceMode = (location.state?.serviceMode || storedDetail?.serviceMode) === 'with_driver' ? 'with_driver' : 'self_drive';
   const [vehicle, setVehicle] = useState(initialVehicle);
 
   const [selectedImage, setSelectedImage] = useState(
     vehicle?.gallery?.[0] || vehicle?.galleryImages?.[0] || vehicle?.coverImage || vehicle?.image || '',
   );
-  const [showQuoteForm, setShowQuoteForm] = useState(false);
+  const [showQuoteForm, setShowQuoteForm] = useState(location.state?.openQuote === true);
   const quoteFormRef = useRef(null);
   const [myQuotes, setMyQuotes] = useState([]);
 
@@ -337,12 +340,12 @@ const RentalVehicleDetail = () => {
     try {
       window.sessionStorage.setItem(
         RENTAL_SELECTED_VEHICLE_STORAGE_KEY,
-        JSON.stringify({ vehicle, duration }),
+        JSON.stringify({ vehicle, duration, serviceMode }),
       );
     } catch {
       // Ignore storage failures and continue rendering with route state only.
     }
-  }, [duration, vehicle]);
+  }, [duration, vehicle, serviceMode]);
 
   if (!vehicle) {
     navigate('/taxi/user/rental');
@@ -748,6 +751,7 @@ const RentalVehicleDetail = () => {
       await userService.createRentalQuoteRequest({
         vehicleTypeId: vehicle.id,
         vehicleName: vehicle.name,
+        serviceMode,
         contactName: quoteForm.contactName,
         contactPhone: quoteForm.contactPhone,
         contactEmail: quoteForm.contactEmail,
@@ -826,6 +830,7 @@ const RentalVehicleDetail = () => {
         vehicle,
         duration,
         selectedPackage,
+        serviceMode,
         serviceLocation: selectedServiceLocation,
         userCoordinates,
       },
@@ -954,6 +959,15 @@ const RentalVehicleDetail = () => {
             </button>
           ))}
         </div>
+
+        {serviceMode === 'with_driver' ? (
+          <div className="flex items-start gap-2.5 rounded-[16px] border border-violet-100 bg-violet-50/80 px-4 py-3">
+            <UserRound size={16} className="mt-0.5 shrink-0 text-violet-600" />
+            <p className="text-[12px] font-bold leading-relaxed text-violet-800">
+              Rental with driver. A driver comes with the vehicle. Package prices are for the vehicle; send a Custom Quote to get a price that includes the driver.
+            </p>
+          </div>
+        ) : null}
 
         <AnimatePresence>
           {showQuoteForm ? (

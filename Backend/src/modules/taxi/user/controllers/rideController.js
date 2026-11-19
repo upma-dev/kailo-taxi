@@ -1089,7 +1089,7 @@ export const listAvailableDrivers = async (req, res) => {
         query.$or = [
           { vehicleTypeId },
           { serviceCategories: { $in: ['delivery', 'parcel'] } },
-          { registerFor: { $in: ['delivery', 'both'] } },
+          { registerFor: { $in: ['delivery', 'parcel'] } },
         ];
       } else {
         query.vehicleTypeId = vehicleTypeId;

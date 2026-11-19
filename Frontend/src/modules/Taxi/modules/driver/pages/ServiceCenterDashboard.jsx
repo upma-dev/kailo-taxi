@@ -13,6 +13,7 @@ import {
   Loader2,
   LogOut,
   MapPin,
+  MessageSquareQuote,
   Phone,
   Plus,
   RotateCcw,
@@ -30,6 +31,8 @@ import {
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { uploadService } from '../../../shared/services/uploadService';
+import ServiceCenterDriverRentalsPanel from './ServiceCenterDriverRentalsPanel';
+import ServiceCenterNotificationBell from './ServiceCenterNotificationBell';
 import {
   captureServiceCenterBookingFingerprint,
   clearDriverAuthState,
@@ -1207,6 +1210,7 @@ const ServiceCenterDashboard = () => {
     const nextTabs = [
       { id: 'overview', label: 'Overview', shortLabel: 'Home', helper: 'Center info', Icon: Building2 },
       { id: 'bookings', label: 'Bookings', shortLabel: 'Jobs', helper: `${bookings.length} queue`, Icon: ClipboardList },
+      { id: 'quotes', label: 'With Driver', shortLabel: 'Driver', helper: 'Drivers, quotes', Icon: MessageSquareQuote },
     ];
 
     if (!isStaffUser) {
@@ -1293,6 +1297,17 @@ const ServiceCenterDashboard = () => {
     nextParams.delete('booking');
     nextParams.delete('fingerprint');
     setSearchParams(nextParams);
+  };
+
+  // An alert opens the request it is about. `n` makes the same alert open again if it is tapped twice.
+  const [driverPanelFocus, setDriverPanelFocus] = useState({ tab: '', n: 0 });
+  const handleNotificationOpen = (item) => {
+    if (item.kind === 'rental_booking') {
+      handleBookingOpen(item.refId);
+      return;
+    }
+    setDriverPanelFocus((current) => ({ tab: item.kind === 'rental_quote' ? 'quotes' : 'bookings', n: current.n + 1 }));
+    if (activeTab !== 'quotes') handleTabChange('quotes');
   };
 
   const handleBookingOpen = (bookingId) => {
@@ -2471,6 +2486,10 @@ const ServiceCenterDashboard = () => {
       style={{ fontFamily: "'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" }}
     >
       <main className="mx-auto max-w-3xl space-y-4">
+        <div className="flex justify-end">
+          <ServiceCenterNotificationBell onOpen={handleNotificationOpen} />
+        </div>
+
         {activeTab === 'overview' ? (
           <section className="rounded-[28px] border border-white/80 bg-white/92 p-5 shadow-[0_24px_70px_rgba(16,185,129,0.12)] backdrop-blur-sm">
             <div className="min-w-0 space-y-3">
@@ -3550,6 +3569,8 @@ const ServiceCenterDashboard = () => {
           </section>
         )}
 
+        {activeTab === 'quotes' && <ServiceCenterDriverRentalsPanel isStaffUser={isStaffUser} focus={driverPanelFocus} />}
+
         {!isStaffUser && activeTab === 'staff' && (
           <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -3697,7 +3718,7 @@ const ServiceCenterDashboard = () => {
 
       <div className="fixed inset-x-0 bottom-0 z-40 bg-transparent px-3 pb-[max(10px,env(safe-area-inset-bottom))] pt-2">
         <div className="mx-auto max-w-3xl rounded-[26px] border border-slate-200/90 bg-white/95 p-1.5 shadow-[0_-10px_28px_rgba(15,23,42,0.1)] backdrop-blur-xl">
-          <div className={`grid gap-1.5 ${isStaffUser ? 'grid-cols-3' : 'grid-cols-5'}`}>
+          <div className={`grid gap-1.5 ${isStaffUser ? 'grid-cols-4' : 'grid-cols-6'}`}>
           {tabs.map(({ id, label, shortLabel, helper, Icon }) => {
             const isActive = activeTab === id;
 

@@ -431,6 +431,32 @@ export const enrollServiceCenterStaffBiometric = (payload) =>
 export const getServiceCenterBookings = () =>
   api.get("/drivers/service-center/bookings", withDriverAuth());
 
+// "Rental with Driver" for the service center app. `kind` is 'vehicles', 'drivers' or 'bookings'.
+export const getServiceCenterDriverRentals = () =>
+  api.get("/drivers/service-center/driver-rentals", withDriverAuth());
+
+export const createServiceCenterDriverRental = (kind, payload) =>
+  api.post(`/drivers/service-center/driver-rentals/${kind}`, payload, withDriverAuth());
+
+export const updateServiceCenterDriverRental = (kind, id, payload) =>
+  api.patch(`/drivers/service-center/driver-rentals/${kind}/${id}`, payload, withDriverAuth());
+
+export const deleteServiceCenterDriverRental = (kind, id) =>
+  api.delete(`/drivers/service-center/driver-rentals/${kind}/${id}`, withDriverAuth());
+
+// Alerts for the service center owner and staff.
+export const getServiceCenterNotifications = () =>
+  api.get("/drivers/service-center/notifications", withDriverAuth());
+
+export const readServiceCenterNotifications = (ids = []) =>
+  api.post("/drivers/service-center/notifications/read", { ids }, withDriverAuth());
+
+export const getServiceCenterQuoteRequests = () =>
+  api.get("/drivers/service-center/quote-requests", withDriverAuth());
+
+export const updateServiceCenterQuoteRequest = (id, payload) =>
+  api.patch(`/drivers/service-center/quote-requests/${id}`, payload, withDriverAuth());
+
 export const getServiceCenterBookingBiometrics = (bookingId) =>
   api.get(`/drivers/service-center/bookings/${bookingId}/biometrics`, withDriverAuth());
 

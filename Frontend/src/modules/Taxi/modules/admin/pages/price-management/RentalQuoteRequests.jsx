@@ -3,6 +3,7 @@ import {
   CalendarDays,
   CheckCircle2,
   ChevronDown,
+  Building2,
   Clock3,
   IndianRupee,
   Luggage,
@@ -38,6 +39,13 @@ const formatDateTime = (value) =>
     ? new Date(value).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: 'numeric', minute: '2-digit' })
     : 'Not set';
 
+const MODE_VIEW = {
+  with_driver: { label: 'With driver', cls: 'bg-violet-50 text-violet-700' },
+  self_drive: { label: 'Self drive', cls: 'bg-slate-100 text-slate-600' },
+};
+
+const ROLE_LABEL = { admin: 'Admin', service_center: 'Service center', service_center_staff: 'Center staff' };
+
 const normalizeArray = (payload) =>
   payload?.data?.data?.results ||
   payload?.data?.results ||
@@ -62,6 +70,11 @@ const RentalQuoteRequests = () => {
   const [openId, setOpenId] = useState('');
   // What the admin is typing for each request: { [id]: { amount, note } }
   const [drafts, setDrafts] = useState({});
+  // Service centers and their staff, for choosing who sees and handles a request.
+  const [centers, setCenters] = useState([]);
+  const [staff, setStaff] = useState([]);
+  // What the admin chose for each request: { [id]: { centers: [centerId], staffId } }
+  const [assignDrafts, setAssignDrafts] = useState({});
 
   const load = useCallback(async (showSpinner = false) => {
     if (showSpinner) setLoading(true);
@@ -77,7 +90,62 @@ const RentalQuoteRequests = () => {
 
   useEffect(() => {
     load(true);
+    Promise.all([adminService.getServiceStores(), adminService.getServiceCenterStaff()])
+      .then(([storeResponse, staffResponse]) => {
+        setCenters(normalizeArray(storeResponse).map((row) => ({ id: String(row.id || row._id), name: row.name || 'Service center' })));
+        setStaff(normalizeArray(staffResponse));
+      })
+      .catch(() => {
+        // The list still works without them; only the assign controls stay empty.
+      });
   }, [load]);
+
+  const assignFor = (item) => {
+    const id = String(item.id || item._id);
+    return (
+      assignDrafts[id] || {
+        centers: (item.serviceCenters || []).map((center) => center.id),
+        staffId: item.assignedStaff?.id || '',
+      }
+    );
+  };
+
+  const setAssign = (item, patch) => {
+    const id = String(item.id || item._id);
+    setAssignDrafts((current) => ({ ...current, [id]: { ...assignFor(item), ...patch } }));
+  };
+
+  const toggleCenter = (item, centerId) => {
+    const current = assignFor(item);
+    const next = current.centers.includes(centerId) ? current.centers.filter((value) => value !== centerId) : [...current.centers, centerId];
+    // A staff member of a center that was just removed can no longer handle the request.
+    const keepStaff = staff.find((member) => member.id === current.staffId && next.includes(member.serviceCenterId));
+    setAssign(item, { centers: next, staffId: keepStaff ? current.staffId : '' });
+  };
+
+  const saveAssignment = async (item) => {
+    const id = String(item.id || item._id);
+    const draft = assignFor(item);
+    setSavingId(id);
+    try {
+      const updated = await adminService.updateRentalQuoteRequest(id, {
+        serviceCenterIds: draft.centers,
+        assignedStaffId: draft.staffId || '',
+      });
+      const payload = updated?.data?.data || updated?.data || updated;
+      setItems((current) => current.map((row) => (String(row.id || row._id) === id ? { ...row, ...payload } : row)));
+      setAssignDrafts((current) => {
+        const next = { ...current };
+        delete next[id];
+        return next;
+      });
+      toast.success('Service centers and staff updated');
+    } catch (error) {
+      toast.error(error?.message || 'Could not update the assignment.');
+    } finally {
+      setSavingId('');
+    }
+  };
 
   const statusOf = (item) => String(item.status || 'pending').toLowerCase();
 
@@ -214,9 +282,18 @@ const RentalQuoteRequests = () => {
                       <span className={`rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wide ${view.cls}`}>
                         {view.label}
                       </span>
+                      <span className={`rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wide ${(MODE_VIEW[item.serviceMode] || MODE_VIEW.self_drive).cls}`}>
+                        {(MODE_VIEW[item.serviceMode] || MODE_VIEW.self_drive).label}
+                      </span>
                     </div>
                     <p className="mt-1 text-sm font-semibold text-slate-500">
                       {item.userId?.name || item.contactName || 'Unknown user'} - {item.userId?.phone || item.contactPhone || 'No phone'}
+                    </p>
+                    <p className="mt-0.5 text-xs font-semibold text-slate-400">
+                      {(item.serviceCenters || []).length > 0
+                        ? `${item.serviceCenters.map((center) => center.name).filter(Boolean).join(', ') || 'Service center'}${item.assignedStaff?.name ? ` - handled by ${item.assignedStaff.name}` : ''}`
+                        : 'Not sent to any service center'}
+                      {item.respondedByRole ? ` - answered by ${ROLE_LABEL[item.respondedByRole] || item.respondedByRole}${item.respondedByName && item.respondedByRole !== 'admin' ? ` (${item.respondedByName})` : ''}` : ''}
                     </p>
                   </div>
                   <div className="text-sm font-semibold text-slate-600">
@@ -265,6 +342,63 @@ const RentalQuoteRequests = () => {
                         {item.specialRequirements ? <p>Requirements: {item.specialRequirements}</p> : null}
                       </div>
                     ) : null}
+
+                    <div className="rounded-2xl border border-slate-200 p-4 space-y-3">
+                      <div className="flex items-center gap-2 text-slate-500">
+                        <Building2 size={14} />
+                        <p className="text-[10px] font-black uppercase tracking-[0.18em]">Service centers and staff</p>
+                      </div>
+                      {centers.length === 0 ? (
+                        <p className="text-sm font-semibold text-slate-400">No service centers have been added yet.</p>
+                      ) : (
+                        <>
+                          <div className="flex flex-wrap gap-2">
+                            {centers.map((center) => {
+                              const on = assignFor(item).centers.includes(center.id);
+                              return (
+                                <button
+                                  key={center.id}
+                                  type="button"
+                                  onClick={() => toggleCenter(item, center.id)}
+                                  className={`rounded-full border px-4 py-2 text-xs font-bold transition ${
+                                    on ? 'border-[#2e3c78] bg-[#2e3c78] text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                                  }`}
+                                >
+                                  {center.name}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          <div className="grid gap-3 md:grid-cols-[1fr_auto]">
+                            <select
+                              value={assignFor(item).staffId}
+                              onChange={(event) => setAssign(item, { staffId: event.target.value })}
+                              className={inputClass}
+                            >
+                              <option value="">No staff chosen (the center handles it)</option>
+                              {staff
+                                .filter((member) => member.active && assignFor(item).centers.includes(member.serviceCenterId))
+                                .map((member) => (
+                                  <option key={member.id} value={member.id}>
+                                    {member.name} - {member.serviceCenterName || 'Service center'}
+                                  </option>
+                                ))}
+                            </select>
+                            <button
+                              type="button"
+                              disabled={saving}
+                              onClick={() => saveAssignment(item)}
+                              className="rounded-xl bg-[#2e3c78] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#25316a] disabled:opacity-60"
+                            >
+                              {saving ? 'Saving...' : 'Save'}
+                            </button>
+                          </div>
+                          <p className="text-[11px] font-semibold text-slate-400">
+                            The chosen centers see this request in their app. A staff member sees it only when it is handed to them.
+                          </p>
+                        </>
+                      )}
+                    </div>
 
                     <div className="rounded-2xl border border-slate-200 p-4 space-y-3">
                       <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
