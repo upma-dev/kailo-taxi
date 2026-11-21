@@ -3,12 +3,13 @@ import { ApiError } from '../../../../utils/ApiError.js';
 import { uploadImageBufferDetailed } from '../../../../services/cloudinary.service.js';
 import { BusinessSettings } from '../models/BusinessSettings.js';
 import {
-  LEGAL_PAGE_KEYS,
+  isLegalPageKey,
   getAdminPageByKey,
   getPublicPageByKey,
   upsertAboutPage,
   upsertHomePage,
   upsertLandingPage,
+  upsertLegalIndex,
   upsertLegalPage,
 } from '../services/pageContentService.js';
 
@@ -21,7 +22,7 @@ export const getPublicPage = asyncHandler(async (req, res) => {
   const userType = String(req.query?.userType || '').trim().toLowerCase();
   if (userType && ['terms', 'privacy'].includes(key)) {
     const roleKey = `${userType}-${key}`;
-    if (LEGAL_PAGE_KEYS.includes(roleKey)) {
+    if (isLegalPageKey(roleKey)) {
       const rolePage = await getPublicPageByKey(roleKey);
       if (rolePage?.data?.content && rolePage.data.content.trim()) key = roleKey;
     }
@@ -51,7 +52,11 @@ export const upsertAdminPage = asyncHandler(async (req, res) => {
     const result = await upsertAboutPage(req.body ?? {}, updatedBy);
     return send(res, 'Page updated successfully', result.data);
   }
-  if (LEGAL_PAGE_KEYS.includes(key)) {
+  if (key === 'legal-index') {
+    const result = await upsertLegalIndex(req.body ?? {}, updatedBy);
+    return send(res, 'Page updated successfully', result.data);
+  }
+  if (isLegalPageKey(key)) {
     const result = await upsertLegalPage(key, req.body ?? {}, updatedBy);
     return send(res, 'Page updated successfully', result.data);
   }

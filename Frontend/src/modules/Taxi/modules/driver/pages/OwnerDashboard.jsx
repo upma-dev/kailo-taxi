@@ -480,12 +480,12 @@ const OwnerDashboard = () => {
           <div className="flex items-center justify-between pb-3 border-b border-blue-300/70">
             <div className="flex items-center gap-2.5">
               <img
-                src={settings.general?.logo || settings.customization?.logo || '/kailo-taxi-logo.png'}
+                src={settings.general?.partner_logo || '/kailo-partner-logo.png'}
                 alt="Kailo Taxi"
                 className="h-10 w-10 object-contain rounded-xl shrink-0"
                 onError={(e) => {
                   e.target.onerror = null;
-                  e.target.src = '/kailo-taxi-logo.png';
+                  e.target.src = '/kailo-partner-logo.png';
                 }}
               />
               <div>

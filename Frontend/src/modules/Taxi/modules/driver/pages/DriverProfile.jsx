@@ -34,6 +34,7 @@ import DriverBottomNav from '../../shared/components/DriverBottomNav';
 import { clearDriverAuthState, getCurrentDriver, getLocalDriverToken, setDriverOffline, updateDriverProfile } from '../services/registrationService';
 import api from '../../../shared/api/axiosInstance';
 import LanguageRow from '@/shared/language/LanguageRow'
+import PanelFooter from '../../shared/components/PanelFooter';
 import { useReturnTrip } from '../components/ReturnTripCard';
 
 const unwrapDriver = (response) => response?.data?.data || response?.data || response || null;
@@ -576,6 +577,7 @@ const DriverProfile = () => {
                 </button>
             </div>
 
+            <PanelFooter panel="driver" className="pb-28" />
             <DriverBottomNav />
 
             <AnimatePresence>

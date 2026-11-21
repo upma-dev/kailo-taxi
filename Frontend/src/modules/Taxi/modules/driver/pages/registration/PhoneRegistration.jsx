@@ -217,7 +217,7 @@ const PhoneRegistration = () => {
     };
 
     const theme = AUTH_THEMES.driver;
-    const logoSrc = settings.general?.logo || settings.customization?.logo || '/kailo-taxi-logo.png';
+    const logoSrc = settings.general?.partner_logo || '/kailo-partner-logo.png';
 
     return (
         <>

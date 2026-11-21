@@ -153,6 +153,7 @@ export const SettingsProvider = ({ children }) => {
       const general = { ...(bootstrapData.general || {}) };
       if (/eqosy/i.test(String(general.app_name || ''))) general.app_name = 'Kailo Taxi';
       if (/eqosy/i.test(String(general.logo || ''))) general.logo = '';
+      if (!general.partner_logo) general.partner_logo = '/kailo-partner-logo.png';
 
       setSettings({
         general,

@@ -1,8 +1,11 @@
 import { getApps, initializeApp } from 'firebase/app';
 import { getMessaging, getToken, isSupported, onMessage } from 'firebase/messaging';
+import toast from 'react-hot-toast';
 import { playRideRequestAlertSound } from "../../modules/driver/utils/rideRequestAlertSound";
-import { getLocalDriverToken, saveDriverFcmToken } from '../../modules/driver/services/registrationService';
+import { getLocalDriverToken, saveDriverFcmToken, getStoredDriverRole } from '../../modules/driver/services/registrationService';
 import { getLocalUserToken, userAuthService } from '../../modules/user/services/authService';
+import api from '../api/axiosInstance';
+import { BACKEND_ORIGIN } from '../api/runtimeConfig';
 
 const LAST_BROWSER_FCM_KEY = 'lastBrowserFcmRegistration';
 const FIREBASE_CONFIG = {
@@ -45,6 +48,38 @@ const dispatchRideRequestPushEvent = (payload) => {
   }
 };
 
+const showNativeNotification = async (title, body, payload) => {
+  if (typeof window === "undefined" || typeof Notification === "undefined") return;
+  if (Notification.permission !== "granted") return;
+
+  try {
+    if ("serviceWorker" in navigator) {
+      const reg = await navigator.serviceWorker.ready;
+      if (reg && typeof reg.showNotification === "function") {
+        await reg.showNotification(title, {
+          body,
+          icon: "/kailo-taxi-logo.png",
+          badge: "/kailo-taxi-logo.png",
+          tag: "fcm_foreground_" + Date.now(),
+          data: payload?.data || {},
+        });
+        return;
+      }
+    }
+  } catch (err) {
+    console.warn("[taxi-push] reg.showNotification error:", err);
+  }
+
+  try {
+    new Notification(title, {
+      body,
+      icon: "/kailo-taxi-logo.png",
+    });
+  } catch (err) {
+    console.warn("[taxi-push] new Notification error:", err);
+  }
+};
+
 const attachForegroundPushListener = (messaging) => {
   if (foregroundListenerBound || !messaging) return;
   foregroundListenerBound = true;
@@ -52,6 +87,12 @@ const attachForegroundPushListener = (messaging) => {
   try {
     onMessage(messaging, (payload) => {
       console.info("[taxi-push] foreground FCM message received", payload);
+      const title = payload?.notification?.title || payload?.data?.title || 'Notification';
+      const body = payload?.notification?.body || payload?.data?.body || '';
+      if (title || body) {
+        toast(`${title}${body ? `: ${body}` : ''}`, { icon: '🔔', duration: 5000 });
+        showNativeNotification(title, body, payload);
+      }
       dispatchRideRequestPushEvent(payload);
     });
   } catch (err) {
@@ -142,7 +183,8 @@ const getAuthenticatedRoles = () => {
   }
 
   if (getLocalDriverToken() && !isDriverPendingApprovalScreen()) {
-    roles.push('driver');
+    const role = String(getStoredDriverRole() || 'driver').toLowerCase();
+    roles.push(role === 'owner' ? 'owner' : 'driver');
   }
 
   return roles;
@@ -162,7 +204,12 @@ const createServiceWorkerUrl = () => {
 };
 
 const saveTokenForRole = async (role, token) => {
-  if (role === 'driver') {
+  if (role === 'admin') {
+    await api.post(`${BACKEND_ORIGIN}/api/v1/fcm-tokens/save`, { token, platform: 'web' });
+    return;
+  }
+
+  if (role === 'driver' || role === 'owner') {
     await saveDriverFcmToken(token, 'web');
     return;
   }
@@ -175,7 +222,7 @@ const shouldSkipRegistration = (role, token) => {
   return stored?.role === role && stored?.token === token;
 };
 
-const registerBrowserFcmToken = async ({ interactive = false } = {}) => {
+const registerBrowserFcmToken = async ({ interactive = false, roles: forcedRoles } = {}) => {
   if (!hasBrowserSupport()) {
     return { ok: false, reason: 'browser-unsupported' };
   }
@@ -184,7 +231,7 @@ const registerBrowserFcmToken = async ({ interactive = false } = {}) => {
     return { ok: false, reason: 'firebase-web-config-missing' };
   }
 
-  const roles = getAuthenticatedRoles();
+  const roles = Array.isArray(forcedRoles) && forcedRoles.length > 0 ? forcedRoles : getAuthenticatedRoles();
   if (roles.length === 0) {
     return { ok: false, reason: 'missing-auth' };
   }

@@ -14,6 +14,7 @@ import api from '../../../shared/api/axiosInstance';
 import { syncThemeForPath } from '@/shared/utils/theme.js';
 import LanguageRow from '@/shared/language/LanguageRow'
 import MyQuoteRequests from '../components/MyQuoteRequests';
+import PanelFooter from '../../shared/components/PanelFooter';
 
 const MotionDiv = motion.div;
 const MotionButton = motion.button;
@@ -352,6 +353,7 @@ const Profile = () => {
         </motion.div>
       </div>
 
+      <PanelFooter panel="user" className="pb-28" />
       <BottomNavbar />
     </div>
   );

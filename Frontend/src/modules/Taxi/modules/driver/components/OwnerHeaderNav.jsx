@@ -52,7 +52,7 @@ const OwnerHeaderNav = () => {
         {/* Brand & Badge */}
         <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate('/taxi/owner/dashboard')}>
           <img
-            src={settings.general?.logo || settings.customization?.logo || brandLogo}
+            src={settings.general?.partner_logo || brandLogo}
             alt={appName}
             className="h-10 w-10 object-contain rounded-xl shrink-0"
             onError={(e) => {

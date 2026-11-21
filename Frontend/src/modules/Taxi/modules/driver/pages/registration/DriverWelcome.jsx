@@ -24,7 +24,7 @@ const DriverWelcome = () => {
     const navigate = useNavigate();
     const { settings } = useSettings();
     const appName = settings.general?.app_name || 'App';
-    const appLogo = settings.general?.logo || settings.customization?.logo;
+    const appLogo = settings.general?.partner_logo || '/kailo-partner-logo.png';
 
     const perks = [
         { icon: <Wallet size={18} />, title: 'Weekly Payouts', sub: 'Receive your earnings directly every week.' },

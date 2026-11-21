@@ -15,7 +15,11 @@ const featureSchema = new mongoose.Schema(
 const legalPageSchema = new mongoose.Schema(
   {
     title: { type: String, default: '' },
-    content: { type: String, default: '' }, // stored as HTML string
+    intro: { type: String, default: '' }, // short summary shown in the highlighted box at the top
+    content: { type: String, default: '' }, // stored as HTML string (visible sections only)
+    published: { type: Boolean, default: true }, // off => the apps show "not available"
+    showUpdated: { type: Boolean, default: true }, // show the "Last updated" line
+    sections: { type: [mongoose.Schema.Types.Mixed], default: undefined }, // editor copy: { heading, body, hidden }
   },
   { _id: false },
 );
@@ -48,11 +52,13 @@ export const PAGE_CONTENT_KEYS = [
 
 const pageContentSchema = new mongoose.Schema(
   {
-    key: { type: String, required: true, unique: true, index: true, enum: PAGE_CONTENT_KEYS },
+    // Legal pages use free-form keys (<app>-<document>) so the admin can add apps and documents; validated in the service.
+    key: { type: String, required: true, unique: true, index: true },
     legal: { type: legalPageSchema, default: undefined },
     about: { type: aboutPageSchema, default: undefined },
     home: { type: mongoose.Schema.Types.Mixed, default: undefined },
     landing: { type: mongoose.Schema.Types.Mixed, default: undefined },
+    meta: { type: mongoose.Schema.Types.Mixed, default: undefined }, // legal-index: apps + document types the admin manages
     updatedBy: { type: mongoose.Schema.Types.ObjectId, default: null },
     updatedByRole: { type: String, default: 'ADMIN' },
   },

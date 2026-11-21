@@ -17,6 +17,7 @@ import sceneHotel from '@/assets/landing/scenes/hotel.webp';
 import sceneMovers from '@/assets/landing/scenes/movers.webp';
 import cityIllu from '@/assets/images/mobility-illustration.webp';
 import mapImg from '@/assets/premium_grid_map.webp';
+import { FOOTER_PANELS } from '../../../shared/components/PanelFooter';
 
 // The photos the website shows when no custom image is set, so they can be seen and opened from here.
 const SCENES = { cab: sceneCab, bike: sceneBike, auto: sceneAuto, bus: sceneBus, parcel: sceneParcel, outstation: sceneTrip, flight: sceneFlight, hotel: sceneHotel, movers: sceneMovers };
@@ -361,6 +362,7 @@ function PreviewPane({ data, tab, onHide }) {
 
 const CMSLanding = () => {
   const [data, setData] = useState(null);
+  const [footerPanel, setFooterPanel] = useState('website');
   const [tab, setTab] = useState(() => {
     try {
       const q = new URLSearchParams(window.location.search).get('tab');
@@ -793,36 +795,82 @@ const CMSLanding = () => {
 
       {tab === 'Footer' && (
         <div className={card}>
-          {f('footer.companyName', 'Company name', { hint: 'Used in the copyright line' })}
-          {f('footer.about', 'About text', { multiline: true })}
-          <Toggle checked={data.footer?.showStoreBadges !== false} onChange={set('footer.showStoreBadges')}>
-            Show Google Play / App Store badges
-          </Toggle>
-          <div className="grid gap-4 sm:grid-cols-2">
-            {f('footer.locationTitle', 'Location column title')}
-            {f('footer.helplineLabel', 'Helpline label')}
-            {f('footer.email', 'Email')}
-            {f('footer.phone', 'Helpline phone')}
-          </div>
-          {f('footer.address', 'Address')}
-          {f('footer.copyright', 'Copyright line', { hint: 'Use {year} and {company} as placeholders' })}
-          <div className="grid gap-4 sm:grid-cols-2">
-            {f('footer.builtIn', 'Bottom line, left part (e.g. Built in Bangalore, IN)')}
-            {f('footer.tagline', 'Bottom line, tagline')}
-          </div>
-          {(data.footer?.columns || []).map((c, i) => (
-            <div key={i} className="relative space-y-3 rounded-lg border border-gray-200 bg-gray-50/60 p-4">
-              <button type="button" onClick={() => set('footer.columns')(data.footer.columns.filter((_, idx) => idx !== i))} className="absolute right-3 top-3 text-gray-400 hover:text-red-500">
-                <Trash2 size={15} />
+          <div className="flex flex-wrap gap-2">
+            {FOOTER_PANELS.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => setFooterPanel(p.id)}
+                className={`rounded-full border px-4 py-1.5 text-xs font-bold ${footerPanel === p.id ? 'border-teal-700 bg-teal-700 text-white' : 'border-gray-200 bg-white text-gray-600'}`}
+              >
+                {p.label}
+                {p.id !== 'website' && data.footer?.panels?.[p.id]?.enabled ? ' ●' : ''}
               </button>
-              <div className="pr-6">{f(`footer.columns.${i}.title`, 'Column title')}</div>
-              <ListEditor title="Links" items={c.links} onChange={set(`footer.columns.${i}.links`)} fields={LINK_FIELDS} blank={{ label: '', target: '' }} addText="Add link" />
-            </div>
-          ))}
-          <button type="button" onClick={() => set('footer.columns')([...(data.footer?.columns || []), { title: '', links: [] }])} className="flex items-center gap-1 text-xs font-bold text-teal-700">
-            <Plus size={14} /> Add column
-          </button>
-          <ListEditor title="Social links" items={data.footer?.social} onChange={set('footer.social')} fields={[{ key: 'label', label: 'Name (e.g. Instagram)' }, { key: 'url', label: 'URL' }]} blank={{ label: '', url: '' }} addText="Add social link" />
+            ))}
+          </div>
+          <p className="text-[11px] text-gray-500">
+            Terms, Privacy, Refund and other policy text is written separately for the Website, Rider app and Driver app in{' '}
+            <a href="/admin/global/legal" className="font-bold text-teal-700 underline">Legal Pages</a>. A footer link such as /taxi/terms or /taxi/privacy opens the policy written for this panel; for a custom document use /taxi/legal/{footerPanel}/document-name.
+          </p>
+          {footerPanel !== 'website' && (
+            <p className="text-[11px] text-gray-500">
+              The {footerPanel === 'user' ? 'Rider' : 'Driver'} app footer shows on its profile and policy pages. It is hidden until you turn the switch below on; the Website footer is not affected.
+            </p>
+          )}
+          {footerPanel !== 'website' && (
+            <Toggle
+              checked={!!data.footer?.panels?.[footerPanel]?.enabled}
+              onChange={(on) => {
+                if (!on) return set(`footer.panels.${footerPanel}.enabled`)(false);
+                const existing = data.footer?.panels?.[footerPanel];
+                // First time: start from a copy of the website footer so the admin only edits what differs.
+                const { panels: _p, ...site } = data.footer || {};
+                set(`footer.panels.${footerPanel}`)({ ...(existing && Object.keys(existing).length > 1 ? existing : JSON.parse(JSON.stringify(site))), enabled: true });
+              }}
+            >
+              Use a separate footer for the {footerPanel === 'user' ? 'Rider' : 'Driver'} app
+            </Toggle>
+          )}
+          {(footerPanel === 'website' || data.footer?.panels?.[footerPanel]?.enabled) && (() => {
+            const P = footerPanel === 'website' ? 'footer' : `footer.panels.${footerPanel}`;
+            const ft = getIn(data, P) || {};
+            return (
+              <>
+                {f(`${P}.companyName`, 'Company name', { hint: 'Used in the copyright line' })}
+                {f(`${P}.about`, 'About text', { multiline: true })}
+                {footerPanel === 'website' && (
+                  <Toggle checked={ft.showStoreBadges !== false} onChange={set('footer.showStoreBadges')}>
+                    Show Google Play / App Store badges
+                  </Toggle>
+                )}
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {f(`${P}.locationTitle`, 'Location column title')}
+                  {f(`${P}.helplineLabel`, 'Helpline label')}
+                  {f(`${P}.email`, 'Email')}
+                  {f(`${P}.phone`, 'Helpline phone')}
+                </div>
+                {f(`${P}.address`, 'Address')}
+                {f(`${P}.copyright`, 'Copyright line', { hint: 'Use {year} and {company} as placeholders' })}
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {f(`${P}.builtIn`, 'Bottom line, left part (e.g. Built in Bangalore, IN)')}
+                  {f(`${P}.tagline`, 'Bottom line, tagline')}
+                </div>
+                {(ft.columns || []).map((c, i) => (
+                  <div key={i} className="relative space-y-3 rounded-lg border border-gray-200 bg-gray-50/60 p-4">
+                    <button type="button" onClick={() => set(`${P}.columns`)(ft.columns.filter((_, idx) => idx !== i))} className="absolute right-3 top-3 text-gray-400 hover:text-red-500">
+                      <Trash2 size={15} />
+                    </button>
+                    <div className="pr-6">{f(`${P}.columns.${i}.title`, 'Column title')}</div>
+                    <ListEditor title="Links" items={c.links} onChange={set(`${P}.columns.${i}.links`)} fields={LINK_FIELDS} blank={{ label: '', target: '' }} addText="Add link" />
+                  </div>
+                ))}
+                <button type="button" onClick={() => set(`${P}.columns`)([...(ft.columns || []), { title: '', links: [] }])} className="flex items-center gap-1 text-xs font-bold text-teal-700">
+                  <Plus size={14} /> Add column
+                </button>
+                <ListEditor title="Social links" items={ft.social} onChange={set(`${P}.social`)} fields={[{ key: 'label', label: 'Name (e.g. Instagram)' }, { key: 'url', label: 'URL' }]} blank={{ label: '', url: '' }} addText="Add social link" />
+              </>
+            );
+          })()}
         </div>
       )}
 
