@@ -642,7 +642,9 @@ export function Contact({ data, footer }) {
 function FooterLink({ link }) {
   const go = useGo();
   const raw = String(link.target || '');
-  const t = PUBLIC_PATHS[raw.replace(/\/$/, '')] || raw;
+  let t = PUBLIC_PATHS[raw.replace(/\/$/, '')] || raw;
+  // Policy links in the website footer show the Website version of the policy the admin set.
+  if (/^\/taxi\/(privacy|terms|refund|cancellation|shipping)(-policy|-and-conditions)?\/?$/.test(t)) t = `${t}?app=website`;
   const cls = 'transition-colors hover:text-lp-accent';
   if (t.startsWith('/') && !t.startsWith('//')) {
     return (

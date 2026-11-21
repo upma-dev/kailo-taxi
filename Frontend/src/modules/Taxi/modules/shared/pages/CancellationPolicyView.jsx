@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertCircle, CheckCircle2, Clock, Loader2, MapPin, Search, ShieldCheck, Timer, UserCheck, Wallet, Car, UserX, Banknote } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Clock, Loader2, MapPin, Search, ShieldCheck, Timer, UserCheck, Wallet, Car, UserX, Banknote, RotateCcw, Filter } from 'lucide-react';
 import apiClient from '../../../shared/api/axiosInstance';
 
 // Cancellation rules shown on the website. Every number comes from the admin's settings
@@ -179,13 +179,44 @@ export default function CancellationPolicyView({ audience = 'user' }) {
   }, []);
 
   const { loading, data, error } = state;
+  const [vehicleSel, setVehicleSel] = useState('all');
+  const [zoneSel, setZoneSel] = useState('all');
   const sym = data?.currency_symbol || '₹';
-  const vehicles = useMemo(() => (Array.isArray(data?.vehicles) ? data.vehicles : []), [data]);
+  const zones = useMemo(() => (Array.isArray(data?.zones) ? data.zones : []), [data]);
+  const zoneName = (id) => zones.find((z) => z.id === id)?.name || '';
+
+  // Every (vehicle, zone) rule the admin has set. Older servers only send one rule per vehicle.
+  const allRules = useMemo(() => {
+    if (Array.isArray(data?.rules) && data.rules.length) {
+      return data.rules.map((r) => ({ id: `${r.vehicle_id}|${r.zone_id || ''}`, vehicle_id: r.vehicle_id, name: r.vehicle_name, zone_id: r.zone_id || '', policy: r.policy }));
+    }
+    return (Array.isArray(data?.vehicles) ? data.vehicles : []).map((v) => ({ id: v.id, vehicle_id: v.id, name: v.name, zone_id: '', policy: v.policy }));
+  }, [data]);
+  const vehicleOptions = useMemo(() => {
+    const seen = new Map();
+    allRules.forEach((r) => seen.set(r.vehicle_id, r.name));
+    return [...seen.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [allRules]);
+
+  // Rules that apply to the chosen vehicle and zone. A rule made for the chosen zone wins over an "all zones" rule.
+  const vehicles = useMemo(() => {
+    const byVehicle = allRules.filter((r) => vehicleSel === 'all' || r.vehicle_id === vehicleSel);
+    if (zoneSel === 'all') return byVehicle;
+    const picked = new Map();
+    byVehicle.forEach((r) => {
+      if (r.zone_id === zoneSel) picked.set(r.vehicle_id, r);
+      else if (!r.zone_id && !(picked.get(r.vehicle_id)?.zone_id)) picked.set(r.vehicle_id, r);
+    });
+    return [...picked.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }, [allRules, vehicleSel, zoneSel]);
+  const filtered = vehicleSel !== 'all' || zoneSel !== 'all';
   // A ride is charged by its vehicle's own rule, so the summary follows the vehicles when they all agree.
   // When they differ, the summary says so and the table below gives each vehicle's numbers.
   const uniform = vehicles.length > 0 && vehicles.every((v) => sig(v.policy) === sig(vehicles[0].policy));
   const varies = vehicles.length > 0 && !uniform;
   const p = uniform ? vehicles[0].policy : data?.default_policy;
+  const busRefunds = Array.isArray(data?.bus_refunds) ? data.bus_refunds : [];
+  const showZoneCol = zoneSel === 'all' && zones.length > 0;
 
   if (loading) {
     return (
@@ -205,7 +236,43 @@ export default function CancellationPolicyView({ audience = 'user' }) {
     );
   }
 
-  if (audience === 'driver') return <DriverView base={data.default_policy} vehicles={vehicles} sym={sym} />;
+  const filterBar = (
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs sm:p-5">
+      <div className="mb-3 flex items-center gap-2 text-sm font-black text-slate-900">
+        <Filter size={16} className="text-[#0F766E]" /> Check the charges for your ride
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="block text-xs font-bold uppercase tracking-wider text-slate-500">
+          Vehicle type
+          <select value={vehicleSel} onChange={(e) => setVehicleSel(e.target.value)} className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold normal-case tracking-normal text-slate-900 outline-none focus:border-[#0F766E]">
+            <option value="all">All vehicles</option>
+            {vehicleOptions.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
+          </select>
+        </label>
+        {zones.length > 0 && (
+          <label className="block text-xs font-bold uppercase tracking-wider text-slate-500">
+            Zone
+            <select value={zoneSel} onChange={(e) => setZoneSel(e.target.value)} className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold normal-case tracking-normal text-slate-900 outline-none focus:border-[#0F766E]">
+              <option value="all">All zones</option>
+              {zones.map((z) => <option key={z.id} value={z.id}>{z.name}</option>)}
+            </select>
+          </label>
+        )}
+      </div>
+      {filtered && vehicles.length === 0 && (
+        <p className="mt-3 text-xs leading-relaxed text-slate-500">No separate rule is set for this vehicle in this zone, so the standard cancellation policy applies.</p>
+      )}
+    </div>
+  );
+
+  if (audience === 'driver') {
+    return (
+      <div className="space-y-8">
+        {filterBar}
+        <DriverView base={data.default_policy} vehicles={vehicles} sym={sym} />
+      </div>
+    );
+  }
 
   const on = varies ? vehicles.some((v) => v.policy.enable_cancellation_charge) : p.enable_cancellation_charge;
   const sameFree = vehicles.every((v) => num(v.policy.free_cancellation_time_mins) === num(vehicles[0].policy.free_cancellation_time_mins));
@@ -217,6 +284,7 @@ export default function CancellationPolicyView({ audience = 'user' }) {
 
   return (
     <div className="space-y-10">
+      {filterBar}
       {!on && (
         <div className="flex items-start gap-3 rounded-2xl border border-[#C6F432]/60 bg-[#F6FCD6] p-4 text-sm font-semibold text-[#4D5F00]">
           <CheckCircle2 size={18} className="mt-0.5 shrink-0" />
@@ -276,6 +344,7 @@ export default function CancellationPolicyView({ audience = 'user' }) {
               <thead className="border-b border-slate-200 bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-600">
                 <tr>
                   <th className="px-4 py-3">Vehicle</th>
+                  {showZoneCol && <th className="px-4 py-3">Zone</th>}
                   <th className="px-4 py-3">Free window</th>
                   <th className="px-4 py-3">Cancellation fee</th>
                   <th className="px-4 py-3">Maximum</th>
@@ -285,6 +354,7 @@ export default function CancellationPolicyView({ audience = 'user' }) {
                 {vehicles.map((v) => (
                   <tr key={v.id} className="hover:bg-slate-50/60">
                     <td className="px-4 py-3 font-bold text-slate-900">{v.name}</td>
+                    {showZoneCol && <td className="px-4 py-3">{zoneName(v.zone_id) || 'All zones'}</td>}
                     <td className="px-4 py-3">{v.policy.enable_cancellation_charge ? minsText(v.policy.free_cancellation_time_mins) : 'Always free'}</td>
                     <td className="px-4 py-3 font-semibold text-slate-900">{feeText(v.policy, sym)}</td>
                     <td className="px-4 py-3">{maxText(v.policy, sym)}</td>
@@ -295,6 +365,37 @@ export default function CancellationPolicyView({ audience = 'user' }) {
           </div>
         </section>
       )}
+
+      {/* Refunds */}
+      <section>
+        <h2 className="mb-1 flex items-center gap-2 text-lg font-black text-slate-900 sm:text-xl"><RotateCcw size={18} className="text-[#0F766E]" /> Refunds</h2>
+        <p className="mb-4 text-sm text-slate-500">When you get money back, and when you do not.</p>
+        <ul className="list-disc space-y-2 rounded-2xl border border-slate-200 bg-white p-5 pl-9 text-sm leading-relaxed text-slate-600">
+          <li>{on ? `Cancel while we find a driver${freeMins > 0 ? ` or within ${minsText(freeMins)} of booking` : ''} and you pay nothing.` : 'Cancelling is free, so you never pay a cancellation charge.'}</li>
+          <li>If your driver cancels, you are not charged.</li>
+          {on && <li>A cancellation fee that applied is added to your next ride fare{cap > 0 ? ` and is never more than ${money(sym, cap)}` : ''}.</li>}
+        </ul>
+        {busRefunds.length > 0 && (
+          <div className="mt-5">
+            <h3 className="mb-2 text-sm font-black text-slate-900">Bus ticket refunds</h3>
+            <div className="overflow-x-auto rounded-2xl border border-slate-200">
+              <table className="w-full min-w-[420px] text-left text-sm">
+                <thead className="border-b border-slate-200 bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-600">
+                  <tr><th className="px-4 py-3">Cancel</th><th className="px-4 py-3">Refund</th></tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-slate-600">
+                  {busRefunds.map((r, i) => (
+                    <tr key={i}>
+                      <td className="px-4 py-3 font-semibold text-slate-900">{r.label || (r.hours_before_departure > 0 ? `${r.hours_before_departure}+ hours before departure` : 'Any time')}</td>
+                      <td className="px-4 py-3">{r.refund_type === 'none' ? 'No refund' : r.refund_type === 'fixed' ? `${money(sym, r.refund_value)} refunded` : `${r.refund_value}% refunded`}{r.notes ? ` - ${r.notes}` : ''}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </section>
 
       {/* Driver side */}
       <section className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">

@@ -230,7 +230,7 @@ const OwnerHome = () => {
         <header className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <img
-              src={settings.general?.logo || settings.customization?.logo || brandLogo}
+              src={settings.general?.partner_logo || brandLogo}
               alt={appName}
               className="h-11 w-11 rounded-2xl bg-white object-contain p-1 shadow-sm"
               onError={(e) => {

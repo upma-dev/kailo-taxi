@@ -23,7 +23,7 @@ const RegistrationDashboard = () => {
     const navigate = useNavigate();
     const { settings } = useSettings();
     const appName = settings.general?.app_name || 'App';
-    const appLogo = settings.general?.logo || settings.customization?.logo;
+    const appLogo = settings.general?.partner_logo || '/kailo-partner-logo.png';
 
     const steps = [
         { id: 'personal', title: 'Personal Information', sub: 'ID & Profile', icon: <User size={18} /> },

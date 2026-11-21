@@ -10,6 +10,8 @@ import { releasePromoForCancelledRide } from './promoService.js';
 import { AdminBusinessSetting } from '../admin/models/AdminBusinessSetting.js';
 import { SetPrice } from '../admin/models/SetPrice.js';
 import { Vehicle } from '../admin/models/Vehicle.js';
+import { Zone } from '../driver/models/Zone.js';
+import { BusService } from '../admin/models/BusService.js';
 import { createDefaultBusinessSettings } from '../admin/data/defaultBusinessSettings.js';
 
 const roundMoney = (val) => Math.round((Number(val || 0) + Number.EPSILON) * 100) / 100;
@@ -71,7 +73,7 @@ const policyFromBusinessSettings = (bizSetting) => {
  * always shows the numbers riders are actually charged.
  */
 export const getPublicCancellationPolicy = async () => {
-  const [bizSetting, rows] = await Promise.all([
+  const [bizSetting, rows, busRows] = await Promise.all([
     AdminBusinessSetting.findOne({ scope: 'default' }).select('customization transport_ride').lean(),
     SetPrice.find({
       active: 1,
@@ -81,26 +83,68 @@ export const getPublicCancellationPolicy = async () => {
     })
       .sort({ updatedAt: -1, createdAt: -1 })
       .populate({ path: 'vehicle_type', model: Vehicle, select: 'name status active' })
+      .populate({ path: 'zone_id', model: Zone, select: 'name status active' })
       .lean(),
+    BusService.find({ status: 'active' }).select('cancellationRules').lean().catch(() => []),
   ]);
 
   const defaultPolicy = policyFromBusinessSettings(bizSetting);
   const seen = new Set();
   const vehicles = [];
+  const rules = [];
+  const zoneMap = new Map();
+  const ruleSeen = new Set();
   for (const row of rows) {
     const vehicle = row.vehicle_type;
     if (!vehicle?._id || !vehicle.name || vehicle.active === false || vehicle.status === 0) continue;
-    const key = String(vehicle._id);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    vehicles.push({ id: key, name: vehicle.name, policy: hasSetPricePolicy(row) ? policyFromSetPrice(row) : defaultPolicy });
+    const policy = hasSetPricePolicy(row) ? policyFromSetPrice(row) : defaultPolicy;
+    const vehicleKey = String(vehicle._id);
+
+    // Existing summary: one entry per vehicle (newest rule), kept for the old table.
+    if (!seen.has(vehicleKey)) {
+      seen.add(vehicleKey);
+      vehicles.push({ id: vehicleKey, name: vehicle.name, policy });
+    }
+
+    // Per zone: one rule per vehicle and zone, newest first. Rows without a zone apply everywhere.
+    const zone = row.zone_id && row.zone_id._id ? row.zone_id : null;
+    if (zone && (zone.active === false || zone.status === 0)) continue;
+    const zoneKey = zone ? String(zone._id) : '';
+    const ruleKey = `${vehicleKey}|${zoneKey}`;
+    if (ruleSeen.has(ruleKey)) continue;
+    ruleSeen.add(ruleKey);
+    if (zone && !zoneMap.has(zoneKey)) zoneMap.set(zoneKey, { id: zoneKey, name: zone.name || 'Zone' });
+    rules.push({ vehicle_id: vehicleKey, vehicle_name: vehicle.name, zone_id: zoneKey || null, policy });
   }
   vehicles.sort((a, b) => a.name.localeCompare(b.name));
+  const zones = [...zoneMap.values()].sort((a, b) => a.name.localeCompare(b.name));
+
+  // Refund rules admins set on bus tickets, listed once per distinct rule.
+  const busRefunds = [];
+  const busSeen = new Set();
+  for (const bus of busRows || []) {
+    for (const r of bus.cancellationRules || []) {
+      const key = [r.hoursBeforeDeparture, r.refundType, r.refundValue].join('|');
+      if (busSeen.has(key)) continue;
+      busSeen.add(key);
+      busRefunds.push({
+        label: r.label || '',
+        hours_before_departure: Number(r.hoursBeforeDeparture || 0),
+        refund_type: r.refundType || 'percentage',
+        refund_value: Number(r.refundValue || 0),
+        notes: r.notes || '',
+      });
+    }
+  }
+  busRefunds.sort((a, b) => b.hours_before_departure - a.hours_before_departure);
 
   return {
     currency_symbol: bizSetting?.customization?.currency_symbol || '₹',
     default_policy: defaultPolicy,
     vehicles,
+    zones,
+    rules,
+    bus_refunds: busRefunds,
   };
 };
 

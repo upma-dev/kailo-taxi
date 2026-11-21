@@ -37,8 +37,6 @@ export const plainTextToLegalHtml = (plainText) => {
 
     if (!trimmed) {
       closeList();
-      // keep spacing like the old implementation
-      out.push("<p><br></p>");
       continue;
     }
 
@@ -51,14 +49,7 @@ export const plainTextToLegalHtml = (plainText) => {
       closeList();
       const text = applyInlineFormatting(escapeHtml((h1 || h2 || h3)[1] || ""));
       const tag = h1 ? "h1" : h2 ? "h2" : "h3";
-      // Add a highlight background for headings
-      const cls =
-        tag === "h1"
-          ? 'class="bg-amber-100/70 px-2 py-1 rounded-md inline-block"'
-          : tag === "h2"
-            ? 'class="bg-amber-100/50 px-2 py-0.5 rounded-md inline-block"'
-            : 'class="bg-amber-100/30 px-2 py-0.5 rounded-md inline-block"';
-      out.push(`<${tag}><span ${cls}>${text}</span></${tag}>`);
+      out.push(`<${tag}>${text}</${tag}>`);
       continue;
     }
 
